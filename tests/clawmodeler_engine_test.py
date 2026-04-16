@@ -265,7 +265,7 @@ class ClawModelerEngineTest(unittest.TestCase):
                 "md",
             )
             report = (workspace / "reports" / "demo_report.md").read_text(encoding="utf-8")
-            self.assertIn("ClawModeler Scenario Report", report)
+            self.assertIn("ClawModeler Technical Report", report)
             self.assertIn("screening-level", report)
             tables = workspace / "runs" / "demo" / "outputs" / "tables"
             self.assertTrue((tables / "accessibility_delta.csv").exists())
@@ -603,8 +603,8 @@ class ClawModelerEngineTest(unittest.TestCase):
             workflow_report = (
                 workflow_workspace / "reports" / "shared_report.md"
             ).read_text(encoding="utf-8")
-            self.assertIn("ClawModeler Scenario Report", manual_report)
-            self.assertIn("ClawModeler Scenario Report", workflow_report)
+            self.assertIn("ClawModeler Technical Report", manual_report)
+            self.assertIn("ClawModeler Technical Report", workflow_report)
 
     def test_workflow_demo_full_and_report_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1121,6 +1121,247 @@ class ClawModelerEngineTest(unittest.TestCase):
                 expected_code=30,
             )
             self.assertIn("OSMnx is not installed", result.stderr)
+
+
+def _has_matplotlib() -> bool:
+    try:
+        import matplotlib  # noqa: F401
+
+        return True
+    except ModuleNotFoundError:
+        return False
+
+
+def _has_folium() -> bool:
+    try:
+        import folium  # noqa: F401
+
+        return True
+    except ModuleNotFoundError:
+        return False
+
+
+def _has_jinja2() -> bool:
+    try:
+        import jinja2  # noqa: F401
+
+        return True
+    except ModuleNotFoundError:
+        return False
+
+
+@unittest.skipUnless(_has_matplotlib(), "matplotlib not installed")
+class ChartsTest(unittest.TestCase):
+    def test_render_standard_figures_produces_non_empty_pngs(self) -> None:
+        from clawmodeler_engine.charts import render_standard_figures
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            figures_dir = Path(temp_dir) / "figures"
+            accessibility_rows = [
+                {"scenario_id": "baseline", "origin_zone_id": "Z1", "mode": "car",
+                 "cutoff_min": 30, "jobs_accessible": 1200},
+                {"scenario_id": "baseline", "origin_zone_id": "Z2", "mode": "car",
+                 "cutoff_min": 30, "jobs_accessible": 800},
+                {"scenario_id": "scenario-a", "origin_zone_id": "Z1", "mode": "car",
+                 "cutoff_min": 30, "jobs_accessible": 1400},
+                {"scenario_id": "scenario-a", "origin_zone_id": "Z2", "mode": "car",
+                 "cutoff_min": 30, "jobs_accessible": 900},
+            ]
+            vmt_rows = [
+                {"scenario_id": "baseline", "daily_vmt": 50000, "daily_kg_co2e": 20000,
+                 "population": 3000, "daily_vmt_delta": 0, "tier": "screening",
+                 "method": "per_capita_proxy"},
+                {"scenario_id": "scenario-a", "daily_vmt": 55000, "daily_kg_co2e": 22000,
+                 "population": 3200, "daily_vmt_delta": 5000, "tier": "screening",
+                 "method": "per_capita_proxy"},
+            ]
+            score_rows = [
+                {"project_id": "p1", "name": "Project One", "total_score": 80.0,
+                 "safety_score": 75, "equity_score": 80, "climate_score": 85,
+                 "feasibility_score": 80, "sensitivity_flag": "LOW"},
+                {"project_id": "p2", "name": "Project Two", "total_score": 65.5,
+                 "safety_score": 60, "equity_score": 65, "climate_score": 70,
+                 "feasibility_score": 65, "sensitivity_flag": "MED"},
+            ]
+            delta_rows = [
+                {"scenario_id": "scenario-a", "origin_zone_id": "Z1", "mode": "car",
+                 "cutoff_min": 30, "jobs_accessible_baseline": 1200,
+                 "jobs_accessible_scenario": 1400, "delta_jobs_accessible": 200},
+            ]
+
+            paths, blocks = render_standard_figures(
+                accessibility_rows=accessibility_rows,
+                vmt_rows=vmt_rows,
+                score_rows=score_rows,
+                delta_rows=delta_rows,
+                figures_dir=figures_dir,
+            )
+            self.assertGreaterEqual(len(paths), 3)
+            for path in paths:
+                self.assertTrue(path.exists(), f"Expected figure at {path}")
+                self.assertGreater(path.stat().st_size, 0, f"Figure {path} is empty")
+                self.assertTrue(str(path).endswith(".png"))
+            self.assertEqual(len(paths), len(blocks))
+            for block in blocks:
+                self.assertIn("figure_ref", block)
+                self.assertIn("claim_text", block)
+                self.assertIn("fact_id", block)
+
+
+@unittest.skipUnless(_has_folium(), "folium not installed")
+class MapsTest(unittest.TestCase):
+    def _zones_geojson(self) -> dict:
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {"type": "Feature",
+                 "properties": {"zone_id": "Z1", "name": "North"},
+                 "geometry": {"type": "Polygon",
+                              "coordinates": [[[-121.6, 39.2], [-121.5, 39.2],
+                                               [-121.5, 39.3], [-121.6, 39.3],
+                                               [-121.6, 39.2]]]}},
+                {"type": "Feature",
+                 "properties": {"zone_id": "Z2", "name": "South"},
+                 "geometry": {"type": "Polygon",
+                              "coordinates": [[[-121.5, 39.2], [-121.4, 39.2],
+                                               [-121.4, 39.3], [-121.5, 39.3],
+                                               [-121.5, 39.2]]]}},
+            ],
+        }
+
+    def test_render_standard_maps_produces_non_empty_html(self) -> None:
+        from clawmodeler_engine.maps import render_standard_maps
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            zones_path = Path(temp_dir) / "zones.geojson"
+            zones_path.write_text(json.dumps(self._zones_geojson()), encoding="utf-8")
+            maps_dir = Path(temp_dir) / "maps"
+
+            accessibility_rows = [
+                {"scenario_id": "baseline", "origin_zone_id": "Z1", "mode": "car",
+                 "cutoff_min": 30, "jobs_accessible": 1200},
+                {"scenario_id": "baseline", "origin_zone_id": "Z2", "mode": "car",
+                 "cutoff_min": 30, "jobs_accessible": 800},
+            ]
+            socio_rows = [
+                {"zone_id": "Z1", "population": 1500.0, "jobs": 400.0},
+                {"zone_id": "Z2", "population": 1200.0, "jobs": 300.0},
+            ]
+
+            paths, blocks = render_standard_maps(
+                zones_geojson_path=zones_path,
+                accessibility_rows=accessibility_rows,
+                socio_rows=socio_rows,
+                project_rows=[],
+                maps_dir=maps_dir,
+                daily_vmt_per_capita=22.0,
+            )
+            self.assertGreaterEqual(len(paths), 3)
+            for path in paths:
+                self.assertTrue(path.exists())
+                content = path.read_text(encoding="utf-8")
+                self.assertIn("<html", content.lower())
+                self.assertGreater(len(content), 1000)
+            for block in blocks:
+                self.assertIn("map_ref", block)
+                self.assertIn("claim_text", block)
+
+
+@unittest.skipUnless(_has_jinja2(), "jinja2 not installed")
+class TemplatesTest(unittest.TestCase):
+    def _minimal_manifest(self, workspace_root: Path, run_id: str) -> dict:
+        return {
+            "schema_version": "1.0.0",
+            "artifact_type": "run_manifest",
+            "manifest_version": "1.0.0",
+            "run_id": run_id,
+            "app": {"name": "ClawModeler", "engine_version": "0.3.0"},
+            "engine": {"routing_engine": "osmnx_networkx", "note": "test"},
+            "workspace": {"root": str(workspace_root)},
+            "inputs": [],
+            "outputs": {"tables": [], "figures": [], "maps": [], "bridges": []},
+            "scenarios": [{"scenario_id": "baseline"}],
+            "methods": ["intake", "model_brain"],
+            "assumptions": ["Screening-level only."],
+            "fact_block_count": 2,
+        }
+
+    def _write_fact_blocks(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        blocks = [
+            {"fact_id": "vmt-baseline", "fact_type": "vmt_screening",
+             "claim_text": "Baseline daily VMT is 50,000.", "scenario_id": "baseline",
+             "method_ref": "vmt.per_capita_proxy",
+             "artifact_refs": [{"type": "table", "path": "t.csv"}]},
+            {"fact_id": "score-top", "fact_type": "project_scoring",
+             "claim_text": "Top project scores 80.", "scenario_id": None,
+             "method_ref": "scoring.weighted_rubric",
+             "artifact_refs": [{"type": "table", "path": "t.csv"}]},
+        ]
+        with path.open("w", encoding="utf-8") as file:
+            for block in blocks:
+                file.write(json.dumps(block))
+                file.write("\n")
+
+    def test_technical_report_includes_evidence_table(self) -> None:
+        from clawmodeler_engine.report import render_technical_report
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            run_root = workspace / "runs" / "t1"
+            self._write_fact_blocks(run_root / "outputs" / "tables" / "fact_blocks.jsonl")
+            (run_root / "qa_report.json").parent.mkdir(parents=True, exist_ok=True)
+            (run_root / "qa_report.json").write_text(
+                json.dumps({"export_ready": True, "manifest_present": True,
+                            "fact_blocks_present": True, "fact_block_count": 2,
+                            "blockers": []}),
+                encoding="utf-8",
+            )
+            output = render_technical_report(self._minimal_manifest(workspace, "t1"))
+            self.assertIn("Technical Report", output)
+            self.assertIn("Evidence (fact-blocks)", output)
+            self.assertIn("vmt-baseline", output)
+            self.assertIn("score-top", output)
+            self.assertIn("QA status: **READY**", output)
+
+    def test_layperson_report_has_headlines_and_findings(self) -> None:
+        from clawmodeler_engine.report import render_layperson_report
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            run_root = workspace / "runs" / "t1"
+            self._write_fact_blocks(run_root / "outputs" / "tables" / "fact_blocks.jsonl")
+            (run_root / "qa_report.json").parent.mkdir(parents=True, exist_ok=True)
+            (run_root / "qa_report.json").write_text(
+                json.dumps({"export_ready": True, "manifest_present": True,
+                            "fact_blocks_present": True, "fact_block_count": 2,
+                            "blockers": []}),
+                encoding="utf-8",
+            )
+            output = render_layperson_report(self._minimal_manifest(workspace, "t1"))
+            self.assertIn("Planner Report", output)
+            self.assertIn("Headline numbers", output)
+            self.assertIn("Key findings", output)
+            self.assertIn("screening-level", output)
+
+    def test_stakeholder_brief_limits_to_five_findings(self) -> None:
+        from clawmodeler_engine.report import render_stakeholder_brief
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            run_root = workspace / "runs" / "t1"
+            self._write_fact_blocks(run_root / "outputs" / "tables" / "fact_blocks.jsonl")
+            (run_root / "qa_report.json").parent.mkdir(parents=True, exist_ok=True)
+            (run_root / "qa_report.json").write_text(
+                json.dumps({"export_ready": True, "manifest_present": True,
+                            "fact_blocks_present": True, "fact_block_count": 2,
+                            "blockers": []}),
+                encoding="utf-8",
+            )
+            output = render_stakeholder_brief(self._minimal_manifest(workspace, "t1"))
+            self.assertIn("Stakeholder Brief", output)
+            self.assertIn("Top findings", output)
+            self.assertIn("fact-blocks grounding each claim", output)
 
 
 if __name__ == "__main__":

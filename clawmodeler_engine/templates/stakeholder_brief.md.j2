@@ -1,0 +1,33 @@
+{% extends "_base.md.j2" %}
+{% block body %}
+## One-page stakeholder brief
+
+**Question:** {{ question_summary or "Screening scenario comparison." }}
+
+**Scenarios reviewed:** {% if scenarios %}{% for scenario in scenarios %}`{{ scenario.scenario_id }}`{% if not loop.last %}, {% endif %}{% endfor %}{% else %}`baseline`{% endif %}
+
+### Top findings
+
+{% if findings %}{% for finding in findings[:5] %}{{ loop.index }}. {{ finding }}
+{% endfor %}{% else %}_No findings to report._
+{% endif %}
+
+### Headline metrics
+
+{% if headlines %}| Metric | Value |
+|---|---|
+{% for headline in headlines[:5] %}| {{ headline.label }} | {{ headline.value }} |
+{% endfor %}{% else %}_Not enough data._
+{% endif %}
+
+### Caveats
+
+- Screening-level analysis. Detailed modeling required before committing capital or adopting regulations.
+- QA status: **{{ qa_status }}**. Export is {% if qa.export_allowed %}allowed{% else %}blocked{% endif %}.
+{% for assumption in assumptions[:3] %}- {{ assumption }}
+{% endfor %}
+
+### Supporting evidence
+
+{% if fact_blocks %}Full technical report lists **{{ fact_blocks|length }}** fact-blocks grounding each claim above.{% else %}_No fact-blocks produced — not ready for stakeholder review._{% endif %}
+{% endblock %}

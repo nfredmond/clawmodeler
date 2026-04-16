@@ -69,6 +69,20 @@ def run_full_stack(
     bridge_outputs = write_bridge_exports(workspace, run_id, paths, scenario_specs)
     outputs["bridges"].extend(bridge_outputs)
 
+    extra_assumptions = render_visuals(
+        workspace=workspace,
+        receipt=receipt,
+        paths=paths,
+        outputs=outputs,
+        fact_blocks=fact_blocks,
+        accessibility=accessibility,
+        delta_rows=delta_rows,
+        vmt_rows=vmt_rows,
+        score_rows=score_rows,
+        socio=socio,
+        question=question,
+    )
+
     fact_blocks_path = paths["tables"] / "fact_blocks.jsonl"
     write_jsonl(fact_blocks_path, fact_blocks)
     outputs["tables"].append(str(fact_blocks_path))
@@ -76,6 +90,9 @@ def run_full_stack(
     scenarios_path = paths["tables"] / "scenario_diff_summary.csv"
     write_csv(scenarios_path, scenario_summary_rows(scenario_specs))
     outputs["tables"].append(str(scenarios_path))
+
+    assumptions = collect_assumptions(workspace, question, receipt, transit_rows)
+    assumptions.extend(extra_assumptions)
 
     return {
         "outputs": outputs,
@@ -91,8 +108,67 @@ def run_full_stack(
             "narrative_engine",
             "bridge_exports",
         ],
-        "assumptions": collect_assumptions(workspace, question, receipt, transit_rows),
+        "assumptions": assumptions,
     }
+
+
+def render_visuals(
+    workspace: Path,
+    receipt: dict[str, Any],
+    paths: dict[str, Path],
+    outputs: dict[str, list[str]],
+    fact_blocks: list[dict[str, Any]],
+    accessibility: list[dict[str, Any]],
+    delta_rows: list[dict[str, Any]],
+    vmt_rows: list[dict[str, Any]],
+    score_rows: list[dict[str, Any]],
+    socio: list[dict[str, Any]],
+    question: dict[str, Any],
+) -> list[str]:
+    assumptions: list[str] = []
+
+    try:
+        from .charts import ChartDependencyMissingError, render_standard_figures
+
+        figure_paths, figure_blocks = render_standard_figures(
+            accessibility_rows=accessibility,
+            vmt_rows=vmt_rows,
+            score_rows=score_rows,
+            delta_rows=delta_rows,
+            figures_dir=paths["figures"],
+            accessibility_table=paths["tables"] / "accessibility_by_zone.csv",
+            vmt_table=paths["tables"] / "vmt_screening.csv",
+            score_table=paths["tables"] / "project_scores.csv",
+            delta_table=paths["tables"] / "accessibility_delta.csv",
+        )
+        outputs["figures"].extend(str(path) for path in figure_paths)
+        fact_blocks.extend(figure_blocks)
+    except ChartDependencyMissingError as error:
+        assumptions.append(f"Figures skipped: {error}")
+
+    try:
+        from .maps import MapDependencyMissingError, render_standard_maps
+
+        zones_paths = artifact_paths(workspace, receipt, "zones_geojson")
+        project_rows = load_project_rows(workspace, receipt)
+        daily_vmt_per_capita = parse_float(
+            question.get("daily_vmt_per_capita"), DEFAULT_DAILY_VMT_PER_CAPITA
+        )
+        if zones_paths:
+            map_paths, map_blocks = render_standard_maps(
+                zones_geojson_path=zones_paths[0],
+                accessibility_rows=accessibility,
+                socio_rows=socio,
+                project_rows=project_rows,
+                maps_dir=paths["maps"],
+                daily_vmt_per_capita=daily_vmt_per_capita,
+            )
+            outputs["maps"].extend(str(path) for path in map_paths)
+            fact_blocks.extend(map_blocks)
+    except MapDependencyMissingError as error:
+        assumptions.append(f"Maps skipped: {error}")
+
+    return assumptions
 
 
 def load_optional_json(path: Path) -> dict[str, Any]:

@@ -4,6 +4,22 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-04-16
+
+### Added
+
+- `clawmodeler_engine/charts.py` — matplotlib chart module producing scenario-comparison bars, VMT/CO2e dual-axis trends, project-score horizontal bars, and accessibility histograms as PNGs under `runs/<id>/outputs/figures/`.
+- `clawmodeler_engine/maps.py` — folium interactive HTML choropleth module for zone population/VMT/accessibility overlays, plus an optional project-score marker map, written under `runs/<id>/outputs/maps/`.
+- `clawmodeler_engine/templates/` — Jinja2 report templates (`_base.md.j2`, `technical.md.j2`, `layperson.md.j2`, `stakeholder_brief.md.j2`) with an AI-disclosure banner slot reserved for v0.4.0.
+- `--report-type {technical,layperson,brief,all}` flag on `clawmodeler-engine export` (default `technical`, back-compat-safe).
+- Optional `figure_ref` and `map_ref` fields on fact-block records so every figure and map is evidence-grounded.
+- Unit coverage for chart rendering, map rendering, and template golden-path snapshots.
+
+### Changed
+
+- `clawmodeler_engine/report.py` rewritten as a Jinja2-backed renderer with `render_report`, `render_technical_report`, `render_layperson_report`, and `render_stakeholder_brief`; the legacy `render_markdown_report` entry point still works as a technical-report shim.
+- `run_full_stack` now emits standard figures and maps and appends their fact-blocks to `fact_blocks.jsonl`. Optional visualization deps (matplotlib/folium) fail gracefully and add a recorded assumption if missing.
+
 ## [0.2.0] — 2026-04-16
 
 ### Added
@@ -37,5 +53,6 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.3.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.1.0

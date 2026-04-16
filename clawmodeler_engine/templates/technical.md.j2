@@ -1,0 +1,76 @@
+{% extends "_base.md.j2" %}
+{% block body %}
+## Methods
+
+{% for method in methods %}- `{{ method }}`
+{% endfor %}
+
+## Scenarios
+
+{% if scenarios %}| Scenario | Name | Population × | Jobs × |
+|---|---|---|---|
+{% for scenario in scenarios %}| `{{ scenario.scenario_id }}` | {{ scenario.name }} | {{ scenario.population_multiplier }} | {{ scenario.jobs_multiplier }} |
+{% endfor %}
+{% else %}_No scenarios recorded._
+{% endif %}
+
+## Evidence (fact-blocks)
+
+{% if fact_blocks %}| Fact ID | Type | Scenario | Claim | Method |
+|---|---|---|---|---|
+{% for block in fact_blocks %}| `{{ block.fact_id }}` | `{{ block.fact_type }}` | `{{ block.scenario_id or "—" }}` | {{ block.claim_text }} | `{{ block.method_ref }}` |
+{% endfor %}
+{% else %}_No fact-blocks produced._
+{% endif %}
+
+## Figures
+
+{% if figures %}{% for figure in figures %}### {{ figure.title }}
+
+![{{ figure.title }}]({{ figure.relative_path }})
+
+{% if figure.caption %}{{ figure.caption }}
+
+{% endif %}{% endfor %}{% else %}_No figures produced._
+{% endif %}
+
+## Interactive maps
+
+{% if maps %}{% for map in maps %}- [{{ map.title }}]({{ map.relative_path }}){% if map.caption %} — {{ map.caption }}{% endif %}
+{% endfor %}{% else %}_No maps produced._
+{% endif %}
+
+## Assumptions and limitations
+
+{% for assumption in assumptions %}- {{ assumption }}
+{% endfor %}
+
+## QA report
+
+- Manifest present: `{{ qa.manifest_present }}`
+- Fact-blocks present: `{{ qa.fact_blocks_present }}`
+- Fact-block count: `{{ qa.fact_block_count }}`
+- Export allowed: `{{ qa.export_allowed }}`
+{% if qa.blockers %}
+**QA blockers:**
+{% for blocker in qa.blockers %}- {{ blocker }}
+{% endfor %}
+{% endif %}
+
+## Artifact inventory
+
+{% for category, paths in outputs.items() %}### {{ category }}
+
+{% if paths %}{% for path in paths %}- `{{ path }}`
+{% endfor %}{% else %}_none_
+{% endif %}
+{% endfor %}
+
+## Bridge Packages
+
+{% if bridges %}| Engine | Status | Notes |
+|---|---|---|
+{% for bridge in bridges %}| `{{ bridge.bridge }}` | `{{ bridge.status }}` | {{ bridge.notes }} |
+{% endfor %}{% else %}_No bridge packages emitted._
+{% endif %}
+{% endblock %}

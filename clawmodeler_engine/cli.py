@@ -98,6 +98,12 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--workspace", required=True, type=Path)
     export.add_argument("--run-id", required=True)
     export.add_argument("--format", choices=["md", "pdf", "docx"], default="md")
+    export.add_argument(
+        "--report-type",
+        choices=["technical", "layperson", "brief", "all"],
+        default="technical",
+        help="Which report template to render (default: technical).",
+    )
     export.set_defaults(func=command_export)
 
     doctor = subparsers.add_parser("doctor", help="Check ClawModeler runtime dependencies.")
@@ -328,8 +334,16 @@ def command_run(args: argparse.Namespace) -> None:
 
 
 def command_export(args: argparse.Namespace) -> None:
-    report_path = write_export(args.workspace, args.run_id, args.format)
-    print(json.dumps({"report": str(report_path)}))
+    report_paths = write_export(
+        args.workspace,
+        args.run_id,
+        args.format,
+        report_type=args.report_type,
+    )
+    if isinstance(report_paths, list):
+        print(json.dumps({"reports": [str(path) for path in report_paths]}))
+    else:
+        print(json.dumps({"report": str(report_paths)}))
 
 
 def command_doctor(args: argparse.Namespace) -> None:
@@ -389,7 +403,14 @@ def command_demo(args: argparse.Namespace) -> None:
             scenarios=["baseline", "infill-growth"],
         )
     )
-    command_export(Namespace(workspace=args.workspace, run_id=args.run_id, format="md"))
+    command_export(
+        Namespace(
+            workspace=args.workspace,
+            run_id=args.run_id,
+            format="md",
+            report_type="technical",
+        )
+    )
     print(
         json.dumps(
             {

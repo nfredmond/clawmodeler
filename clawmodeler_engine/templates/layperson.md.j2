@@ -1,0 +1,43 @@
+{% extends "_base.md.j2" %}
+{% block body %}
+## What this analysis is
+
+This is a **screening-level** look at the scenarios you asked about. It was produced automatically from the data you staged, using proxy methods rather than a detailed engineering model. Treat the numbers as planning-grade, not engineering-grade.
+
+## Headline numbers
+
+{% if headlines %}{% for headline in headlines %}- **{{ headline.label }}:** {{ headline.value }}{% if headline.context %} — {{ headline.context }}{% endif %}
+{% endfor %}{% else %}_Not enough fact-blocks to summarize._
+{% endif %}
+
+## Key findings
+
+{% if findings %}{% for finding in findings %}- {{ finding }}
+{% endfor %}{% else %}_No findings to report._
+{% endif %}
+
+## Maps and charts
+
+{% if figures %}**Charts embedded below:**
+
+{% for figure in figures %}### {{ figure.title }}
+
+![{{ figure.title }}]({{ figure.relative_path }})
+
+{% endfor %}{% endif %}
+{% if maps %}**Interactive maps (open in a browser):**
+
+{% for map in maps %}- [{{ map.title }}]({{ map.relative_path }})
+{% endfor %}{% endif %}
+
+## What this means for decision-makers
+
+- The screening outputs can guide prioritization conversations, but they should be paired with detailed modeling before committing capital or adopting regulations.
+- Every claim on this page ties back to a fact-block in the technical report (see `Evidence` section). Ask your modeler to walk you through any claim you want to verify.
+- Limitations below explain where this screening could mislead if taken literally.
+
+## Plain-language limitations
+
+{% for assumption in assumptions %}- {{ assumption }}
+{% endfor %}
+{% endblock %}

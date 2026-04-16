@@ -12,7 +12,7 @@ from .contracts import (
 )
 from .model import run_full_stack
 from .qa import build_qa_report, load_qa_report
-from .report import render_markdown_report
+from .report import REPORT_TYPES, render_report
 from .workspace import (
     ENGINE_VERSION,
     InsufficientDataError,
@@ -150,7 +150,13 @@ def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path,
     return manifest_path, paths["root"] / "qa_report.json"
 
 
-def write_export(workspace: Path, run_id: str, export_format: str) -> Path:
+def write_export(
+    workspace: Path,
+    run_id: str,
+    export_format: str,
+    *,
+    report_type: str = "technical",
+) -> Path | list[Path]:
     ensure_workspace(workspace)
     build_qa_report(workspace, run_id)
     qa_report = load_qa_report(workspace, run_id)
@@ -182,6 +188,29 @@ def write_export(workspace: Path, run_id: str, export_format: str) -> Path:
         workspace / "runs" / run_id / "manifest.json",
         "run_manifest",
     )
-    report_path = reports_dir / f"{run_id}_report.{export_format}"
-    report_path.write_text(render_markdown_report(manifest), encoding="utf-8")
+
+    if report_type == "all":
+        paths: list[Path] = []
+        for single_type in REPORT_TYPES:
+            path = _write_single_report(manifest, reports_dir, run_id, single_type, export_format)
+            paths.append(path)
+        return paths
+
+    if report_type not in REPORT_TYPES:
+        raise InsufficientDataError(
+            f"Unknown --report-type {report_type!r}; expected one of {REPORT_TYPES} or 'all'."
+        )
+    return _write_single_report(manifest, reports_dir, run_id, report_type, export_format)
+
+
+def _write_single_report(
+    manifest: dict[str, Any],
+    reports_dir: Path,
+    run_id: str,
+    report_type: str,
+    export_format: str,
+) -> Path:
+    suffix = "" if report_type == "technical" else f"_{report_type}"
+    report_path = reports_dir / f"{run_id}_report{suffix}.{export_format}"
+    report_path.write_text(render_report(manifest, report_type), encoding="utf-8")
     return report_path

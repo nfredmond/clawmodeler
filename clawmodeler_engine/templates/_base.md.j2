@@ -1,0 +1,25 @@
+{#
+  Shared header/footer for every ClawModeler report.
+  AI-narrative disclosure banner is rendered only when context.ai_narrative is set.
+#}
+{% block header %}# {{ title }}
+
+- Run ID: `{{ run_id }}`
+- Generated: `{{ generated_at }}`
+- Engine version: `{{ engine_version }}`
+- Routing engine: `{{ routing_engine }}`
+- QA status: **{{ qa_status }}**
+{% if ai_narrative %}
+
+> **AI-generated narrative.** Every claim in the narrative sections is grounded in a fact-block.
+> Model: `{{ ai_narrative.provider }}/{{ ai_narrative.model }}`.
+{% endif %}
+
+{% endblock %}
+{% block body %}{% endblock %}
+{% block footer %}
+
+---
+
+*ClawModeler is a screening-level planning workbench. Outputs labeled "screening" are not substitutes for detailed engineering analysis.*
+{% endblock %}
