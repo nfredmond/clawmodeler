@@ -1,5 +1,8 @@
 # ClawModeler
 
+[![CI](https://github.com/nfredmond/clawmodeler/actions/workflows/ci.yml/badge.svg)](https://github.com/nfredmond/clawmodeler/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 ClawModeler is an OpenClaw-powered transportation modeling workbench. It is designed to let local agents help a planner go from raw transportation data to reproducible scenario outputs, QA-gated evidence, and report-ready narratives.
 
 The long-term goal is an installable OpenClaw transportation edition where agents can inspect local tools, select the right modeling method, run the workflow, validate the outputs, and explain every limitation.

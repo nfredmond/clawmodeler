@@ -9,8 +9,14 @@ description = "ClawModeler transportation modeling engine."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "ClawModeler contributors" }]
+authors = [{ name = "Nathaniel Ford Redmond" }]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/nfredmond/clawmodeler"
+Repository = "https://github.com/nfredmond/clawmodeler"
+Issues = "https://github.com/nfredmond/clawmodeler/issues"
+Changelog = "https://github.com/nfredmond/clawmodeler/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 light = []
