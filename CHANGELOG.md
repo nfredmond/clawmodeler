@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Automated multi-platform release pipeline (`.github/workflows/release.yml`) that builds desktop bundles for Linux, macOS (Apple Silicon + Intel), and Windows on every tag push.
+- Automated multi-platform release pipeline (`.github/workflows/release.yml`) that builds desktop bundles for Linux, macOS Apple Silicon, and Windows on every tag push.
 - macOS `.dmg` and Windows `.msi` + NSIS `-setup.exe` installers.
 - Auto-generated platform icons (`icon.icns` for macOS, `icon.ico` for Windows, Square* tiles for Windows Store).
 - First-run instructions in the README for unsigned macOS (Gatekeeper) and Windows (SmartScreen) builds.
@@ -16,8 +16,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- `scripts/build-sidecar-binary.sh` now detects Windows vs Unix venv layout (`Scripts/` vs `bin/`) and PyInstaller `--add-data` separator.
+- `scripts/build-sidecar-binary.sh` now detects Windows vs Unix venv layout (`Scripts/` vs `bin/`) and PyInstaller `--add-data` separator, and disables MSYS path conversion on Windows runners so `cygpath`-rewritten paths reach PyInstaller intact.
 - `desktop/src-tauri/tauri.conf.json` bundle resources switched to a `binaries/clawmodeler-engine*` wildcard so the `.exe` suffix is picked up on Windows.
+
+### Known Limitations
+
+- **No native macOS Intel (x86_64) installer.** GitHub's `macos-13` hosted-runner pool is exhausted and deprecating, so the `macos-13` matrix entry was dropped. Intel Mac users should build from source. A self-hosted Intel Mac runner or community Intel build is a candidate for a future release.
 
 ## [0.1.0] — 2026-04-16
 

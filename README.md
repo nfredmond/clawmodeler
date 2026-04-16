@@ -18,9 +18,10 @@ Pre-built desktop installers are attached to every [GitHub release](https://gith
 | Linux (any distro) | `ClawModeler_<version>_amd64.AppImage` |
 | Debian / Ubuntu | `ClawModeler_<version>_amd64.deb` |
 | Fedora / RHEL | `ClawModeler-<version>-1.x86_64.rpm` |
-| macOS Apple Silicon | `ClawModeler_<version>_aarch64.dmg` |
-| macOS Intel | `ClawModeler_<version>_x64.dmg` |
+| macOS Apple Silicon (M1/M2/M3/M4) | `ClawModeler_<version>_aarch64.dmg` |
 | Windows 10 / 11 | `ClawModeler_<version>_x64_en-US.msi` or `ClawModeler_<version>_x64-setup.exe` |
+
+**Intel Mac (x86_64):** no pre-built installer at this time. GitHub's `macos-13` hosted-runner pool is being deprecated and is unreliable for release builds. Intel Mac users can build from source (see Quick Start), or wait for a self-hosted Intel runner in a future release.
 
 ### First-run on macOS or Windows (unsigned builds)
 
