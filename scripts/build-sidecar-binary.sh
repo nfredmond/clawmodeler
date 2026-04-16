@@ -52,17 +52,39 @@ fi
 
 rm -f "$dist_dir/clawmodeler-engine$exe_suffix"
 
+# MSYS/Git Bash (Windows) rewrites posix-looking args before passing to .exe.
+# Disable that conversion for pyinstaller so --add-data SRC;DEST stays intact.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
+if [ -n "$exe_suffix" ] && command -v cygpath >/dev/null 2>&1; then
+  repo_root_native="$(cygpath -w "$repo_root")"
+  data_src="${repo_root_native}\\clawmodeler_engine\\toolbox.default.json"
+  paths_arg="$repo_root_native"
+  distpath_arg="$(cygpath -w "$dist_dir")"
+  workpath_arg="$(cygpath -w "$work_dir/build")"
+  specpath_arg="$(cygpath -w "$work_dir")"
+  launcher_arg="$(cygpath -w "$launcher")"
+else
+  data_src="$repo_root/clawmodeler_engine/toolbox.default.json"
+  paths_arg="$repo_root"
+  distpath_arg="$dist_dir"
+  workpath_arg="$work_dir/build"
+  specpath_arg="$work_dir"
+  launcher_arg="$launcher"
+fi
+
 "$venv_bin/pyinstaller" \
   --clean \
   --noconfirm \
   --onefile \
   --name clawmodeler-engine \
-  --distpath "$dist_dir" \
-  --workpath "$work_dir/build" \
-  --specpath "$work_dir" \
-  --paths "$repo_root" \
-  --add-data "$repo_root/clawmodeler_engine/toolbox.default.json${data_sep}clawmodeler_engine" \
-  "$launcher"
+  --distpath "$distpath_arg" \
+  --workpath "$workpath_arg" \
+  --specpath "$specpath_arg" \
+  --paths "$paths_arg" \
+  --add-data "${data_src}${data_sep}clawmodeler_engine" \
+  "$launcher_arg"
 
 "$dist_dir/clawmodeler-engine$exe_suffix" --version >/dev/null
 
