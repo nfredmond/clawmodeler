@@ -12,7 +12,6 @@ from .tbest_bridge import prepare_tbest_bridge
 from .urbansim_bridge import prepare_urbansim_bridge
 from .workspace import ClawModelerError, load_receipt, utc_now, write_json
 
-
 BridgePrepare = Callable[[Path, str, str], Path]
 
 

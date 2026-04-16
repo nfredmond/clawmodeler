@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
-from .contracts import stamp_contract, validate_contract, validate_artifact_file
+from .contracts import stamp_contract, validate_artifact_file, validate_contract
 from .sumo_bridge import validate_sumo_bridge
 from .workspace import InsufficientDataError, read_json, utc_now, write_json
 

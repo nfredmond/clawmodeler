@@ -6,8 +6,14 @@ from typing import Any
 
 from .contracts import stamp_contract, validate_contract
 from .model import artifact_paths, read_gtfs_csv, write_csv
-from .workspace import InsufficientDataError, InputValidationError, load_receipt, read_json
-from .workspace import utc_now, write_json
+from .workspace import (
+    InputValidationError,
+    InsufficientDataError,
+    load_receipt,
+    read_json,
+    utc_now,
+    write_json,
+)
 
 
 def prepare_tbest_bridge(workspace: Path, run_id: str, scenario_id: str = "baseline") -> Path:
