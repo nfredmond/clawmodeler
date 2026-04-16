@@ -9,6 +9,28 @@ The long-term goal is an installable OpenClaw transportation edition where agent
 
 For the big-picture roadmap and scope guardrails, see `docs/roadmap.md`.
 
+## Download
+
+Pre-built desktop installers are attached to every [GitHub release](https://github.com/nfredmond/clawmodeler/releases/latest). Free for all platforms.
+
+| Platform | Installer |
+|---|---|
+| Linux (any distro) | `ClawModeler_<version>_amd64.AppImage` |
+| Debian / Ubuntu | `ClawModeler_<version>_amd64.deb` |
+| Fedora / RHEL | `ClawModeler-<version>-1.x86_64.rpm` |
+| macOS Apple Silicon | `ClawModeler_<version>_aarch64.dmg` |
+| macOS Intel | `ClawModeler_<version>_x64.dmg` |
+| Windows 10 / 11 | `ClawModeler_<version>_x64_en-US.msi` or `ClawModeler_<version>_x64-setup.exe` |
+
+### First-run on macOS or Windows (unsigned builds)
+
+ClawModeler currently ships without Apple or Microsoft code-signing certificates to keep every platform free. The first launch needs a one-time bypass:
+
+- **macOS:** Right-click `ClawModeler.app` → **Open** → **Open** (Gatekeeper remembers it afterwards).
+- **Windows:** SmartScreen dialog → **More info** → **Run anyway**.
+
+Code signing is planned for a future release.
+
 ## What It Does
 
 ClawModeler coordinates:
@@ -29,9 +51,13 @@ Current analysis outputs are intentionally labeled as screening-level when proxy
 
 ## Quick Start
 
-Check the local modeling lab:
+Most users should grab a [release installer](#download) instead. These steps are for developers who want to run from source.
+
+Clone and install the Python engine:
 
 ```bash
+git clone https://github.com/nfredmond/clawmodeler
+cd clawmodeler
 python3 -m pip install -e .
 clawmodeler-engine doctor
 clawmodeler-engine tools

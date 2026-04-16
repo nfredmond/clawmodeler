@@ -12,6 +12,8 @@ __pycache__/
 
 # Desktop / Tauri
 /desktop/src-tauri/target/
+/desktop/src-tauri/icons/android/
+/desktop/src-tauri/icons/ios/
 
 # OS
 .DS_Store
