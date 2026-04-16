@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+dist-runtime/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.tmp/
+
+# Desktop / Tauri
+/desktop/src-tauri/target/
+
+# OS
+.DS_Store
+Thumbs.db

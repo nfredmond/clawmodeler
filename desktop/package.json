@@ -1,0 +1,25 @@
+{
+  "name": "clawmodeler-desktop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "sidecar:build": "bash ../scripts/build-sidecar-binary.sh",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.10.1",
+    "@tauri-apps/plugin-dialog": "2.7.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.10.1",
+    "@types/node": "^24.10.0",
+    "typescript": "^6.0.2",
+    "vite": "8.0.8",
+    "vitest": "^4.1.4"
+  }
+}
