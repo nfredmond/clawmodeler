@@ -4,6 +4,19 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] — 2026-04-16
+
+### Added
+
+- `clawmodeler_engine/planner_pack/lapm.py` — **Planner Pack v2**: Caltrans *Local Assistance Procedures Manual* (LAPM) project programming fact sheets. Reads a finished run's `project_scores.csv`, optionally enriches each project with lat/lon, description, project type, estimated cost, and schedule from the candidate-projects sidecar (resolved from the run manifest, then `inputs/projects.csv`, then `inputs/processed/projects.csv`, then `inputs/raw/projects.csv`), and emits a Chapter 3-style programming exhibit per project. Fields the lead agency has not supplied are labeled explicitly ("to be provided by lead agency"); ClawModeler does not invent administrative content.
+- `clawmodeler_engine/templates/planner_pack/lapm_exhibit.md.j2` — Jinja2 template for the LAPM programming packet: scope, methodology citing LAPM Chapter 3 and Chapter 7, a programming summary table across all projects, and per-project fact sheets covering identifiers, location, description, estimated cost, schedule, ClawModeler screening scores, purpose and need, and citations.
+- `clawmodeler-engine planner-pack lapm-exhibit` CLI subcommand. Flags: `--workspace`, `--run-id`, `--lead-agency`, `--district`, `--json`. Writes `lapm_exhibit.csv`, `lapm_exhibit.json`, appends `lapm_programming_exhibit` fact_blocks to `fact_blocks.jsonl`, and renders `reports/<run_id>_lapm_exhibit.md`.
+- `tests/test_lapm_exhibit.py` — 9 tests covering the arithmetic/enrichment path (default lead-agency placeholders, sidecar enrichment of location/cost/description), input validation (empty rows, missing project_id, all-empty project_ids), fact_block shape, end-to-end on the demo workspace (CSV + JSON + report + fact_block append, `City of Grass Valley` / `District 3` in the rendered output), missing-run error path, and idempotent re-runs.
+
+### Changed
+
+- None. v0.6.1 is strictly additive. Existing exports, chat, AI narrative, CEQA VMT screening, and QA behavior are byte-identical to v0.6.0.
+
 ## [0.6.0] — 2026-04-16
 
 ### Added
@@ -128,6 +141,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.6.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.1
 [0.6.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.0
 [0.5.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.1
 [0.5.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.0

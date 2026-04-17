@@ -19,8 +19,22 @@ from .ceqa import (
     render_ceqa_vmt_markdown,
     write_ceqa_vmt,
 )
+from .lapm import (
+    DEFAULT_DISTRICT,
+    DEFAULT_LEAD_AGENCY,
+    LapmExhibitResult,
+    LapmProgrammingExhibit,
+    compute_lapm_exhibit,
+    lapm_fact_blocks,
+    render_lapm_markdown,
+    write_lapm_exhibit,
+)
 
 __all__ = [
+    "DEFAULT_DISTRICT",
+    "DEFAULT_LEAD_AGENCY",
+    "LapmExhibitResult",
+    "LapmProgrammingExhibit",
     "OPR_DEFAULT_THRESHOLD_PCT",
     "PROJECT_TYPES",
     "REFERENCE_LABELS",
@@ -28,6 +42,10 @@ __all__ = [
     "CeqaVmtScenario",
     "ceqa_vmt_fact_blocks",
     "compute_ceqa_vmt",
+    "compute_lapm_exhibit",
+    "lapm_fact_blocks",
     "render_ceqa_vmt_markdown",
+    "render_lapm_markdown",
     "write_ceqa_vmt",
+    "write_lapm_exhibit",
 ]

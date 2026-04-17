@@ -1,0 +1,101 @@
+# Caltrans LAPM Project Programming Exhibit — run `{{ run_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+- Lead agency: **{{ result.lead_agency }}**
+- Caltrans district: **{{ result.district }}**
+- Candidate projects screened: **{{ result.project_count }}**
+
+## Scope
+
+This packet compiles one project programming fact sheet per candidate project
+in ClawModeler run `{{ run_id }}`. It is intended to be handed to a Caltrans
+District Local Assistance Engineer (DLAE) or incorporated into the lead
+agency's *Local Assistance Procedures Manual* (LAPM) Chapter 3 (Project
+Authorization) and Chapter 7 (Field Review) submittal.
+
+## Methodology
+
+Each fact sheet below pairs ClawModeler's four-dimension screening scores
+(safety, equity, climate, feasibility — each 0–100, weighted 30/25/25/20 into
+the total) with the LAPM-style programming fields that a lead agency must
+populate. Fields that the lead agency has not yet supplied are labeled
+explicitly; ClawModeler does **not** invent scope, cost, schedule, or
+environmental information it does not have evidence for.
+
+## Programming summary
+
+{% if exhibits %}| Project | Total | Safety | Equity | Climate | Feasibility | Sensitivity |
+|---|---:|---:|---:|---:|---:|---|
+{% for exhibit in exhibits %}| `{{ exhibit.project_id }}` — {{ exhibit.name }} | {{ exhibit.total_score }} | {{ exhibit.safety_score }} | {{ exhibit.equity_score }} | {{ exhibit.climate_score }} | {{ exhibit.feasibility_score }} | {{ exhibit.sensitivity_flag }} |
+{% endfor %}
+{% else %}_No projects available for LAPM exhibit._
+{% endif %}
+
+## Per-project fact sheets
+
+{% for exhibit in exhibits %}### `{{ exhibit.project_id }}` — {{ exhibit.name }}
+
+**Programming identifiers**
+
+- Project ID: `{{ exhibit.project_id }}`
+- Project title: {{ exhibit.name }}
+- Lead agency: {{ exhibit.lead_agency }}
+- Caltrans district: {{ exhibit.district }}
+- Project type: {{ exhibit.project_type }}
+- Location: {{ exhibit.location_note }}
+
+**Description**
+
+{{ exhibit.description }}
+
+**Estimated cost**
+
+{% if exhibit.estimated_cost_usd is not none %}- Total programmed cost: **${{ '%0.0f' | format(exhibit.estimated_cost_usd) }}** (lead agency estimate; allocate across PA&ED / PS&E / R/W / CON per LAPM Chapter 3).
+{% else %}- Total programmed cost: _to be provided by lead agency (PA&ED, PS&E, R/W, CON)._
+{% endif %}
+
+**Schedule**
+
+- {{ exhibit.schedule_note }}
+
+**ClawModeler screening scores**
+
+| Dimension | Score |
+|---|---:|
+| Safety | {{ exhibit.safety_score }} |
+| Equity | {{ exhibit.equity_score }} |
+| Climate | {{ exhibit.climate_score }} |
+| Feasibility | {{ exhibit.feasibility_score }} |
+| **Total (weighted 30/25/25/20)** | **{{ exhibit.total_score }}** |
+| Sensitivity flag | {{ exhibit.sensitivity_flag }} |
+
+**Purpose and need / anticipated benefits**
+
+Screening evidence above supports the project's anticipated benefits across
+safety, equity, climate, and feasibility dimensions. The sensitivity flag
+({{ exhibit.sensitivity_flag }}) indicates how many of the four input
+dimensions used default assumptions; `LOW` means the lead agency supplied
+all four, higher flags mean one or more dimensions defaulted to the
+placeholder value of 50 and should be refined before a field review.
+
+{% endfor %}
+
+## Citations
+
+- California Department of Transportation, *Local Assistance Procedures Manual*, Chapter 3 (Project Authorization) and Chapter 7 (Field Review).
+- California Streets & Highways Code §§ 820–822 (federal-aid and state-funded local projects).
+
+## Notes
+
+- This packet is **screening-level**. It does not substitute for a Caltrans
+  District Local Assistance Engineer's field review, environmental
+  determination, or financial plan.
+- Every entry in the Programming summary table above is mirrored as a
+  `lapm_programming_exhibit` fact_block appended to this run's
+  `fact_blocks.jsonl`, so subsequent narrative and chat turns remain
+  subject to the ClawModeler citation contract.
+
+---
+
+*ClawModeler Planner Pack — Caltrans LAPM programming exhibits.*

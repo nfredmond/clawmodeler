@@ -389,6 +389,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ceqa_vmt.set_defaults(func=command_planner_pack_ceqa_vmt)
 
+    lapm_exhibit = planner_subparsers.add_parser(
+        "lapm-exhibit",
+        help="Render Caltrans LAPM project programming fact sheets for a run.",
+    )
+    lapm_exhibit.add_argument("--workspace", required=True, type=Path)
+    lapm_exhibit.add_argument("--run-id", dest="run_id", required=True)
+    lapm_exhibit.add_argument(
+        "--lead-agency",
+        dest="lead_agency",
+        default=None,
+        help="Lead agency name (populates every fact sheet header).",
+    )
+    lapm_exhibit.add_argument(
+        "--district",
+        dest="district",
+        default=None,
+        help="Caltrans district label (e.g. 'District 3').",
+    )
+    lapm_exhibit.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full LAPM exhibit summary as JSON.",
+    )
+    lapm_exhibit.set_defaults(func=command_planner_pack_lapm_exhibit)
+
     return parser
 
 
@@ -836,6 +862,29 @@ def command_planner_pack_ceqa_vmt(args: argparse.Namespace) -> None:
         f"CEQA §15064.3 VMT screening — {summary['scenario_count']} scenario(s), "
         f"threshold {summary['threshold_vmt_per_capita']} VMT/capita "
         f"({summary['reference_label']} × {1 - summary['threshold_pct']:.2f})"
+    )
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
+def command_planner_pack_lapm_exhibit(args: argparse.Namespace) -> None:
+    from .planner_pack import DEFAULT_DISTRICT, DEFAULT_LEAD_AGENCY, write_lapm_exhibit
+
+    ensure_workspace(args.workspace)
+    summary = write_lapm_exhibit(
+        args.workspace,
+        args.run_id,
+        lead_agency=args.lead_agency or DEFAULT_LEAD_AGENCY,
+        district=args.district or DEFAULT_DISTRICT,
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    print(
+        f"Caltrans LAPM programming exhibits — {summary['project_count']} project(s), "
+        f"lead agency: {summary['lead_agency']}, district: {summary['district']}."
     )
     print(f"Report: {summary['report_path']}")
     print(f"CSV:    {summary['csv_path']}")
