@@ -27,7 +27,7 @@ jobs:
         run: ruff check clawmodeler_engine/ tests/
 
       - name: Engine tests
-        run: python -m unittest discover -s tests -p 'clawmodeler_engine_test.py'
+        run: python -m unittest discover -s tests -p '*test*.py'
 
       - uses: pnpm/action-setup@v4
         with:
