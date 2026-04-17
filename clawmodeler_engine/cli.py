@@ -317,6 +317,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     llm_configure.set_defaults(func=command_llm_configure)
 
+    chat = subparsers.add_parser(
+        "chat",
+        help="Ask a grounded question against a finished run's fact_blocks.",
+    )
+    chat.add_argument("--workspace", required=True, type=Path)
+    chat.add_argument("--run-id", dest="run_id", required=True)
+    chat.add_argument(
+        "--message",
+        required=True,
+        help="Planner question to ask against the run.",
+    )
+    chat.add_argument(
+        "--no-history",
+        dest="no_history",
+        action="store_true",
+        help="Ignore prior chat_history.jsonl turns when building the prompt.",
+    )
+    chat.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full ChatTurn payload as JSON.",
+    )
+    chat.set_defaults(func=command_chat)
+
     return parser
 
 
@@ -710,4 +735,37 @@ def command_llm_configure(args: argparse.Namespace) -> None:
             "cloud_confirmed=true to allow export --ai-narrative."
         )
     print(json.dumps(payload))
+
+
+def command_chat(args: argparse.Namespace) -> None:
+    from .chat import chat_from_workspace
+
+    ensure_workspace(args.workspace)
+    try:
+        turn = chat_from_workspace(
+            args.workspace,
+            args.run_id,
+            args.message,
+            include_history=not args.no_history,
+        )
+    except InsufficientDataError:
+        raise
+    except ClawModelerError:
+        raise
+
+    if args.as_json:
+        print(json.dumps(turn.to_json()))
+        return
+
+    print(f"[{turn.provider}/{turn.model}] turn {turn.turn_id}")
+    print(turn.text)
+    if turn.cited_fact_ids:
+        print()
+        print(f"Cited fact_ids: {', '.join(turn.cited_fact_ids)}")
+    if turn.ungrounded_sentence_count:
+        print(
+            f"Dropped {turn.ungrounded_sentence_count} ungrounded sentence(s)."
+        )
+    if turn.unknown_fact_ids:
+        print(f"Unknown fact_ids in model output: {', '.join(turn.unknown_fact_ids)}")
 

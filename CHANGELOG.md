@@ -4,6 +4,18 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-04-16
+
+### Added
+
+- `clawmodeler_engine/chat.py` — **Chat With the Run**. Read-only grounded Q&A against a finished run's `fact_blocks.jsonl`. Every sentence in the model reply must cite `[fact:<fact_id>]` against a known fact_id or it is dropped (STRICT mode). When nothing survives grounding, the reply collapses to the canonical `"I do not have evidence for that in this run's fact_blocks."` sentence. Each turn is appended to `runs/<run_id>/chat_history.jsonl` for reproducibility, and the prior 5 turns feed the next prompt by default.
+- `clawmodeler-engine chat --workspace <ws> --run-id <id> --message <msg>` CLI subcommand. Flags: `--no-history` to skip the chat_history replay, `--json` for machine-readable `ChatTurn` payload. Reuses the same provider + `cloud_confirmed` gate as `export --ai-narrative`, so cloud BYOK providers still require explicit confirmation before any fact_blocks leave the machine.
+- `tests/test_chat.py` — 12 tests covering prompt composition, grounded persistence, turn_id increment across calls, history feeding into subsequent prompts, ungrounded → NOT_IN_CONTEXT fallback, unknown fact_id recording, missing/empty `fact_blocks.jsonl` raising `InsufficientDataError`, and the cloud-confirmation gate.
+
+### Changed
+
+- None. v0.5.0 is strictly additive. `export`, `--ai-narrative`, and the grounding contract are byte-identical to v0.4.1.
+
 ## [0.4.1] — 2026-04-16
 
 ### Added
@@ -90,6 +102,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.5.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.0
 [0.4.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.4.1
 [0.4.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.4.0
 [0.3.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.3.0
