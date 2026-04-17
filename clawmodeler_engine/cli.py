@@ -279,6 +279,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     graph_map_zones.set_defaults(func=command_graph_map_zones)
 
+    llm = subparsers.add_parser(
+        "llm",
+        help="Inspect and configure the AI-narrative LLM provider.",
+    )
+    llm_subparsers = llm.add_subparsers(required=True)
+    llm_doctor = llm_subparsers.add_parser(
+        "doctor",
+        help="Probe the configured LLM provider and print reachability.",
+    )
+    llm_doctor.add_argument("--workspace", required=True, type=Path)
+    llm_doctor.add_argument(
+        "--json", dest="as_json", action="store_true",
+        help="Output machine-readable JSON.",
+    )
+    llm_doctor.set_defaults(func=command_llm_doctor)
+
+    llm_configure = llm_subparsers.add_parser(
+        "configure",
+        help="Update llm_config.json with key=value pairs.",
+    )
+    llm_configure.add_argument("--workspace", required=True, type=Path)
+    llm_configure.add_argument(
+        "pairs",
+        nargs="+",
+        metavar="KEY=VALUE",
+        help="One or more key=value updates (e.g. provider=ollama model=phi3:mini).",
+    )
+    llm_configure.set_defaults(func=command_llm_configure)
+
     return parser
 
 
@@ -592,4 +621,83 @@ def command_graph_map_zones(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = build_zone_node_map(args.workspace, graph_path=args.graph, output_path=args.output)
     print(json.dumps({"zone_node_map": str(path)}))
+
+
+def command_llm_doctor(args: argparse.Namespace) -> None:
+    from .llm.config import CLOUD_PROVIDERS, build_provider, load_config
+
+    ensure_workspace(args.workspace)
+    config = load_config(args.workspace)
+    provider = build_provider(config)
+    probe = provider.probe()
+
+    payload = {
+        "provider": probe.provider,
+        "model": probe.model,
+        "ok": probe.ok,
+        "detail": probe.detail,
+        "metadata": probe.metadata,
+        "grounding_mode": config.grounding_mode,
+        "is_cloud": provider.is_cloud,
+        "cloud_confirmed": config.cloud_confirmed,
+    }
+
+    if args.as_json:
+        print(json.dumps(payload))
+        return
+
+    print(f"Provider: {probe.provider}")
+    print(f"Model:    {probe.model}")
+    print(f"Status:   {'OK' if probe.ok else 'FAIL'}")
+    print(f"Detail:   {probe.detail}")
+    print(f"Grounding mode: {config.grounding_mode}")
+
+    if config.provider in CLOUD_PROVIDERS:
+        print()
+        print("CONFIDENTIALITY WARNING: this is a cloud provider.")
+        print(
+            "  Narrative prompts (including fact_blocks) will be sent to "
+            f"{config.provider} servers when `export --ai-narrative` runs."
+        )
+        if config.cloud_confirmed:
+            print("  Cloud use is confirmed in llm_config.json (cloud_confirmed=true).")
+        else:
+            print(
+                "  Cloud use is NOT confirmed. Run "
+                "`clawmodeler-engine llm configure cloud_confirmed=true` "
+                "to allow `export --ai-narrative` to call this provider."
+            )
+
+
+def command_llm_configure(args: argparse.Namespace) -> None:
+    from .llm.config import (
+        CLOUD_PROVIDERS,
+        apply_updates,
+        load_config,
+        parse_key_value_pairs,
+        save_config,
+    )
+
+    ensure_workspace(args.workspace)
+    try:
+        updates = parse_key_value_pairs(args.pairs)
+        config = load_config(args.workspace)
+        new_config = apply_updates(config, updates)
+        path = save_config(args.workspace, new_config)
+    except ValueError as e:
+        raise ClawModelerError(str(e)) from e
+
+    payload = {
+        "path": str(path),
+        "provider": new_config.provider,
+        "model": new_config.model,
+        "grounding_mode": new_config.grounding_mode,
+        "cloud_confirmed": new_config.cloud_confirmed,
+    }
+    if new_config.provider in CLOUD_PROVIDERS and not new_config.cloud_confirmed:
+        payload["warning"] = (
+            f"{new_config.provider} is a cloud provider; set "
+            "cloud_confirmed=true to allow export --ai-narrative."
+        )
+    print(json.dumps(payload))
 

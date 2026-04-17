@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .llm.config import CONFIG_FILENAME as LLM_CONFIG_FILENAME
+from .llm.config import default_config
 from .workspace import ensure_workspace, write_json
 
 
@@ -35,6 +37,13 @@ def init_workspace(workspace: Path, force: bool = False) -> dict[str, str]:
         write_text_once(
             workspace / "data-dictionary.md",
             data_dictionary(),
+            force=force,
+        )
+    )
+    created.extend(
+        write_json_once(
+            workspace / LLM_CONFIG_FILENAME,
+            default_config().to_dict(),
             force=force,
         )
     )
