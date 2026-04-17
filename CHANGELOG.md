@@ -4,6 +4,20 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-04-16
+
+### Added
+
+- `clawmodeler_engine/pdf.py` — `render_pdf(manifest, report_type, reports_dir, *, ai_narrative=None) -> bytes`. Pipeline: `render_report` → Markdown → HTML via `markdown-it-py` (CommonMark + tables) → PDF via `weasyprint.HTML(...).write_pdf()`. Figures resolve via `base_url`; maps appear as styled links (interactive content belongs in the HTML report, not a static PDF).
+- `--format pdf` on `clawmodeler-engine export` is now end-to-end (CLI already accepted the choice; `write_export` now branches on format). `--format pdf --ai-narrative` composes cleanly with grounded narrative.
+- `pyproject.toml` optional extra: `pdf = ["markdown-it-py>=3.0", "weasyprint>=62"]`.
+- `tests/test_pdf.py` — per-report-type PDF rendering (`%PDF-` magic bytes + size checks), a grounded-narrative + PDF composition case, and a dependency-missing sanity check.
+
+### Changed
+
+- `write_export` in `orchestration.py` now accepts `export_format in {"md", "pdf"}`; the previous `md`-only guard is replaced with a format branch that dispatches to Markdown or PDF rendering.
+- `.github/workflows/ci.yml` installs `libpango-1.0-0` + `libpangoft2-1.0-0` (WeasyPrint system deps) and `[visuals,pdf]` extras.
+
 ## [0.4.0] — 2026-04-16
 
 ### Added
@@ -76,6 +90,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.4.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.4.1
 [0.4.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.4.0
 [0.3.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.2.0

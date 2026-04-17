@@ -170,7 +170,7 @@ def write_export(
             f"Export blocked by QA gate: {reports_dir / f'{run_id}_export_blocked.md'}"
         )
 
-    if export_format != "md":
+    if export_format not in {"md", "pdf"}:
         raise InsufficientDataError(
             f"Export format {export_format!r} is not implemented in the sidecar scaffold."
         )
@@ -318,8 +318,20 @@ def _write_single_report(
 ) -> Path:
     suffix = "" if report_type == "technical" else f"_{report_type}"
     report_path = reports_dir / f"{run_id}_report{suffix}.{export_format}"
-    report_path.write_text(
-        render_report(manifest, report_type, ai_narrative=ai_narrative),
-        encoding="utf-8",
-    )
+    if export_format == "pdf":
+        from .pdf import render_pdf
+
+        report_path.write_bytes(
+            render_pdf(
+                manifest,
+                report_type,
+                reports_dir,
+                ai_narrative=ai_narrative,
+            )
+        )
+    else:
+        report_path.write_text(
+            render_report(manifest, report_type, ai_narrative=ai_narrative),
+            encoding="utf-8",
+        )
     return report_path
