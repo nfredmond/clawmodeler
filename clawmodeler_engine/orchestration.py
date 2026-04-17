@@ -159,26 +159,16 @@ def write_export(
     ai_narrative: bool = False,
 ) -> Path | list[Path]:
     ensure_workspace(workspace)
-    build_qa_report(workspace, run_id)
-    qa_report = load_qa_report(workspace, run_id)
     reports_dir = workspace / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
+
+    build_qa_report(workspace, run_id)
+    qa_report = load_qa_report(workspace, run_id)
     if not qa_report.get("export_ready"):
-        blocked_path = reports_dir / f"{run_id}_export_blocked.md"
-        blocked_path.write_text(
-            "\n".join(
-                [
-                    "# Export Blocked",
-                    "",
-                    "ClawQA blocked this export because required evidence is missing.",
-                    "",
-                    f"Blockers: {', '.join(qa_report.get('blockers', []))}",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
+        _write_qa_block_report(reports_dir, run_id, qa_report)
+        raise QaGateBlockedError(
+            f"Export blocked by QA gate: {reports_dir / f'{run_id}_export_blocked.md'}"
         )
-        raise QaGateBlockedError(f"Export blocked by QA gate: {blocked_path}")
 
     if export_format != "md":
         raise InsufficientDataError(
@@ -192,7 +182,18 @@ def write_export(
 
     narrative_context: dict[str, Any] | None = None
     if ai_narrative:
-        narrative_context = _generate_ai_narrative(workspace, run_id, manifest, reports_dir)
+        narrative_result = _generate_ai_narrative(workspace, run_id, manifest)
+        build_qa_report(workspace, run_id, narrative=narrative_result)
+        qa_report = load_qa_report(workspace, run_id)
+        if not qa_report.get("export_ready"):
+            _write_qa_block_report(
+                reports_dir, run_id, qa_report, narrative=narrative_result
+            )
+            raise QaGateBlockedError(
+                f"Export blocked by QA gate: "
+                f"{reports_dir / f'{run_id}_export_blocked.md'}"
+            )
+        narrative_context = narrative_result.to_template_context()
 
     if report_type == "all":
         paths: list[Path] = []
@@ -226,15 +227,14 @@ def _generate_ai_narrative(
     workspace: Path,
     run_id: str,
     manifest: dict[str, Any],
-    reports_dir: Path,
-) -> dict[str, Any]:
-    """Build provider, generate narrative, enforce grounding before export.
+) -> Any:
+    """Build provider and generate a narrative against the run's fact_blocks.
 
-    Blocks the export with a ``*_export_blocked.md`` report when the
-    configured cloud provider has not been explicitly confirmed or when
-    the grounded narrative still contains ungrounded / unknown-fact
-    sentences. The grounding contract is the load-bearing check — we
-    never let an ungrounded sentence ship.
+    Raises for provider- or config-level problems (unconfirmed cloud
+    use, missing fact_blocks). Does NOT raise for grounding failures —
+    those are recorded in the returned ``NarrativeResult`` and the
+    caller feeds them into :func:`qa.build_qa_report` so the standard
+    QA gate blocks the export.
     """
 
     from .llm import (
@@ -268,33 +268,43 @@ def _generate_ai_narrative(
         mode = GroundingMode(config.grounding_mode)
     except ValueError:
         mode = GroundingMode.STRICT
-    result = generate_narrative(manifest, fact_blocks, provider, mode=mode)
+    return generate_narrative(manifest, fact_blocks, provider, mode=mode)
 
-    if not result.is_fully_grounded:
-        blocked_path = reports_dir / f"{run_id}_ai_narrative_blocked.md"
-        blocked_lines = [
-            "# AI Narrative Blocked",
+
+def _write_qa_block_report(
+    reports_dir: Path,
+    run_id: str,
+    qa_report: dict[str, Any],
+    *,
+    narrative: Any = None,
+) -> Path:
+    blocked_path = reports_dir / f"{run_id}_export_blocked.md"
+    lines = [
+        "# Export Blocked",
+        "",
+        "ClawQA blocked this export because required evidence is missing.",
+        "",
+        f"Blockers: {', '.join(qa_report.get('blockers', []))}",
+        "",
+    ]
+    if narrative is not None and not narrative.is_fully_grounded:
+        lines += [
+            "## AI narrative grounding failure",
             "",
-            "The grounding validator rejected the generated narrative.",
+            f"- Provider: `{narrative.provider}`",
+            f"- Model: `{narrative.model}`",
+            f"- Ungrounded sentences: {narrative.ungrounded_sentence_count}",
+            f"- Unknown fact_ids: {narrative.unknown_fact_ids}",
             "",
-            f"- Provider: `{result.provider}`",
-            f"- Model: `{result.model}`",
-            f"- Ungrounded sentences: {result.ungrounded_sentence_count}",
-            f"- Unknown fact_ids: {result.unknown_fact_ids}",
-            "",
-            "## Raw model output",
+            "### Raw model output",
             "",
             "```",
-            result.raw_text,
+            narrative.raw_text,
             "```",
             "",
         ]
-        blocked_path.write_text("\n".join(blocked_lines), encoding="utf-8")
-        raise QaGateBlockedError(
-            f"AI narrative is not fully grounded; export blocked: {blocked_path}"
-        )
-
-    return result.to_template_context()
+    blocked_path.write_text("\n".join(lines), encoding="utf-8")
+    return blocked_path
 
 
 def _write_single_report(

@@ -8,7 +8,21 @@ from .contracts import stamp_contract, validate_artifact_file, validate_contract
 from .workspace import InputValidationError, read_json, write_json
 
 
-def build_qa_report(workspace: Path, run_id: str) -> dict[str, Any]:
+def build_qa_report(
+    workspace: Path,
+    run_id: str,
+    *,
+    narrative: Any = None,
+) -> dict[str, Any]:
+    """Build and persist the QA report for ``run_id``.
+
+    ``narrative`` is an optional narrative result (anything with
+    ``is_fully_grounded``, ``ungrounded_sentence_count``, and
+    ``unknown_fact_ids``) produced by ``llm.narrative.generate_narrative``.
+    When supplied, the report records whether the grounded narrative
+    is covenant-ready; ungrounded narrative blocks the export gate.
+    """
+
     run_root = workspace / "runs" / run_id
     manifest_path = run_root / "manifest.json"
     fact_blocks_path = run_root / "outputs" / "tables" / "fact_blocks.jsonl"
@@ -19,6 +33,7 @@ def build_qa_report(workspace: Path, run_id: str) -> dict[str, Any]:
         "fact_blocks_present": fact_blocks_path.exists(),
         "fact_blocks_valid": False,
         "narrative_claims_without_factblocks": 0,
+        "ai_narrative_grounded": True,
     }
     if manifest_path.exists():
         try:
@@ -33,6 +48,13 @@ def build_qa_report(workspace: Path, run_id: str) -> dict[str, Any]:
         fact_block_count, invalid_fact_block_count = inspect_fact_blocks(fact_blocks_path)
         checks["fact_blocks_valid"] = invalid_fact_block_count == 0
 
+    if narrative is not None:
+        checks["ai_narrative_grounded"] = bool(narrative.is_fully_grounded)
+        checks["narrative_claims_without_factblocks"] = int(
+            narrative.ungrounded_sentence_count
+        )
+        checks["ai_narrative_unknown_fact_ids"] = list(narrative.unknown_fact_ids)
+
     checks["fact_block_count"] = fact_block_count
     checks["invalid_fact_block_count"] = invalid_fact_block_count
     export_ready = (
@@ -42,6 +64,7 @@ def build_qa_report(workspace: Path, run_id: str) -> dict[str, Any]:
         and checks["fact_blocks_valid"]
         and fact_block_count > 0
         and checks["narrative_claims_without_factblocks"] == 0
+        and checks["ai_narrative_grounded"]
     )
     report = stamp_contract(
         {
@@ -103,6 +126,8 @@ def _blockers(checks: dict[str, Any]) -> list[str]:
         blockers.append("fact_blocks_invalid")
     if checks["narrative_claims_without_factblocks"] > 0:
         blockers.append("narrative_claims_without_factblocks")
+    if not checks.get("ai_narrative_grounded", True):
+        blockers.append("ai_narrative_ungrounded")
     return list(dict.fromkeys(blockers))
 
 
