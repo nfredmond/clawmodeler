@@ -4,6 +4,18 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-04-16
+
+### Added
+
+- Desktop chat panel: a new `Chat` section in the workbench that interrogates the loaded run's `fact_blocks.jsonl` against the v0.5.0 grounding contract. Citation chips render inline for every `[fact:<id>]` token; replies are badged `grounded` / `partial` / `unknown-ids` based on the engine's `ChatTurn` payload. Ctrl/Cmd-Enter sends the message.
+- Tauri command `clawmodeler_chat(workspace, runId, message, noHistory)` that shells the bundled sidecar (or `python3 -m clawmodeler_engine` in dev) with `chat --json` and returns the engine `EngineResult` envelope. Input validation rejects empty workspace / run id / message at the Rust boundary.
+- `parseChatTurn`, `segmentChatText`, and `chatTurnBadge` helpers in `desktop/src/workbench.ts` plus three new Vitest cases covering payload parsing, citation-chip segmentation, and grounding badges.
+
+### Changed
+
+- Engine behavior unchanged from v0.5.0. v0.5.1 is a desktop-shell follow-up: the `chat` CLI subcommand, grounding validator, and `chat_history.jsonl` persistence all continue to be the source of truth.
+
 ## [0.5.0] — 2026-04-16
 
 ### Added
@@ -102,6 +114,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.5.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.1
 [0.5.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.0
 [0.4.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.4.1
 [0.4.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.4.0

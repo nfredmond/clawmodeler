@@ -3,11 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   buildFullWorkflowArgs,
+  type ChatTurn,
+  chatTurnBadge,
   deriveQuestionSavePath,
   friendlyError,
   manifestOutputCategories,
   normalizePathList,
   normalizeScenarios,
+  parseChatTurn,
+  segmentChatText,
   summarizeQa,
 } from "./workbench.js";
 
@@ -65,6 +69,11 @@ type AppState = {
   artifacts: WorkspaceArtifacts | null;
   commandLog: string[];
   onboarded: boolean;
+  chatTurns: ChatTurn[];
+  chatDraft: string;
+  chatBusy: boolean;
+  chatNoHistory: boolean;
+  chatStatus: string;
 };
 
 const state: AppState = {
@@ -80,6 +89,11 @@ const state: AppState = {
   artifacts: null,
   commandLog: [],
   onboarded: localStorage.getItem("clawmodeler.onboarded") === "true",
+  chatTurns: [],
+  chatDraft: "",
+  chatBusy: false,
+  chatNoHistory: false,
+  chatStatus: "",
 };
 
 function markOnboarded() {
@@ -184,6 +198,14 @@ async function tauriApi<T = unknown>(path: string, body?: unknown): Promise<ApiR
   if (path === "/api/clawmodeler/run") {
     return await invoke<ApiResult<T>>("clawmodeler_run", { args: payload.args });
   }
+  if (path === "/api/clawmodeler/chat") {
+    return await invoke<ApiResult<T>>("clawmodeler_chat", {
+      workspace: stringField(payload, "workspace"),
+      runId: stringField(payload, "runId"),
+      message: stringField(payload, "message"),
+      noHistory: payload.noHistory === true,
+    });
+  }
   throw new Error(`Unsupported ClawModeler API path: ${path}`);
 }
 
@@ -280,6 +302,47 @@ async function refreshArtifacts(showBusy = true) {
       state.busy = false;
       render();
     }
+  }
+}
+
+async function sendChat() {
+  const message = state.chatDraft.trim();
+  if (!message) {
+    state.chatStatus = "Type a question first.";
+    render();
+    return;
+  }
+  if (!state.workspace.trim() || !state.runId.trim()) {
+    state.chatStatus = "Pick a workspace and run id before chatting.";
+    render();
+    return;
+  }
+  state.chatBusy = true;
+  state.chatStatus = "Asking the run…";
+  render();
+  try {
+    const result = await api<Record<string, unknown>>("/api/clawmodeler/chat", {
+      workspace: state.workspace,
+      runId: state.runId,
+      message,
+      noHistory: state.chatNoHistory,
+    });
+    const turn = parseChatTurn(result.json ?? null);
+    if (turn) {
+      state.chatTurns = [...state.chatTurns, turn];
+      state.chatDraft = "";
+      state.chatStatus = turn.isFullyGrounded
+        ? `Grounded reply from ${turn.provider}/${turn.model}.`
+        : `Reply had ${turn.ungroundedSentenceCount} ungrounded sentence(s) dropped.`;
+    } else {
+      state.chatStatus = "Chat call returned no turn payload.";
+    }
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    state.chatStatus = friendlyError(raw);
+  } finally {
+    state.chatBusy = false;
+    render();
   }
 }
 
@@ -503,6 +566,27 @@ function bindControls() {
     ?.addEventListener("click", () => {
       void refreshArtifacts();
     });
+
+  appRoot.querySelector<HTMLTextAreaElement>("#chat-draft")?.addEventListener("input", (event) => {
+    state.chatDraft = (event.target as HTMLTextAreaElement).value;
+  });
+  appRoot
+    .querySelector<HTMLTextAreaElement>("#chat-draft")
+    ?.addEventListener("keydown", (event) => {
+      const ke = event as KeyboardEvent;
+      if ((ke.ctrlKey || ke.metaKey) && ke.key === "Enter") {
+        ke.preventDefault();
+        void sendChat();
+      }
+    });
+  appRoot.querySelector<HTMLInputElement>("#chat-no-history")?.addEventListener("change", (event) => {
+    state.chatNoHistory = (event.target as HTMLInputElement).checked;
+  });
+  appRoot
+    .querySelector<HTMLButtonElement>("[data-action='chat-send']")
+    ?.addEventListener("click", () => {
+      void sendChat();
+    });
 }
 
 function renderWelcome(): string {
@@ -543,6 +627,76 @@ function renderDoctor() {
         )
         .join("")}
     </div>
+  `;
+}
+
+function renderChatTurn(turn: ChatTurn): string {
+  const badge = chatTurnBadge(turn);
+  const segments = segmentChatText(turn.text)
+    .map((segment) =>
+      segment.kind === "chip"
+        ? `<span class="chat-chip" title="fact_id ${escapeHtml(segment.factId)}">[fact:${escapeHtml(segment.factId)}]</span>`
+        : escapeHtml(segment.value),
+    )
+    .join("");
+  const unknown =
+    turn.unknownFactIds.length > 0
+      ? `<p class="chat-warning">Unknown fact_ids in model output: ${escapeHtml(turn.unknownFactIds.join(", "))}</p>`
+      : "";
+  const dropped =
+    turn.ungroundedSentenceCount > 0
+      ? `<p class="chat-warning">Dropped ${turn.ungroundedSentenceCount} ungrounded sentence(s).</p>`
+      : "";
+  return `
+    <article class="chat-turn">
+      <div class="chat-user"><strong>You</strong><p>${escapeHtml(turn.userMessage)}</p></div>
+      <div class="chat-reply">
+        <div class="chat-reply-head">
+          <strong>${escapeHtml(turn.provider)}/${escapeHtml(turn.model)}</strong>
+          <span class="chat-badge ${escapeHtml(badge)}">${escapeHtml(badge)}</span>
+        </div>
+        <p>${segments || "<em>(empty)</em>"}</p>
+        ${unknown}
+        ${dropped}
+      </div>
+    </article>
+  `;
+}
+
+function renderChat(): string {
+  const hasRun = Boolean(state.artifacts?.manifest);
+  const transcript =
+    state.chatTurns.length > 0
+      ? `<div class="chat-transcript">${state.chatTurns.map(renderChatTurn).join("")}</div>`
+      : `<p class="muted">Ask a grounded question about this run. Every reply sentence will cite a real <code>[fact:&lt;id&gt;]</code> or the reply collapses to "I do not have evidence for that in this run's fact_blocks."</p>`;
+  const disabled = state.chatBusy || !hasRun;
+  return `
+    <section class="panel chat-panel" id="chat">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow"><span class="step-num">5</span> Chat</p>
+          <h2>Chat With the Run</h2>
+        </div>
+        <span>${escapeHtml(state.chatStatus || (hasRun ? "Ready" : "Run a workflow first"))}</span>
+      </div>
+      ${transcript}
+      <label class="chat-composer">
+        <textarea
+          id="chat-draft"
+          rows="3"
+          spellcheck="true"
+          placeholder="Ask a grounded question about this run…"
+          ${disabled ? "disabled" : ""}
+        >${escapeHtml(state.chatDraft)}</textarea>
+      </label>
+      <div class="chat-controls">
+        <label class="check-row">
+          <input id="chat-no-history" type="checkbox" ${state.chatNoHistory ? "checked" : ""} ${disabled ? "disabled" : ""} />
+          Ignore prior chat history
+        </label>
+        <button data-action="chat-send" ${disabled ? "disabled" : ""}>${state.chatBusy ? "Thinking…" : "Send"}</button>
+      </div>
+    </section>
   `;
 }
 
@@ -612,6 +766,7 @@ function render() {
           <a href="#run">Run</a>
           <a href="#qa">QA</a>
           <a href="#report">Report</a>
+          <a href="#chat">Chat</a>
         </nav>
         <p class="rail-note">Screening-level outputs. Use a detailed modeling workflow for final engineering decisions.</p>
       </aside>
@@ -729,6 +884,8 @@ function render() {
         <div id="qa" class="results">
           ${renderArtifacts()}
         </div>
+
+        ${renderChat()}
       </section>
     </main>
   `;

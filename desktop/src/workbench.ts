@@ -147,6 +147,89 @@ export function friendlyError(raw: string): string {
   return firstLine.length > 220 ? `${firstLine.slice(0, 217)}...` : firstLine;
 }
 
+export type ChatTurn = {
+  turnId: number;
+  createdAt: string;
+  userMessage: string;
+  provider: string;
+  model: string;
+  text: string;
+  rawText: string;
+  isFullyGrounded: boolean;
+  ungroundedSentenceCount: number;
+  citedFactIds: string[];
+  unknownFactIds: string[];
+};
+
+export function parseChatTurn(payload: unknown): ChatTurn | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const p = payload as Record<string, unknown>;
+  const turnId = typeof p.turn_id === "number" ? p.turn_id : Number(p.turn_id);
+  if (!Number.isFinite(turnId)) {
+    return null;
+  }
+  const cited = Array.isArray(p.cited_fact_ids)
+    ? p.cited_fact_ids.map((value) => String(value)).filter(Boolean)
+    : [];
+  const unknown = Array.isArray(p.unknown_fact_ids)
+    ? p.unknown_fact_ids.map((value) => String(value)).filter(Boolean)
+    : [];
+  return {
+    turnId,
+    createdAt: typeof p.created_at === "string" ? p.created_at : "",
+    userMessage: typeof p.user_message === "string" ? p.user_message : "",
+    provider: typeof p.provider === "string" ? p.provider : "",
+    model: typeof p.model === "string" ? p.model : "",
+    text: typeof p.text === "string" ? p.text : "",
+    rawText: typeof p.raw_text === "string" ? p.raw_text : "",
+    isFullyGrounded: p.is_fully_grounded === true,
+    ungroundedSentenceCount:
+      typeof p.ungrounded_sentence_count === "number"
+        ? p.ungrounded_sentence_count
+        : Number(p.ungrounded_sentence_count) || 0,
+    citedFactIds: cited,
+    unknownFactIds: unknown,
+  };
+}
+
+const FACT_CITATION_RE = /\[fact:([A-Za-z0-9_.-]+)\]/gu;
+
+export type ChatSegment =
+  | { kind: "text"; value: string }
+  | { kind: "chip"; factId: string };
+
+export function segmentChatText(text: string): ChatSegment[] {
+  if (!text) {
+    return [];
+  }
+  const segments: ChatSegment[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(FACT_CITATION_RE)) {
+    const matchIndex = match.index ?? 0;
+    if (matchIndex > cursor) {
+      segments.push({ kind: "text", value: text.slice(cursor, matchIndex) });
+    }
+    segments.push({ kind: "chip", factId: match[1] });
+    cursor = matchIndex + match[0].length;
+  }
+  if (cursor < text.length) {
+    segments.push({ kind: "text", value: text.slice(cursor) });
+  }
+  return segments;
+}
+
+export function chatTurnBadge(turn: ChatTurn): string {
+  if (turn.unknownFactIds.length > 0) {
+    return "unknown-ids";
+  }
+  if (!turn.isFullyGrounded || turn.ungroundedSentenceCount > 0) {
+    return "partial";
+  }
+  return "grounded";
+}
+
 export function deriveQuestionSavePath(workspace: string, currentQuestion: string): string {
   const trimmedQuestion = currentQuestion.trim();
   if (trimmedQuestion) {

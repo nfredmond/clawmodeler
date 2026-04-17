@@ -134,6 +134,42 @@ fn clawmodeler_run(app: tauri::AppHandle, args: Vec<String>) -> Result<EngineRes
 }
 
 #[tauri::command]
+fn clawmodeler_chat(
+    app: tauri::AppHandle,
+    workspace: String,
+    run_id: String,
+    message: String,
+    no_history: Option<bool>,
+) -> Result<EngineResult, String> {
+    let workspace = workspace.trim().to_string();
+    let run_id = run_id.trim().to_string();
+    if workspace.is_empty() {
+        return Err("workspace is required".to_string());
+    }
+    if run_id.is_empty() {
+        return Err("run_id is required".to_string());
+    }
+    if message.trim().is_empty() {
+        return Err("message is required".to_string());
+    }
+
+    let mut args: Vec<String> = vec![
+        "chat".into(),
+        "--workspace".into(),
+        workspace,
+        "--run-id".into(),
+        run_id,
+        "--message".into(),
+        message,
+        "--json".into(),
+    ];
+    if no_history.unwrap_or(false) {
+        args.push("--no-history".into());
+    }
+    run_engine_args(&app, args)
+}
+
+#[tauri::command]
 fn clawmodeler_workspace(workspace: String, run_id: String) -> Result<ArtifactResult, String> {
     let workspace_path = PathBuf::from(workspace.trim());
     if workspace_path.as_os_str().is_empty() {
@@ -205,7 +241,8 @@ pub fn run() {
             clawmodeler_doctor,
             clawmodeler_tools,
             clawmodeler_run,
-            clawmodeler_workspace
+            clawmodeler_workspace,
+            clawmodeler_chat
         ])
         .run(tauri::generate_context!())
     {
