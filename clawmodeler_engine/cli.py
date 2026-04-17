@@ -342,6 +342,53 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chat.set_defaults(func=command_chat)
 
+    planner = subparsers.add_parser(
+        "planner-pack",
+        help="Produce Planner Pack regulatory deliverables (CEQA, LAPM, RTP, equity).",
+    )
+    planner_subparsers = planner.add_subparsers(required=True)
+    ceqa_vmt = planner_subparsers.add_parser(
+        "ceqa-vmt",
+        help="Compute CEQA §15064.3 VMT significance determinations for a run.",
+    )
+    ceqa_vmt.add_argument("--workspace", required=True, type=Path)
+    ceqa_vmt.add_argument("--run-id", dest="run_id", required=True)
+    ceqa_vmt.add_argument(
+        "--project-type",
+        dest="project_type",
+        choices=["residential", "employment", "retail"],
+        default="residential",
+    )
+    ceqa_vmt.add_argument(
+        "--reference-label",
+        dest="reference_label",
+        choices=["regional", "citywide", "custom"],
+        default="regional",
+    )
+    ceqa_vmt.add_argument(
+        "--reference-vmt-per-capita",
+        dest="reference_vmt_per_capita",
+        type=float,
+        default=None,
+        help="Override the regional/citywide VMT-per-capita baseline. "
+        "Defaults to analysis_plan.json question.daily_vmt_per_capita, then 22.0.",
+    )
+    ceqa_vmt.add_argument(
+        "--threshold-pct",
+        dest="threshold_pct",
+        type=float,
+        default=0.15,
+        help="Fraction below the reference baseline that is deemed less than "
+        "significant (OPR default 0.15).",
+    )
+    ceqa_vmt.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full CEQA result summary as JSON.",
+    )
+    ceqa_vmt.set_defaults(func=command_planner_pack_ceqa_vmt)
+
     return parser
 
 
@@ -768,4 +815,30 @@ def command_chat(args: argparse.Namespace) -> None:
         )
     if turn.unknown_fact_ids:
         print(f"Unknown fact_ids in model output: {', '.join(turn.unknown_fact_ids)}")
+
+
+def command_planner_pack_ceqa_vmt(args: argparse.Namespace) -> None:
+    from .planner_pack import write_ceqa_vmt
+
+    ensure_workspace(args.workspace)
+    summary = write_ceqa_vmt(
+        args.workspace,
+        args.run_id,
+        project_type=args.project_type,
+        reference_label=args.reference_label,
+        reference_vmt_per_capita=args.reference_vmt_per_capita,
+        threshold_pct=args.threshold_pct,
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    print(
+        f"CEQA §15064.3 VMT screening — {summary['scenario_count']} scenario(s), "
+        f"threshold {summary['threshold_vmt_per_capita']} VMT/capita "
+        f"({summary['reference_label']} × {1 - summary['threshold_pct']:.2f})"
+    )
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
 

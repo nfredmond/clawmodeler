@@ -4,6 +4,20 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-04-16
+
+### Added
+
+- `clawmodeler_engine/planner_pack/` — **Planner Pack v1**: regulatory deliverables grounded in run fact_blocks. First module is CEQA §15064.3 VMT significance screening.
+- `clawmodeler_engine/planner_pack/ceqa.py` — `compute_ceqa_vmt`, `ceqa_vmt_fact_blocks`, `render_ceqa_vmt_markdown`, `write_ceqa_vmt`. Reads a finished run's `vmt_screening.csv`, compares each scenario's VMT per capita to an agency-configurable reference baseline (default `question.daily_vmt_per_capita`, then 22.0), applies the OPR *Technical Advisory on Evaluating Transportation Impacts in CEQA* (December 2018) default of **15 percent below the regional/citywide baseline**, and issues `potentially significant` / `less than significant` determinations. Agencies can override the project type (`residential` / `employment` / `retail`), reference label (`regional` / `citywide` / `custom`), reference VMT per capita, and percent-below value.
+- `clawmodeler_engine/templates/planner_pack/ceqa_vmt.md.j2` — Jinja2 template for the CEQA §15064.3 VMT memo: scope, methodology citing OPR Dec 2018, per-scenario determination table, findings split into significant vs. less-than-significant lists, and a citations block.
+- `clawmodeler-engine planner-pack ceqa-vmt` CLI subcommand. Flags: `--workspace`, `--run-id`, `--project-type`, `--reference-label`, `--reference-vmt-per-capita`, `--threshold-pct`, `--json`. Writes `ceqa_vmt.csv`, `ceqa_vmt.json`, appends `ceqa_vmt_determination` fact_blocks to `fact_blocks.jsonl`, and renders `reports/<run_id>_ceqa_vmt.md`. The appended fact_blocks remain subject to the same citation contract that gates `export --ai-narrative` and `chat`, so downstream narrative and chat turns can cite CEQA determinations.
+- `tests/test_ceqa_vmt.py` — 14 tests covering the arithmetic (below / above / at-threshold), input validation (invalid project type, reference label, threshold_pct, negative reference), empty-row handling, fact_block shape, end-to-end on the demo workspace (CSV + JSON + report + fact_block append), missing-run error path, analysis_plan.json reference fallback, and idempotent re-runs.
+
+### Changed
+
+- None. v0.6.0 is strictly additive. Existing exports, chat, AI narrative, and QA behavior are byte-identical to v0.5.1.
+
 ## [0.5.1] — 2026-04-16
 
 ### Added
@@ -114,6 +128,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.6.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.0
 [0.5.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.1
 [0.5.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.0
 [0.4.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.4.1

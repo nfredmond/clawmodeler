@@ -1,0 +1,78 @@
+# CEQA §15064.3 VMT Significance Determination — run `{{ run_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+- Project type: **{{ result.project_type }}**
+- Reference baseline: **{{ result.reference_label }}** — {{ result.reference_vmt_per_capita }} VMT per capita
+- Screening threshold: **{{ (result.threshold_pct * 100) | round(0, 'floor') | int }}% below {{ result.reference_label }}** → {{ result.threshold_vmt_per_capita }} VMT per capita
+
+## Scope
+
+This memo documents the CEQA transportation-impact significance screening for each
+scenario produced by ClawModeler run `{{ run_id }}`. Per California Public Resources
+Code §21099 and CEQA Guidelines §15064.3 (revised after SB 743), vehicle miles
+traveled (VMT) is the preferred metric for transportation-impact significance for
+land-use and transportation projects.
+
+## Methodology
+
+The Governor's Office of Planning and Research (OPR) *Technical Advisory on
+Evaluating Transportation Impacts in CEQA* (December 2018) recommends **15 percent
+below the regional or citywide VMT-per-capita baseline** as the default residential
+screening threshold. Scenarios at or above that cut line are flagged as *potentially
+significant*; scenarios below it are *less than significant*. The cut line applied
+to this run is **{{ result.threshold_vmt_per_capita }} VMT per capita**
+({{ (result.threshold_pct * 100) | round(0, 'floor') | int }} percent below the
+{{ result.reference_label }} reference of {{ result.reference_vmt_per_capita }}
+VMT per capita). Determinations are arithmetic and reproducible; no model is
+consulted.
+
+## Per-scenario determinations
+
+{% if scenarios %}| Scenario | Population | Daily VMT | VMT/capita | Threshold | Δ vs. threshold | Determination |
+|---|---:|---:|---:|---:|---:|---|
+{% for scenario in scenarios %}| `{{ scenario.scenario_id }}` | {{ scenario.population }} | {{ scenario.daily_vmt }} | {{ scenario.vmt_per_capita }} | {{ scenario.threshold_vmt_per_capita }} | {{ (scenario.delta_pct * 100) | round(1) }}% | **{{ scenario.determination }}** |
+{% endfor %}
+{% else %}_No scenarios were available for CEQA screening._
+{% endif %}
+
+## Findings
+
+{% set significant_scenarios = scenarios | selectattr('significant') | list %}
+{% if significant_scenarios %}The following scenarios are **potentially significant** under CEQA §15064.3 and
+require VMT mitigation or a substantial-evidence finding before the lead agency
+can issue a less-than-significant determination:
+
+{% for scenario in significant_scenarios %}- `{{ scenario.scenario_id }}`: {{ scenario.vmt_per_capita }} VMT per capita — {{ (scenario.delta_pct * 100) | round(1) }}% above the {{ scenario.threshold_vmt_per_capita }} VMT per capita threshold. Mitigation required.
+{% endfor %}
+{% else %}No scenarios in this run exceed the CEQA §15064.3 screening threshold. All
+scenarios are **less than significant** for transportation-impact purposes.
+{% endif %}
+
+{% set below_scenarios = scenarios | rejectattr('significant') | list %}
+{% if below_scenarios %}The following scenarios are **less than significant** and do not require VMT
+mitigation under CEQA §15064.3:
+
+{% for scenario in below_scenarios %}- `{{ scenario.scenario_id }}`: {{ scenario.vmt_per_capita }} VMT per capita — {{ (scenario.delta_pct * 100) | round(1) }}% versus the {{ scenario.threshold_vmt_per_capita }} VMT per capita threshold.
+{% endfor %}
+{% endif %}
+
+## Citations
+
+- California Public Resources Code §21099.
+- CEQA Guidelines §15064.3 (14 CCR §15064.3).
+- Governor's Office of Planning and Research, *Technical Advisory on Evaluating Transportation Impacts in CEQA*, December 2018.
+
+## Notes
+
+- Determinations in this memo are *screening-level*. A lead agency may adopt a
+  different threshold or a custom methodology with substantial evidence. Override
+  the reference VMT per capita or the percent-below value on the command line to
+  reproduce the agency's preferred cut line.
+- Every determination in this memo is mirrored as a `ceqa_vmt_determination`
+  fact_block appended to this run's `fact_blocks.jsonl`, so subsequent narrative
+  and chat turns remain subject to the ClawModeler citation contract.
+
+---
+
+*ClawModeler Planner Pack — CEQA §15064.3 VMT significance screening.*
