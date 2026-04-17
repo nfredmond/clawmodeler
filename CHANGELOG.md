@@ -4,7 +4,20 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.1] — 2026-04-16
+## [0.6.2] — 2026-04-17
+
+### Added
+
+- `clawmodeler_engine/planner_pack/rtp.py` — **Planner Pack v3**: RTP *Projects and Performance* chapter generator. Composes a single chapter grounded in a finished run's `project_scores.csv` and `vmt_screening.csv`, and enriches it from `accessibility_delta.csv`, `ceqa_vmt.csv` (v0.6.0), and `lapm_exhibit.csv` (v0.6.1) when those outputs are present. The chapter cites California Government Code §65080, 23 CFR §450.322, the CTC *2017 RTP Guidelines*, CEQA §15064.3, and Caltrans LAPM Chapters 3 & 7.
+- `clawmodeler_engine/templates/planner_pack/rtp_chapter.md.j2` — Jinja2 template for the RTP chapter: overview, Action Element project list, Performance Monitoring scenarios table with per-scenario VMT per capita, accessibility delta, CEQA determination, a CEQA findings split (significant vs. less-than-significant), financial + environmental placeholders, and citations.
+- `clawmodeler-engine planner-pack rtp-chapter` CLI subcommand. Flags: `--workspace`, `--run-id`, `--agency`, `--rtp-cycle`, `--chapter-title`, `--json`. Writes `rtp_chapter_projects.csv`, `rtp_chapter_scenarios.csv`, `rtp_chapter.json`, appends `rtp_chapter_entry` fact_blocks to `fact_blocks.jsonl`, and renders `reports/<run_id>_rtp_chapter.md`.
+- `tests/test_rtp_chapter.py` — 13 tests covering basic composition, CEQA enrichment, LAPM enrichment, accessibility-delta aggregation across zones, zero-population scenarios, input validation (empty scores, empty vmt, all-empty project_ids), fact_block shape, end-to-end on the demo workspace both without and with prior v0.6.0 + v0.6.1 outputs, missing-run error, and idempotent re-runs.
+
+### Changed
+
+- None. v0.6.2 is strictly additive. Existing exports, chat, AI narrative, CEQA VMT, LAPM, and QA behavior are byte-identical to v0.6.1.
+
+## [0.6.1] — 2026-04-17
 
 ### Added
 
@@ -141,6 +154,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.6.2]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.2
 [0.6.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.1
 [0.6.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.0
 [0.5.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.5.1

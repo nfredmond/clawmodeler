@@ -415,6 +415,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     lapm_exhibit.set_defaults(func=command_planner_pack_lapm_exhibit)
 
+    rtp_chapter = planner_subparsers.add_parser(
+        "rtp-chapter",
+        help="Compose the RTP Projects and Performance chapter for a run.",
+    )
+    rtp_chapter.add_argument("--workspace", required=True, type=Path)
+    rtp_chapter.add_argument("--run-id", dest="run_id", required=True)
+    rtp_chapter.add_argument(
+        "--agency",
+        dest="agency",
+        default=None,
+        help="Lead agency / RTPA name that will adopt this chapter.",
+    )
+    rtp_chapter.add_argument(
+        "--rtp-cycle",
+        dest="rtp_cycle",
+        default=None,
+        help="RTP adoption cycle label (e.g. '2026 RTP').",
+    )
+    rtp_chapter.add_argument(
+        "--chapter-title",
+        dest="chapter_title",
+        default=None,
+        help="Override the default 'Projects and Performance' chapter title.",
+    )
+    rtp_chapter.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full RTP chapter summary as JSON.",
+    )
+    rtp_chapter.set_defaults(func=command_planner_pack_rtp_chapter)
+
     return parser
 
 
@@ -889,5 +921,36 @@ def command_planner_pack_lapm_exhibit(args: argparse.Namespace) -> None:
     print(f"Report: {summary['report_path']}")
     print(f"CSV:    {summary['csv_path']}")
     print(f"JSON:   {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
+def command_planner_pack_rtp_chapter(args: argparse.Namespace) -> None:
+    from .planner_pack import (
+        DEFAULT_AGENCY,
+        DEFAULT_CHAPTER_TITLE,
+        DEFAULT_RTP_CYCLE,
+        write_rtp_chapter,
+    )
+
+    ensure_workspace(args.workspace)
+    summary = write_rtp_chapter(
+        args.workspace,
+        args.run_id,
+        agency=args.agency or DEFAULT_AGENCY,
+        rtp_cycle=args.rtp_cycle or DEFAULT_RTP_CYCLE,
+        chapter_title=args.chapter_title or DEFAULT_CHAPTER_TITLE,
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    print(
+        f"RTP chapter — {summary['project_count']} project(s), "
+        f"{summary['scenario_count']} scenario(s), agency: {summary['agency']}, "
+        f"cycle: {summary['rtp_cycle']}."
+    )
+    print(f"Report:           {summary['report_path']}")
+    print(f"Projects CSV:     {summary['projects_csv_path']}")
+    print(f"Scenarios CSV:    {summary['scenarios_csv_path']}")
+    print(f"JSON:             {summary['json_path']}")
     print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
 

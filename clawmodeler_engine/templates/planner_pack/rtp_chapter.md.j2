@@ -1,0 +1,84 @@
+# RTP Chapter — {{ result.chapter_title }}
+
+- Agency: **{{ result.agency }}**
+- RTP cycle: **{{ result.rtp_cycle }}**
+- Run ID: `{{ run_id }}`
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+
+## 1. Overview
+
+This chapter is composed from ClawModeler run `{{ run_id }}` and captures the
+Action Element (candidate projects) and Performance Monitoring (scenario-level
+VMT, accessibility, and CEQA §15064.3 determinations) of the
+{{ result.agency }} {{ result.rtp_cycle }} Regional Transportation Plan.
+
+## 2. Action Element — candidate projects
+
+{% if projects %}| Project | Total score | Sensitivity | Project type | Estimated cost |
+|---|---:|---|---|---:|
+{% for project in projects %}| `{{ project.project_id }}` — {{ project.name }} | {{ project.total_score }} | {{ project.sensitivity_flag }} | {{ project.lapm_project_type }} | {% if project.lapm_estimated_cost_usd is not none %}${{ '%0.0f' | format(project.lapm_estimated_cost_usd) }}{% else %}_TBD_{% endif %} |
+{% endfor %}
+{% else %}_No candidate projects in this run._
+{% endif %}
+
+## 3. Performance Monitoring — scenarios
+
+{% if scenarios %}| Scenario | Population | Daily VMT | VMT/capita | Δ jobs accessible | CEQA §15064.3 determination |
+|---|---:|---:|---:|---:|---|
+{% for scenario in scenarios %}| `{{ scenario.scenario_id }}` | {{ scenario.population }} | {{ scenario.daily_vmt }} | {% if scenario.vmt_per_capita is not none %}{{ scenario.vmt_per_capita }}{% else %}_n/a_{% endif %} | {% if scenario.accessibility_delta_jobs is not none %}{{ scenario.accessibility_delta_jobs }}{% else %}_n/a_{% endif %} | {{ scenario.ceqa_determination }} |
+{% endfor %}
+{% else %}_No scenarios in this run._
+{% endif %}
+
+### Performance findings
+
+{% set significant = scenarios | selectattr('ceqa_determination', 'equalto', 'potentially significant') | list %}
+{% set less_than = scenarios | selectattr('ceqa_determination', 'equalto', 'less than significant') | list %}
+{% if significant %}The following scenarios are **potentially significant** under CEQA §15064.3
+and require VMT mitigation before the lead agency can issue a
+less-than-significant finding for the RTP:
+
+{% for scenario in significant %}- `{{ scenario.scenario_id }}` — {{ scenario.vmt_per_capita }} VMT per capita vs. threshold {{ scenario.ceqa_threshold_vmt_per_capita }}.
+{% endfor %}
+{% endif %}
+{% if less_than %}The following scenarios are **less than significant** under CEQA §15064.3:
+
+{% for scenario in less_than %}- `{{ scenario.scenario_id }}` — {{ scenario.vmt_per_capita }} VMT per capita vs. threshold {{ scenario.ceqa_threshold_vmt_per_capita }}.
+{% endfor %}
+{% endif %}
+{% if not significant and not less_than %}_CEQA §15064.3 screening has not been run for this run. Invoke
+`clawmodeler-engine planner-pack ceqa-vmt` to append determinations to
+`fact_blocks.jsonl` before publishing this chapter._
+{% endif %}
+
+## 4. Financial and environmental placeholders
+
+- Financial plan narrative, fund constrained project list, and 20-year
+  revenue forecast must be supplied by the lead agency. ClawModeler does
+  not invent fiscal content.
+- Environmental constraints, tribal consultation, and equity overlays
+  (SB 535, AB 1550) will be incorporated when the equity-lens module
+  (v0.6.3) is run against this run.
+
+## 5. Citations
+
+- California Government Code §65080 (Regional Transportation Plans).
+- 23 CFR §450.322 (Metropolitan Transportation Planning Process).
+- California Transportation Commission, *2017 RTP Guidelines* (or the
+  agency's adopted superseding guidelines).
+- California Public Resources Code §21099 and CEQA Guidelines §15064.3.
+- Caltrans *Local Assistance Procedures Manual*, Chapters 3 and 7.
+
+## Notes
+
+- This chapter is **screening-level** and is meant to feed into an RTP
+  packet, not to replace an environmental or fiscal constraint analysis.
+- Every project and scenario row in this chapter is mirrored as an
+  `rtp_chapter_entry` fact_block appended to this run's
+  `fact_blocks.jsonl`, so subsequent narrative and chat turns remain
+  subject to the ClawModeler citation contract.
+
+---
+
+*ClawModeler Planner Pack — RTP chapter generator.*
