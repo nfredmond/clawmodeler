@@ -447,6 +447,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rtp_chapter.set_defaults(func=command_planner_pack_rtp_chapter)
 
+    equity_lens = planner_subparsers.add_parser(
+        "equity-lens",
+        help="Apply the SB 535 / AB 1550 / tribal equity lens to a run.",
+    )
+    equity_lens.add_argument("--workspace", required=True, type=Path)
+    equity_lens.add_argument("--run-id", dest="run_id", required=True)
+    equity_lens.add_argument(
+        "--agency",
+        dest="agency",
+        default=None,
+        help="Lead agency name for the equity packet header.",
+    )
+    equity_lens.add_argument(
+        "--dataset-note",
+        dest="dataset_note",
+        default=None,
+        help="Override the default dataset-provenance note.",
+    )
+    equity_lens.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full equity lens summary as JSON.",
+    )
+    equity_lens.set_defaults(func=command_planner_pack_equity_lens)
+
     return parser
 
 
@@ -952,5 +978,45 @@ def command_planner_pack_rtp_chapter(args: argparse.Namespace) -> None:
     print(f"Projects CSV:     {summary['projects_csv_path']}")
     print(f"Scenarios CSV:    {summary['scenarios_csv_path']}")
     print(f"JSON:             {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
+def command_planner_pack_equity_lens(args: argparse.Namespace) -> None:
+    from .planner_pack import DEFAULT_EQUITY_AGENCY, write_equity_lens
+
+    ensure_workspace(args.workspace)
+    summary = write_equity_lens(
+        args.workspace,
+        args.run_id,
+        agency=args.agency or DEFAULT_EQUITY_AGENCY,
+        dataset_note=args.dataset_note,
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    portfolio = summary["summary"] or {}
+    print(
+        f"Equity lens — {summary['project_count']} project(s), "
+        f"{summary['overlay_supplied_count']} with overlay staged, "
+        f"agency: {summary['agency']}."
+    )
+    if portfolio:
+        print(
+            f"  SB 535 DAC share: {portfolio['dac_share'] * 100:.1f}% "
+            f"(AB 1550 target 25%){' — met' if portfolio['ab1550_dac_target_met'] else ' — not yet met'}."
+        )
+        print(
+            f"  AB 1550 low-income within 1/2 mile of DAC share: "
+            f"{portfolio['low_income_near_dac_share'] * 100:.1f}% "
+            f"(target 10%){' — met' if portfolio['ab1550_low_income_near_dac_target_met'] else ' — not yet met'}."
+        )
+        print(
+            f"  AB 1550 low-income outside 1/2 mile share: "
+            f"{portfolio['low_income_share'] * 100:.1f}% "
+            f"(target 5%){' — met' if portfolio['ab1550_low_income_target_met'] else ' — not yet met'}."
+        )
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
     print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
 

@@ -4,6 +4,19 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] — 2026-04-17
+
+### Added
+
+- `clawmodeler_engine/planner_pack/equity.py` — **Planner Pack v4**: SB 535 / AB 1550 / tribal equity lens overlay. Reads a finished run's `project_scores.csv` and an optional `inputs/equity_overlay.csv` sidecar (columns: `project_id`, `dac_sb535`, `low_income_ab1550`, `low_income_near_dac`, `tribal_area`, `ces_percentile`, `notes`); classifies each project into the AB 1550 benefit category the lead agency would report to CARB (DAC / low-income within ½ mile of DAC / low-income outside the buffer / other / unknown). Projects without an overlay row are reported as **Unknown** rather than silently assumed non-disadvantaged. Computes portfolio shares against the AB 1550 statutory minima (25% DAC, 10% low-income within ½ mile of DAC, 5% low-income outside). Cites Gov Code §39711 (SB 535), H&S Code §39713 (AB 1550), Pub Res Code §§21074 / 21080.3.1–21080.3.2 (AB 52 tribal consultation), CARB *Funding Guidelines for Agencies Administering California Climate Investments*, and OEHHA *CalEnviroScreen 4.0*.
+- `clawmodeler_engine/templates/planner_pack/equity_lens.md.j2` — Jinja2 template for the equity packet: scope, methodology, per-project findings table, portfolio summary with AB 1550 target checks, findings split (DAC / low-income near DAC / low-income outside buffer / tribal area / overlay not staged), data sources and limitations, and citations.
+- `clawmodeler-engine planner-pack equity-lens` CLI subcommand. Flags: `--workspace`, `--run-id`, `--agency`, `--dataset-note`, `--json`. Writes `equity_lens.csv`, `equity_lens.json`, appends `equity_lens_project` fact_blocks per project and a single `equity_lens_summary` fact_block for the portfolio to `fact_blocks.jsonl`, and renders `reports/<run_id>_equity_lens.md`.
+- `tests/test_equity_lens.py` — 12 tests covering benefit-category classification (DAC / low-income near DAC / low-income / other), missing-overlay → Unknown behavior, portfolio shares vs. AB 1550 statutory minima, boolean coercion (true/yes/1/y, case-insensitive), input validation (empty rows, all-empty project_ids), default agency, fact_block shape (per-project + portfolio summary), end-to-end on the demo workspace both without and with a staged overlay, missing-run error, and idempotent re-runs.
+
+### Changed
+
+- None. v0.6.3 is strictly additive. Existing exports, chat, AI narrative, CEQA VMT, LAPM, RTP chapter, and QA behavior are byte-identical to v0.6.2.
+
 ## [0.6.2] — 2026-04-17
 
 ### Added
@@ -154,6 +167,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.6.3]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.3
 [0.6.2]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.2
 [0.6.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.1
 [0.6.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.0

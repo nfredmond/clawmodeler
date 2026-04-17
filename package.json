@@ -1,6 +1,6 @@
 {
   "name": "clawmodeler",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "AI-orchestrated, local-first transportation scenario modeling for small and rural agencies.",
   "private": true,
   "license": "Apache-2.0",

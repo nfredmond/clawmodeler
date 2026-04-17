@@ -19,6 +19,21 @@ from .ceqa import (
     render_ceqa_vmt_markdown,
     write_ceqa_vmt,
 )
+from .equity import (
+    AB1550_TARGET_DAC_SHARE,
+    AB1550_TARGET_LOW_INCOME_NEAR_DAC_SHARE,
+    AB1550_TARGET_LOW_INCOME_SHARE,
+    BENEFIT_CATEGORIES,
+    DEFAULT_DATASET_NOTE,
+    EquityLensResult,
+    EquityPortfolioSummary,
+    EquityProjectFinding,
+    compute_equity_lens,
+    equity_lens_fact_blocks,
+    render_equity_lens_markdown,
+    write_equity_lens,
+)
+from .equity import DEFAULT_AGENCY as DEFAULT_EQUITY_AGENCY
 from .lapm import (
     DEFAULT_DISTRICT,
     DEFAULT_LEAD_AGENCY,
@@ -43,11 +58,20 @@ from .rtp import (
 )
 
 __all__ = [
+    "AB1550_TARGET_DAC_SHARE",
+    "AB1550_TARGET_LOW_INCOME_NEAR_DAC_SHARE",
+    "AB1550_TARGET_LOW_INCOME_SHARE",
+    "BENEFIT_CATEGORIES",
     "DEFAULT_AGENCY",
     "DEFAULT_CHAPTER_TITLE",
+    "DEFAULT_DATASET_NOTE",
     "DEFAULT_DISTRICT",
+    "DEFAULT_EQUITY_AGENCY",
     "DEFAULT_LEAD_AGENCY",
     "DEFAULT_RTP_CYCLE",
+    "EquityLensResult",
+    "EquityPortfolioSummary",
+    "EquityProjectFinding",
     "LapmExhibitResult",
     "LapmProgrammingExhibit",
     "OPR_DEFAULT_THRESHOLD_PCT",
@@ -60,14 +84,18 @@ __all__ = [
     "CeqaVmtScenario",
     "ceqa_vmt_fact_blocks",
     "compute_ceqa_vmt",
+    "compute_equity_lens",
     "compute_lapm_exhibit",
     "compute_rtp_chapter",
+    "equity_lens_fact_blocks",
     "lapm_fact_blocks",
     "render_ceqa_vmt_markdown",
+    "render_equity_lens_markdown",
     "render_lapm_markdown",
     "render_rtp_chapter_markdown",
     "rtp_chapter_fact_blocks",
     "write_ceqa_vmt",
+    "write_equity_lens",
     "write_lapm_exhibit",
     "write_rtp_chapter",
 ]

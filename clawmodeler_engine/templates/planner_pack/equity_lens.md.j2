@@ -1,0 +1,124 @@
+# Equity Lens — SB 535 / AB 1550 / Tribal Overlay — run `{{ run_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+- Lead agency: **{{ result.agency }}**
+- Candidate projects screened: **{{ result.project_count }}**
+
+## Scope
+
+This packet applies California's statutory equity lens to the projects
+in ClawModeler run `{{ run_id }}`:
+
+- **SB 535** (De León, 2012; Gov Code §39711) — CalEPA disadvantaged
+  community (DAC) designations via CalEnviroScreen 4.0.
+- **AB 1550** (Gomez, 2016; H&S Code §39713) — low-income community and
+  household targets for California Climate Investments: **25%** of
+  benefits to DACs, an additional **10%** to low-income communities /
+  households within a half-mile of a DAC, and an additional **5%** to
+  low-income communities / households outside that buffer.
+- **AB 52** (2014) — tribal cultural resources consultation trigger
+  under CEQA when a project is located in or adjacent to an area of
+  traditional, cultural, or religious significance to a California
+  Native American tribe.
+
+## Methodology
+
+Each finding below is keyed to the lead-agency-staged equity overlay at
+`inputs/equity_overlay.csv` (columns: `project_id`, `dac_sb535`,
+`low_income_ab1550`, `low_income_near_dac`, `tribal_area`,
+`ces_percentile`, `notes`). Projects for which no overlay row was staged
+are labeled **Unknown** rather than silently assumed non-disadvantaged —
+the lead agency must stage the overlay or document the reason for its
+absence before relying on the portfolio summary.
+
+- **Dataset note:** {{ result.dataset_note }}
+
+## Per-project findings
+
+{% if findings %}| Project | Total | SB 535 DAC | AB 1550 low-income | ½ mi of DAC | Tribal | CES %ile | Benefit category |
+|---|---:|:---:|:---:|:---:|:---:|---:|---|
+{% for f in findings %}| `{{ f.project_id }}` — {{ f.name }} | {{ f.total_score }} | {{ "Yes" if f.dac_sb535 else "No" }} | {{ "Yes" if f.low_income_ab1550 else "No" }} | {{ "Yes" if f.low_income_near_dac else "No" }} | {{ "Yes" if f.tribal_area else "No" }} | {% if f.ces_percentile is not none %}{{ f.ces_percentile }}{% else %}—{% endif %} | {{ f.benefit_category }} |
+{% endfor %}
+{% else %}_No projects available for the equity lens._
+{% endif %}
+
+## Portfolio summary
+
+{% if summary %}- Projects screened: **{{ summary.project_count }}**
+- SB 535 DAC share: **{{ "%.1f" | format(summary.dac_share * 100) }}%** (AB 1550 target: {{ "%.0f" | format(targets.dac * 100) }}%){% if summary.ab1550_dac_target_met %} — **met**{% else %} — **not yet met**{% endif %}
+- AB 1550 low-income within ½ mile of DAC share: **{{ "%.1f" | format(summary.low_income_near_dac_share * 100) }}%** (target: {{ "%.0f" | format(targets.low_income_near_dac * 100) }}%){% if summary.ab1550_low_income_near_dac_target_met %} — **met**{% else %} — **not yet met**{% endif %}
+- AB 1550 low-income outside ½-mile buffer share: **{{ "%.1f" | format(summary.low_income_share * 100) }}%** (target: {{ "%.0f" | format(targets.low_income * 100) }}%){% if summary.ab1550_low_income_target_met %} — **met**{% else %} — **not yet met**{% endif %}
+- Tribal-area projects: **{{ summary.tribal_count }}** (AB 52 consultation trigger if any).
+- Projects with no equity overlay staged: **{{ summary.unknown_count }}** (excluded from share calculations as unknown, not as non-disadvantaged).
+{% else %}_Portfolio summary unavailable — no findings generated._
+{% endif %}
+
+## Findings by category
+
+{% set dac_list = findings | selectattr("benefit_category", "equalto", "DAC") | list %}
+{% set li_near_list = findings | selectattr("benefit_category", "equalto", "Low-income near DAC") | list %}
+{% set li_list = findings | selectattr("benefit_category", "equalto", "Low-income") | list %}
+{% set tribal_list = findings | selectattr("tribal_area") | list %}
+{% set unknown_list = findings | rejectattr("overlay_supplied") | list %}
+
+### SB 535 disadvantaged communities (DAC)
+
+{% if dac_list %}{% for f in dac_list %}- `{{ f.project_id }}` — {{ f.name }}{% if f.ces_percentile is not none %} (CalEnviroScreen %ile {{ f.ces_percentile }}){% endif %}. {{ f.notes }}
+{% endfor %}{% else %}_No projects flagged as SB 535 DAC in this portfolio._
+{% endif %}
+
+### AB 1550 low-income within ½ mile of a DAC
+
+{% if li_near_list %}{% for f in li_near_list %}- `{{ f.project_id }}` — {{ f.name }}. {{ f.notes }}
+{% endfor %}{% else %}_No projects flagged as low-income within ½ mile of a DAC._
+{% endif %}
+
+### AB 1550 low-income outside the ½-mile buffer
+
+{% if li_list %}{% for f in li_list %}- `{{ f.project_id }}` — {{ f.name }}. {{ f.notes }}
+{% endfor %}{% else %}_No projects flagged as low-income outside the ½-mile buffer._
+{% endif %}
+
+### Tribal area / AB 52 consultation triggers
+
+{% if tribal_list %}{% for f in tribal_list %}- `{{ f.project_id }}` — {{ f.name }}. {{ f.notes }}
+{% endfor %}{% else %}_No projects flagged as tribal-area in this portfolio._
+{% endif %}
+
+### Overlay not yet staged
+
+{% if unknown_list %}{% for f in unknown_list %}- `{{ f.project_id }}` — {{ f.name }}. {{ f.notes }}
+{% endfor %}{% else %}_Every project in the portfolio has an equity overlay row._
+{% endif %}
+
+## Data sources and limitations
+
+- Authoritative SB 535 DAC layer: CalEPA *Designation of Disadvantaged Communities Pursuant to SB 535*, paired with OEHHA *CalEnviroScreen 4.0*.
+- Authoritative AB 1550 low-income layer: HCD low-income community / household tract list under H&S Code §39713.
+- Tribal area overlays are agency-specific and typically derived from BIA Indian Lands, TCA boundaries, and consultation records; AB 52 consultation obligations are triggered independently of ClawModeler screening.
+- ClawModeler does not compute eligibility from raw census tracts here; the lead agency supplies per-project flags via `inputs/equity_overlay.csv`. Projects without an overlay row are reported as **Unknown**.
+
+## Citations
+
+- California Government Code §39711 — SB 535 (De León, 2012).
+- California Health & Safety Code §39713 — AB 1550 (Gomez, 2016).
+- California Public Resources Code §§21074, 21080.3.1–21080.3.2 — AB 52 (2014) tribal cultural resources consultation.
+- CARB, *Funding Guidelines for Agencies Administering California Climate Investments*.
+- OEHHA, *CalEnviroScreen 4.0* (the current designation basis for SB 535).
+
+## Notes
+
+- This packet is **screening-level**. It does not substitute for the lead
+  agency's SB 535 / AB 1550 benefit-tracking submittal to CARB or for
+  formal AB 52 tribal consultation, which begins with a written request
+  from a California Native American tribe.
+- Every entry in the per-project findings table above is mirrored as an
+  `equity_lens_project` fact_block appended to this run's
+  `fact_blocks.jsonl`, and the portfolio summary as a
+  `equity_lens_summary` fact_block, so downstream narrative and chat
+  turns remain subject to the ClawModeler citation contract.
+
+---
+
+*ClawModeler Planner Pack — SB 535 / AB 1550 / tribal equity lens.*
