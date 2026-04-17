@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Nathaniel Ford Redmond" }]
-dependencies = []
+dependencies = ["jinja2>=3.1"]
 
 [project.urls]
 Homepage = "https://github.com/nfredmond/clawmodeler"
@@ -20,6 +20,7 @@ Changelog = "https://github.com/nfredmond/clawmodeler/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 light = []
+visuals = ["matplotlib>=3.8", "folium>=0.15"]
 standard = ["duckdb", "pandas", "shapely", "pyproj", "networkx", "osmnx"]
 full = ["duckdb", "pandas", "shapely", "pyproj", "networkx", "osmnx", "ortools", "scikit-learn"]
 gpu = ["torch", "xgboost"]
