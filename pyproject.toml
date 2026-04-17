@@ -21,6 +21,8 @@ Changelog = "https://github.com/nfredmond/clawmodeler/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 light = []
 visuals = ["matplotlib>=3.8", "folium>=0.15"]
+llm = ["httpx>=0.27"]
+llm-cloud = ["anthropic>=0.34", "openai>=1.50"]
 standard = ["duckdb", "pandas", "shapely", "pyproj", "networkx", "osmnx"]
 full = ["duckdb", "pandas", "shapely", "pyproj", "networkx", "osmnx", "ortools", "scikit-learn"]
 gpu = ["torch", "xgboost"]
