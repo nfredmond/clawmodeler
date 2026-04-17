@@ -33,6 +33,11 @@ from .grounding import (
     split_sentences,
     validate_and_ground,
 )
+from .narrative import (
+    NarrativeResult,
+    build_narrative_prompt,
+    generate_narrative,
+)
 from .ollama import (
     DEFAULT_ENDPOINT as OLLAMA_DEFAULT_ENDPOINT,
 )
@@ -70,6 +75,7 @@ __all__ = [
     "LLMConfig",
     "LLMConfigError",
     "LLMProvider",
+    "NarrativeResult",
     "OLLAMA_DEFAULT_ENDPOINT",
     "OLLAMA_DEFAULT_MODEL",
     "OllamaNotInstalledError",
@@ -81,9 +87,11 @@ __all__ = [
     "SUPPORTED_PROVIDERS",
     "Sentence",
     "apply_updates",
+    "build_narrative_prompt",
     "build_provider",
     "config_path",
     "default_config",
+    "generate_narrative",
     "load_config",
     "parse_key_value_pairs",
     "save_config",

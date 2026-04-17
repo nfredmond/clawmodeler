@@ -6,7 +6,11 @@
 
 **Scenarios reviewed:** {% if scenarios %}{% for scenario in scenarios %}`{{ scenario.scenario_id }}`{% if not loop.last %}, {% endif %}{% endfor %}{% else %}`baseline`{% endif %}
 
-### Top findings
+{% if ai_narrative and ai_narrative.text %}### Narrative summary
+
+{{ ai_narrative.text }}
+
+{% endif %}### Top findings
 
 {% if findings %}{% for finding in findings[:5] %}{{ loop.index }}. {{ finding }}
 {% endfor %}{% else %}_No findings to report._

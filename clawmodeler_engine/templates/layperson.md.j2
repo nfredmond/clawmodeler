@@ -1,6 +1,10 @@
 {% extends "_base.md.j2" %}
 {% block body %}
-## What this analysis is
+{% if ai_narrative and ai_narrative.text %}## Narrative summary
+
+{{ ai_narrative.text }}
+
+{% endif %}## What this analysis is
 
 This is a **screening-level** look at the scenarios you asked about. It was produced automatically from the data you staged, using proxy methods rather than a detailed engineering model. Treat the numbers as planning-grade, not engineering-grade.
 

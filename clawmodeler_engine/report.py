@@ -43,12 +43,19 @@ def _environment():
     return env
 
 
-def render_report(manifest: dict[str, Any], report_type: str = "technical") -> str:
+def render_report(
+    manifest: dict[str, Any],
+    report_type: str = "technical",
+    *,
+    ai_narrative: dict[str, Any] | None = None,
+) -> str:
     if report_type not in REPORT_TYPES:
         raise ValueError(
             f"Unknown report_type {report_type!r}; expected one of {REPORT_TYPES}"
         )
-    context = build_context(manifest, report_type=report_type)
+    context = build_context(
+        manifest, report_type=report_type, ai_narrative=ai_narrative
+    )
     env = _environment()
     template_name = {
         "technical": "technical.md.j2",
@@ -75,7 +82,12 @@ def render_markdown_report(manifest: dict[str, Any]) -> str:
     return render_technical_report(manifest)
 
 
-def build_context(manifest: dict[str, Any], *, report_type: str) -> dict[str, Any]:
+def build_context(
+    manifest: dict[str, Any],
+    *,
+    report_type: str,
+    ai_narrative: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     run_id = str(manifest.get("run_id", "unknown"))
     workspace_root = Path(str(manifest["workspace"]["root"]))
     run_root = workspace_root / "runs" / run_id
@@ -120,7 +132,7 @@ def build_context(manifest: dict[str, Any], *, report_type: str) -> dict[str, An
         "headlines": headlines,
         "findings": findings,
         "question_summary": extract_question_summary(workspace_root),
-        "ai_narrative": None,
+        "ai_narrative": ai_narrative,
     }
 
 

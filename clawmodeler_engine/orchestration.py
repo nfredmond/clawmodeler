@@ -156,6 +156,7 @@ def write_export(
     export_format: str,
     *,
     report_type: str = "technical",
+    ai_narrative: bool = False,
 ) -> Path | list[Path]:
     ensure_workspace(workspace)
     build_qa_report(workspace, run_id)
@@ -189,10 +190,21 @@ def write_export(
         "run_manifest",
     )
 
+    narrative_context: dict[str, Any] | None = None
+    if ai_narrative:
+        narrative_context = _generate_ai_narrative(workspace, run_id, manifest, reports_dir)
+
     if report_type == "all":
         paths: list[Path] = []
         for single_type in REPORT_TYPES:
-            path = _write_single_report(manifest, reports_dir, run_id, single_type, export_format)
+            path = _write_single_report(
+                manifest,
+                reports_dir,
+                run_id,
+                single_type,
+                export_format,
+                ai_narrative=narrative_context,
+            )
             paths.append(path)
         return paths
 
@@ -200,7 +212,89 @@ def write_export(
         raise InsufficientDataError(
             f"Unknown --report-type {report_type!r}; expected one of {REPORT_TYPES} or 'all'."
         )
-    return _write_single_report(manifest, reports_dir, run_id, report_type, export_format)
+    return _write_single_report(
+        manifest,
+        reports_dir,
+        run_id,
+        report_type,
+        export_format,
+        ai_narrative=narrative_context,
+    )
+
+
+def _generate_ai_narrative(
+    workspace: Path,
+    run_id: str,
+    manifest: dict[str, Any],
+    reports_dir: Path,
+) -> dict[str, Any]:
+    """Build provider, generate narrative, enforce grounding before export.
+
+    Blocks the export with a ``*_export_blocked.md`` report when the
+    configured cloud provider has not been explicitly confirmed or when
+    the grounded narrative still contains ungrounded / unknown-fact
+    sentences. The grounding contract is the load-bearing check — we
+    never let an ungrounded sentence ship.
+    """
+
+    from .llm import (
+        CLOUD_PROVIDERS,
+        GroundingMode,
+        build_provider,
+        generate_narrative,
+        load_config,
+    )
+    from .report import read_fact_blocks
+
+    config = load_config(workspace)
+    if config.provider in CLOUD_PROVIDERS and not config.cloud_confirmed:
+        raise InsufficientDataError(
+            f"Cloud provider {config.provider!r} requires explicit confirmation. "
+            "Run `clawmodeler-engine llm configure cloud_confirmed=true` "
+            "before using --ai-narrative."
+        )
+
+    fact_blocks_path = (
+        workspace / "runs" / run_id / "outputs" / "tables" / "fact_blocks.jsonl"
+    )
+    fact_blocks = read_fact_blocks(fact_blocks_path) if fact_blocks_path.exists() else []
+    if not fact_blocks:
+        raise InsufficientDataError(
+            "--ai-narrative requires at least one fact_block; none were found."
+        )
+
+    provider = build_provider(config)
+    try:
+        mode = GroundingMode(config.grounding_mode)
+    except ValueError:
+        mode = GroundingMode.STRICT
+    result = generate_narrative(manifest, fact_blocks, provider, mode=mode)
+
+    if not result.is_fully_grounded:
+        blocked_path = reports_dir / f"{run_id}_ai_narrative_blocked.md"
+        blocked_lines = [
+            "# AI Narrative Blocked",
+            "",
+            "The grounding validator rejected the generated narrative.",
+            "",
+            f"- Provider: `{result.provider}`",
+            f"- Model: `{result.model}`",
+            f"- Ungrounded sentences: {result.ungrounded_sentence_count}",
+            f"- Unknown fact_ids: {result.unknown_fact_ids}",
+            "",
+            "## Raw model output",
+            "",
+            "```",
+            result.raw_text,
+            "```",
+            "",
+        ]
+        blocked_path.write_text("\n".join(blocked_lines), encoding="utf-8")
+        raise QaGateBlockedError(
+            f"AI narrative is not fully grounded; export blocked: {blocked_path}"
+        )
+
+    return result.to_template_context()
 
 
 def _write_single_report(
@@ -209,8 +303,13 @@ def _write_single_report(
     run_id: str,
     report_type: str,
     export_format: str,
+    *,
+    ai_narrative: dict[str, Any] | None = None,
 ) -> Path:
     suffix = "" if report_type == "technical" else f"_{report_type}"
     report_path = reports_dir / f"{run_id}_report{suffix}.{export_format}"
-    report_path.write_text(render_report(manifest, report_type), encoding="utf-8")
+    report_path.write_text(
+        render_report(manifest, report_type, ai_narrative=ai_narrative),
+        encoding="utf-8",
+    )
     return report_path

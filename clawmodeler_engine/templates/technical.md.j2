@@ -1,6 +1,10 @@
 {% extends "_base.md.j2" %}
 {% block body %}
-## Methods
+{% if ai_narrative and ai_narrative.text %}## Narrative summary
+
+{{ ai_narrative.text }}
+
+{% endif %}## Methods
 
 {% for method in methods %}- `{{ method }}`
 {% endfor %}

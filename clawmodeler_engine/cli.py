@@ -104,6 +104,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="technical",
         help="Which report template to render (default: technical).",
     )
+    export.add_argument(
+        "--ai-narrative",
+        dest="ai_narrative",
+        action="store_true",
+        help=(
+            "Generate a grounded AI narrative using the workspace llm_config; "
+            "every sentence must cite a fact_id from the run or the export is blocked."
+        ),
+    )
     export.set_defaults(func=command_export)
 
     doctor = subparsers.add_parser("doctor", help="Check ClawModeler runtime dependencies.")
@@ -368,6 +377,7 @@ def command_export(args: argparse.Namespace) -> None:
         args.run_id,
         args.format,
         report_type=args.report_type,
+        ai_narrative=getattr(args, "ai_narrative", False),
     )
     if isinstance(report_paths, list):
         print(json.dumps({"reports": [str(path) for path in report_paths]}))
