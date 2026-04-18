@@ -1,0 +1,72 @@
+# Run Diff — `{{ result.run_a_id }}` → `{{ result.run_b_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+- Run A engine: `{{ result.run_a_engine_version or "unknown" }}` (created `{{ result.run_a_created_at or "unknown" }}`)
+- Run B engine: `{{ result.run_b_engine_version or "unknown" }}` (created `{{ result.run_b_created_at or "unknown" }}`)
+
+## Scope
+
+This report is a deterministic, CSV-grounded comparison of two finished
+ClawModeler runs in the same workspace. It reports **added**, **removed**,
+and **changed** rows for every tracked artifact — engine outputs
+(`project_scores.csv`, `vmt_screening.csv`) and the Planner Pack series
+(`ceqa_vmt.csv`, `lapm_exhibit.csv`, `rtp_chapter_*.csv`,
+`equity_lens.csv`, `atp_packet.csv`) — so the lead agency can explain
+*what moved* between RTP draft iterations, scenario edits, or project
+list revisions.
+
+Artifacts that are not present in one or both runs are reported
+explicitly; no values are silently defaulted. Every added / removed /
+changed row is mirrored as a `run_diff_row` fact_block, and every
+artifact summary as a `run_diff_summary` fact_block, so downstream
+narrative and chat turns remain under the ClawModeler citation
+contract.
+
+## Portfolio of changes
+
+| Artifact | Present A | Present B | Rows A | Rows B | Added | Removed | Changed | Unchanged |
+|---|:---:|:---:|---:|---:|---:|---:|---:|---:|
+{% for a in artifacts -%}
+| {{ a.label }} | {{ "✔" if a.present_in_a else "—" }} | {{ "✔" if a.present_in_b else "—" }} | {{ a.row_count_a }} | {{ a.row_count_b }} | {{ a.added_count }} | {{ a.removed_count }} | {{ a.changed_count }} | {{ a.unchanged_count }} |
+{% endfor %}
+
+{% for a in artifacts %}## {{ a.label }}
+
+- File: `{{ a.filename }}` · key: `{{ a.key_column }}`
+- Run A: {{ "present" if a.present_in_a else "**not present**" }} ({{ a.row_count_a }} row(s))
+- Run B: {{ "present" if a.present_in_b else "**not present**" }} ({{ a.row_count_b }} row(s))
+- Delta: **{{ a.added_count }} added**, **{{ a.removed_count }} removed**, **{{ a.changed_count }} changed**, {{ a.unchanged_count }} unchanged.
+
+{% if a.row_changes -%}
+| Status | Key | Name | Changes |
+|---|---|---|---|
+{% for row in a.row_changes -%}
+| {{ row.status }} | `{{ row.key }}` | {{ row.name }} | {% if row.changes -%}{% for c in row.changes -%}`{{ c.field }}`: {{ c.from_value or "∅" }} → {{ c.to_value or "∅" }}{% if c.numeric_delta is not none %} (Δ {{ "+" if c.numeric_delta >= 0 else "" }}{{ c.numeric_delta }}){% endif %}{% if not loop.last %}<br/>{% endif %}{% endfor -%}{% else -%}_no tracked columns populated_{% endif %} |
+{% endfor %}
+{%- else -%}
+_No row-level changes for this artifact._
+{%- endif %}
+
+{% endfor %}
+## Citations
+
+- California Government Code §65080 — Regional Transportation Plans (RTP cycle + amendments that drive re-runs).
+- California Public Resources Code §21099 + CEQA Guidelines §15064.3 — transportation-impact VMT significance.
+- Caltrans *Local Assistance Procedures Manual*, Chapter 3 (Project Authorization) — programming field revisions.
+- California Streets & Highways Code §§2380–2383 — Active Transportation Program (grant-cycle iterations).
+- California Government Code §39711 (SB 535) and Health & Safety Code §39713 (AB 1550) — equity lens inputs that may change between overlays.
+
+## Notes
+
+- This report is **screening-level**. It does not replace the lead
+  agency's formal amendment record, CEQA findings, ATP resubmission, or
+  RTP public-review documentation.
+- Every change above is mirrored as a grounded fact_block in
+  `diffs/{{ result.run_a_id }}_vs_{{ result.run_b_id }}/fact_blocks.jsonl`
+  so downstream narrative and chat turns can cite it under the
+  ClawModeler citation contract.
+
+---
+
+*ClawModeler run diff — v0.7.0.*

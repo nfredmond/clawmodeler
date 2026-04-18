@@ -4,6 +4,19 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-04-18
+
+### Added
+
+- `clawmodeler_engine/diff.py` — **Run-to-run diff** across every shipped engine and Planner Pack artifact. `compute_run_diff`, `run_diff_fact_blocks`, `render_run_diff_markdown`, `write_run_diff`. Reads both runs' `project_scores.csv`, `vmt_screening.csv`, `ceqa_vmt.csv`, `lapm_exhibit.csv`, `rtp_chapter_projects.csv`, `rtp_chapter_scenarios.csv`, `equity_lens.csv`, and `atp_packet.csv` from `outputs/tables/`, classifies each keyed row as **added** / **removed** / **changed** / **unchanged**, and reports numeric deltas on score, VMT, cost, accessibility, and threshold columns. Artifacts that are not present in one or both runs are reported explicitly rather than silently defaulted. Emits per-change `run_diff_row` fact_blocks and per-artifact `run_diff_summary` fact_blocks so downstream narrative and chat turns can cite the differences under the ClawModeler citation contract.
+- `clawmodeler_engine/templates/run_diff.md.j2` — Jinja2 template for the diff report: header (run IDs, engine versions, creation timestamps), scope, portfolio of changes table (one row per artifact with added/removed/changed/unchanged counts), per-artifact section with a Markdown table of row-level changes (field-by-field old → new with Δ for numeric columns), citations (Gov Code §65080, Pub Res Code §21099 + CEQA §15064.3, LAPM Chapter 3, S&HC §§2380–2383, Gov Code §39711 + H&S Code §39713), and notes.
+- `clawmodeler-engine diff` CLI subcommand. Flags: `--workspace`, `--run-a`, `--run-b`, `--json`. Writes `diffs/<run_a>_vs_<run_b>/diff.csv` (flat one-row-per-field-change), `diff.json`, and `fact_blocks.jsonl`, and renders `reports/<run_a>_vs_<run_b>_diff.md`.
+- `tests/test_run_diff.py` — 14 tests covering: identical-run-id rejection, added/removed/changed detection with numeric delta, artifact-presence reporting when one side is absent, unchanged-row counting without listing, empty-key-row filtering, per-row + per-artifact fact_block shape, presence phrase variants (both / only A / only B / neither), end-to-end on two unchanged runs, end-to-end on mutated project_scores, end-to-end with the full Planner Pack staged on both runs, flat CSV one-row-per-field-change check, same-run-id rejection, missing-run error, and idempotent re-runs.
+
+### Changed
+
+- None. v0.7.0 is strictly additive. Existing exports, chat, AI narrative, CEQA VMT, LAPM, RTP chapter, equity lens, ATP packet, and QA behavior are byte-identical to v0.6.4.
+
 ## [0.6.4] — 2026-04-18
 
 ### Added
@@ -180,6 +193,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.7.0]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.7.0
 [0.6.4]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.4
 [0.6.3]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.3
 [0.6.2]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.2

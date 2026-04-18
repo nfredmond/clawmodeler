@@ -505,6 +505,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     atp_packet.set_defaults(func=command_planner_pack_atp_packet)
 
+    diff = subparsers.add_parser(
+        "diff",
+        help="Compare two finished runs across engine and Planner Pack artifacts.",
+    )
+    diff.add_argument("--workspace", required=True, type=Path)
+    diff.add_argument(
+        "--run-a",
+        dest="run_a",
+        required=True,
+        help="Baseline run ID (the 'from' side of the diff).",
+    )
+    diff.add_argument(
+        "--run-b",
+        dest="run_b",
+        required=True,
+        help="Comparison run ID (the 'to' side of the diff).",
+    )
+    diff.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full diff summary as JSON.",
+    )
+    diff.set_defaults(func=command_diff)
+
     return parser
 
 
@@ -1085,4 +1110,28 @@ def command_planner_pack_atp_packet(args: argparse.Namespace) -> None:
     print(f"CSV:    {summary['csv_path']}")
     print(f"JSON:   {summary['json_path']}")
     print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
+def command_diff(args: argparse.Namespace) -> None:
+    from .diff import write_run_diff
+
+    ensure_workspace(args.workspace)
+    summary = write_run_diff(args.workspace, args.run_a, args.run_b)
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    totals = summary["totals"]
+    print(
+        f"Run diff {summary['run_a_id']} → {summary['run_b_id']}: "
+        f"{totals['added']} added, {totals['removed']} removed, "
+        f"{totals['changed']} changed, {totals['unchanged']} unchanged."
+    )
+    print(f"Report:   {summary['report_path']}")
+    print(f"CSV:      {summary['csv_path']}")
+    print(f"JSON:     {summary['json_path']}")
+    print(f"Diff dir: {summary['diff_dir']}")
+    print(
+        f"Appended {summary['fact_block_count']} fact_block(s) to "
+        f"{summary['diff_dir']}/fact_blocks.jsonl."
+    )
 
