@@ -473,6 +473,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     equity_lens.set_defaults(func=command_planner_pack_equity_lens)
 
+    atp_packet = planner_subparsers.add_parser(
+        "atp-packet",
+        help="Draft a California ATP application packet for each scored project.",
+    )
+    atp_packet.add_argument("--workspace", required=True, type=Path)
+    atp_packet.add_argument("--run-id", dest="run_id", required=True)
+    atp_packet.add_argument(
+        "--agency",
+        dest="agency",
+        default=None,
+        help="Lead agency name for the ATP application header.",
+    )
+    atp_packet.add_argument(
+        "--cycle",
+        dest="cycle",
+        default=None,
+        help="ATP cycle label (e.g. 'ATP Cycle 7').",
+    )
+    atp_packet.add_argument(
+        "--rtp-cycle-label",
+        dest="rtp_cycle_label",
+        default=None,
+        help="Optional RTP cycle label (e.g. '2026 RTP') for consistency wording.",
+    )
+    atp_packet.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full ATP packet summary as JSON.",
+    )
+    atp_packet.set_defaults(func=command_planner_pack_atp_packet)
+
     return parser
 
 
@@ -1014,6 +1046,40 @@ def command_planner_pack_equity_lens(args: argparse.Namespace) -> None:
             f"  AB 1550 low-income outside 1/2 mile share: "
             f"{portfolio['low_income_share'] * 100:.1f}% "
             f"(target 5%){' — met' if portfolio['ab1550_low_income_target_met'] else ' — not yet met'}."
+        )
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
+def command_planner_pack_atp_packet(args: argparse.Namespace) -> None:
+    from .planner_pack import DEFAULT_ATP_AGENCY, DEFAULT_ATP_CYCLE, write_atp_packet
+
+    ensure_workspace(args.workspace)
+    summary = write_atp_packet(
+        args.workspace,
+        args.run_id,
+        agency=args.agency or DEFAULT_ATP_AGENCY,
+        cycle=args.cycle or DEFAULT_ATP_CYCLE,
+        rtp_cycle_label=args.rtp_cycle_label,
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    portfolio = summary["summary"] or {}
+    print(
+        f"California ATP packet — {summary['application_count']} application "
+        f"draft(s), agency: {summary['agency']}, cycle: {summary['cycle']}."
+    )
+    if portfolio:
+        print(
+            f"  Mean screening total score: "
+            f"{portfolio['mean_total_score']}/100; "
+            f"{portfolio['dac_application_count']} SB 535 DAC "
+            f"({portfolio['dac_share'] * 100:.1f}%), "
+            f"{portfolio['low_income_application_count']} AB 1550 low-income, "
+            f"{portfolio['tribal_application_count']} tribal-area."
         )
     print(f"Report: {summary['report_path']}")
     print(f"CSV:    {summary['csv_path']}")

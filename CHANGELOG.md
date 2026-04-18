@@ -4,6 +4,19 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] — 2026-04-18
+
+### Added
+
+- `clawmodeler_engine/planner_pack/atp.py` — **Planner Pack v5**: California Active Transportation Program (ATP) grant application packet generator. Drafts one ATP application per candidate project in a finished run, populated from `project_scores.csv` and enriched when the run already has `lapm_exhibit.csv` (programming fields), `ceqa_vmt.csv` (per-scenario significance collapsed into a run-level CEQA phrase), and `equity_lens.csv` (SB 535 / AB 1550 / tribal benefit category). Projects whose equity-lens benefit category is `DAC`, `Low-income near DAC`, or `Low-income` are flagged as eligible for ATP's disadvantaged-community benefit bonus (`ATP_DAC_SCORING_CATEGORIES`). Emits per-application `atp_application_project` fact_blocks and a portfolio-level `atp_application_summary` fact_block so downstream narrative and chat turns stay under the ClawModeler citation contract. Cites California Streets & Highways Code §§2380–2383, the CTC *Active Transportation Program Guidelines*, Gov Code §39711 (SB 535), H&S Code §39713 (AB 1550), Pub Res Code §21099 + CEQA Guidelines §15064.3, Caltrans LAPM Chapters 3 and 7, and Gov Code §65080 (RTP).
+- `clawmodeler_engine/templates/planner_pack/atp_packet.md.j2` — Jinja2 template for the ATP packet: scope, methodology, portfolio summary, per-project application drafts (identifiers, description, benefits scoring table with safety/equity/climate/feasibility and the 30/25/25/20 weighted total, CEQA §15064.3 determination, DAC benefit section with SB 535 / AB 1550 / tribal flags and ATP bonus eligibility, scope/schedule/budget, readiness, RTP consistency, explicit past-performance / letters-of-support placeholder), citations, and notes.
+- `clawmodeler-engine planner-pack atp-packet` CLI subcommand. Flags: `--workspace`, `--run-id`, `--agency`, `--cycle`, `--rtp-cycle-label`, `--json`. Writes `atp_packet.csv`, `atp_packet.json`, appends fact_blocks to `fact_blocks.jsonl`, and renders `reports/<run_id>_atp_packet.md`.
+- `tests/test_atp_packet.py` — 14 tests covering computation without Planner Pack inputs, LAPM enrichment of programming fields, equity → DAC-eligibility mapping, CEQA per-scenario → run-level significance collapse, RTP cycle label propagation, readiness-note tiers derived from `sensitivity_flag` (LOW / MEDIUM / HIGH), portfolio aggregation (DAC share, mean total score), input validation (empty rows, all-empty project_ids), fact_block shape (per-project + portfolio summary), end-to-end on the demo workspace both without and with the full Planner Pack (CEQA + LAPM + equity overlay), missing-run error, and idempotent re-runs.
+
+### Changed
+
+- None. v0.6.4 is strictly additive. Existing exports, chat, AI narrative, CEQA VMT, LAPM, RTP chapter, equity lens, and QA behavior are byte-identical to v0.6.3.
+
 ## [0.6.3] — 2026-04-17
 
 ### Added
@@ -167,6 +180,7 @@ Initial standalone release. Extracted from the `nfredmond/openclaw` fork into it
 - GitHub Actions CI running ruff, engine unittests, and desktop Vitest.
 - Apache-2.0 license.
 
+[0.6.4]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.4
 [0.6.3]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.3
 [0.6.2]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.2
 [0.6.1]: https://github.com/nfredmond/clawmodeler/releases/tag/v0.6.1
