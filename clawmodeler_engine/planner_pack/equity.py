@@ -323,6 +323,8 @@ def equity_lens_fact_blocks(
                 "fact_type": "equity_lens_project",
                 "project_id": finding.project_id,
                 "claim_text": claim,
+                "method_ref": "planner_pack.equity_lens",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": finding.project_id,
             }
@@ -345,6 +347,8 @@ def equity_lens_fact_blocks(
                 "fact_id": "equity-lens-summary",
                 "fact_type": "equity_lens_summary",
                 "claim_text": portfolio_claim,
+                "method_ref": "planner_pack.equity_lens",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": "portfolio",
             }

@@ -474,6 +474,8 @@ def run_diff_fact_blocks(
                     "artifact": artifact.artifact,
                     "status": row.status,
                     "claim_text": claim,
+                    "method_ref": "diff.run_to_run",
+                    "artifact_refs": [{"path": str(source_path), "type": "table"}],
                     "source_table": str(source_path),
                     "source_row": row.key,
                 }
@@ -500,6 +502,8 @@ def run_diff_fact_blocks(
                 "fact_type": "run_diff_summary",
                 "artifact": artifact.artifact,
                 "claim_text": summary_claim,
+                "method_ref": "diff.run_to_run",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": artifact.artifact,
             }

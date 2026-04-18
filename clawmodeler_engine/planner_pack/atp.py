@@ -351,6 +351,8 @@ def atp_grant_fact_blocks(
                 "fact_type": "atp_application_project",
                 "project_id": app.project_id,
                 "claim_text": claim,
+                "method_ref": "planner_pack.atp_packet",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": app.project_id,
             }
@@ -372,6 +374,8 @@ def atp_grant_fact_blocks(
                 "fact_id": "atp-application-summary",
                 "fact_type": "atp_application_summary",
                 "claim_text": portfolio_claim,
+                "method_ref": "planner_pack.atp_packet",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": "portfolio",
             }

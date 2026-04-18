@@ -173,6 +173,8 @@ def ceqa_vmt_fact_blocks(
                 "fact_type": "ceqa_vmt_determination",
                 "scenario_id": scenario.scenario_id,
                 "claim_text": claim,
+                "method_ref": "planner_pack.ceqa_vmt",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": f"{result.project_type}.{result.reference_label}",
             }

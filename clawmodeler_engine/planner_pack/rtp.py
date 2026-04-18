@@ -248,6 +248,8 @@ def rtp_chapter_fact_blocks(
                 "fact_type": "rtp_chapter_entry",
                 "project_id": project.project_id,
                 "claim_text": claim,
+                "method_ref": "planner_pack.rtp_chapter",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": f"projects.{project.project_id}",
             }
@@ -273,6 +275,8 @@ def rtp_chapter_fact_blocks(
                 "fact_type": "rtp_chapter_entry",
                 "scenario_id": scenario.scenario_id,
                 "claim_text": claim,
+                "method_ref": "planner_pack.rtp_chapter",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": f"scenarios.{scenario.scenario_id}",
             }

@@ -211,6 +211,8 @@ def lapm_fact_blocks(
                 "fact_type": "lapm_programming_exhibit",
                 "project_id": exhibit.project_id,
                 "claim_text": claim,
+                "method_ref": "planner_pack.lapm_exhibit",
+                "artifact_refs": [{"path": str(source_path), "type": "table"}],
                 "source_table": str(source_path),
                 "source_row": exhibit.project_id,
             }

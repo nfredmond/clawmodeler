@@ -4,6 +4,16 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] — 2026-04-18
+
+### Fixed
+
+- **QA gate schema for Planner Pack and run-diff fact_blocks.** All Planner Pack emitters shipped in v0.6.0–v0.6.4 (`ceqa`, `lapm`, `rtp`, `equity`, `atp`) and the v0.7.0 run-to-run diff (`diff`) wrote fact_blocks with `source_table` / `source_row` keys but without the `method_ref` (str) and `artifact_refs` (non-empty list) keys that `qa.is_valid_fact_block` requires. The validator rejected every block as invalid, so any run that staged a Planner Pack or diff artifact returned `export_ready: false, blockers: ["fact_blocks_invalid"]` from `build_qa_report` and silently broke `clawmodeler-engine export`. No existing test exercised `export` after a Planner Pack command, which is how the bug reached `main`. Fix is additive: every emitter now sets `method_ref` to a module-specific dotted identifier (`planner_pack.ceqa_vmt`, `planner_pack.lapm_exhibit`, `planner_pack.rtp_chapter`, `planner_pack.equity_lens`, `planner_pack.atp_packet`, `diff.run_to_run`) and `artifact_refs` to a single-element list `[{"path": <source CSV>, "type": "table"}]`. The legacy `source_table` / `source_row` keys are preserved for backward compatibility with any tooling that read them directly. Core engine fact_blocks (project_scores, VMT screening, bridge validation, AI narrative) were unaffected — their existing `method_ref` + `artifact_refs` shape is unchanged.
+
+### Added
+
+- `tests/test_qa_gate_planner_pack.py` — 7-test regression suite: one test per Planner Pack emitter (`ceqa_vmt`, `lapm_exhibit`, `rtp_chapter`, `equity_lens`, `atp_packet`) plus the full-stack composition running all five in one run, each asserting `build_qa_report` returns `export_ready: true` with no blockers; plus one test for `write_run_diff` that reads `diffs/<a>_vs_<b>/fact_blocks.jsonl` directly (diffs don't live under a run tree) and validates every block against `qa.is_valid_fact_block`. These tests would have caught the bug on v0.6.0 and guard against the same schema drift happening again.
+
 ## [0.7.0] — 2026-04-18
 
 ### Added
