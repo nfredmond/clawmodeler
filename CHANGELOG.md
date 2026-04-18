@@ -4,6 +4,21 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-04-18
+
+### Added
+
+- `clawmodeler_engine/what_if.py` — **What-if simulator.** Deterministic parameter overrides on a finished run: `WhatIfOverrides` (scoring weights, reference VMT per capita, CEQA threshold, project include/exclude, sensitivity floor), `WhatIfResult` (per-project deltas, dropped project ids, scoring weights used), `compute_what_if` (no-side-effect preview), `what_if_fact_blocks` (summary + per-project delta blocks, `method_ref="what_if.parameter_override"`, `artifact_refs=[{"path": str, "type": "table"}]`), `render_what_if_markdown`, and `write_what_if` (re-invokes the full-stack scoring path with overrides, re-filters `project_scores.csv`, rewrites `fact_blocks.jsonl`, stamps the new run's manifest with `base_run_id` + `overrides`, builds a QA report). No LLM is called and no narrative is generated — the grounding covenant is preserved.
+- `clawmodeler_engine/templates/what_if.md.j2` — Jinja2 template for the what-if report: applied-overrides list, scoring weights used, per-project deltas table, dropped-project list, citations (Gov Code §65080, CEQA Pub Res Code §21099 + §15064.3, OPR *Technical Advisory* Dec 2018, S&HC §§2380–2383).
+- `clawmodeler-engine what-if` CLI subcommand. Flags: `--workspace`, `--base-run-id`, `--new-run-id`, `--weight-safety/equity/climate/feasibility` (must be supplied together and sum to 1.0), `--reference-vmt-per-capita`, `--threshold-pct` (0 < pct < 1), `--include-project` (repeatable), `--exclude-project` (repeatable), `--sensitivity-floor {LOW,MEDIUM,HIGH}`, `--json`.
+- `tests/test_what_if.py` — 22-test regression suite: override-validation (weight sum, missing keys, empty overrides, invalid threshold/floor, include/exclude overlap), run creation (base-not-found, collision, weight shift, include/exclude filter, idempotent rerun, same base/new id), QA gate (new run `export_ready: true`, every what-if fact_block passes `qa.is_valid_fact_block`), composition (diff over base vs what-if produces `run_diff_row` blocks, full chain through Planner Pack CEQA + diff + export), manifest round-trip (new 1.1.0 with `base_run_id` + `overrides`, legacy 1.0.0 still validates), fact_block shape.
+
+### Changed
+
+- `clawmodeler_engine/model.py` — Factored the hard-coded scoring weights `0.30 / 0.25 / 0.25 / 0.20` (safety / equity / climate / feasibility) into `DEFAULT_SCORING_WEIGHTS` + `_resolve_scoring_weights` helper. `compute_project_scores` now accepts a `weights=` keyword argument and `run_full_stack` accepts a `scoring_weights=` keyword argument; both default to the original California ATP-aligned values so every existing caller is byte-identical. `what_if.py` is the only new caller that supplies overrides.
+- `clawmodeler_engine/contracts.py` — **Manifest schema 1.0.0 → 1.1.0 (additive).** Two optional fields are now stamped by `write_what_if`: `base_run_id: str | None` and `overrides: dict | None`. `CURRENT_MANIFEST_VERSION` is now `"1.1.0"`; a new `LEGACY_MANIFEST_VERSIONS = ("1.0.0",)` tuple records which prior versions remain readable. Existing 1.0.0 manifests continue to validate unchanged; the additive fields are ignored when absent.
+- `tests/clawmodeler_engine_test.py` — Bumped the one assertion on `manifest_version` from `"1.0.0"` to `"1.1.0"` to match the new stamp; all other assertions on manifest contents are unchanged.
+
 ## [0.7.1] — 2026-04-18
 
 ### Fixed

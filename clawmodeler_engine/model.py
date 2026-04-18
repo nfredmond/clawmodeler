@@ -24,6 +24,8 @@ def run_full_stack(
     receipt: dict[str, Any],
     scenarios: list[str],
     paths: dict[str, Path],
+    *,
+    scoring_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     question = load_optional_json(workspace / "analysis_plan.json").get("question", {})
     zones = load_zones(workspace, receipt)
@@ -60,7 +62,9 @@ def run_full_stack(
         outputs["tables"].append(str(transit_path))
         fact_blocks.extend(transit_fact_blocks(transit_path, transit_rows))
 
-    score_rows = compute_project_scores(workspace, receipt, delta_rows, vmt_rows)
+    score_rows = compute_project_scores(
+        workspace, receipt, delta_rows, vmt_rows, weights=scoring_weights
+    )
     score_path = paths["tables"] / "project_scores.csv"
     write_csv(score_path, score_rows)
     outputs["tables"].append(str(score_path))
@@ -589,12 +593,52 @@ def compute_transit_metrics(workspace: Path, receipt: dict[str, Any]) -> list[di
     return rows
 
 
+DEFAULT_SCORING_WEIGHTS: dict[str, float] = {
+    "safety": 0.30,
+    "equity": 0.25,
+    "climate": 0.25,
+    "feasibility": 0.20,
+}
+
+
+def _resolve_scoring_weights(
+    weights: dict[str, float] | None,
+) -> dict[str, float]:
+    """Validate and return the weights to apply.
+
+    None falls back to DEFAULT_SCORING_WEIGHTS (0.30/0.25/0.25/0.20).
+    When supplied, the dict must contain all four criteria and sum to 1.0
+    within 1e-6.
+    """
+    if weights is None:
+        return dict(DEFAULT_SCORING_WEIGHTS)
+    missing = set(DEFAULT_SCORING_WEIGHTS) - set(weights)
+    if missing:
+        raise ValueError(
+            f"Scoring weight override missing keys: {sorted(missing)}"
+        )
+    total = sum(float(weights[key]) for key in DEFAULT_SCORING_WEIGHTS)
+    if abs(total - 1.0) > 1e-6:
+        raise ValueError(
+            "Scoring weights must sum to 1.0 "
+            f"(got {total:.6f} from {weights})"
+        )
+    return {key: float(weights[key]) for key in DEFAULT_SCORING_WEIGHTS}
+
+
 def compute_project_scores(
     workspace: Path,
     receipt: dict[str, Any],
     delta_rows: list[dict[str, Any]],
     vmt_rows: list[dict[str, Any]],
+    *,
+    weights: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
+    resolved_weights = _resolve_scoring_weights(weights)
+    w_safety = resolved_weights["safety"]
+    w_equity = resolved_weights["equity"]
+    w_climate = resolved_weights["climate"]
+    w_feasibility = resolved_weights["feasibility"]
     project_rows = load_project_rows(workspace, receipt)
     if not project_rows:
         delta_by_scenario: dict[str, float] = {}
@@ -615,10 +659,10 @@ def compute_project_scores(
                 "climate_score": normalized_score(-vmt_by_scenario.get(scenario_id, 0.0)),
                 "feasibility_score": 50,
                 "total_score": round(
-                    0.30 * 50
-                    + 0.25 * normalized_score(delta_by_scenario.get(scenario_id, 0.0))
-                    + 0.25 * normalized_score(-vmt_by_scenario.get(scenario_id, 0.0))
-                    + 0.20 * 50,
+                    w_safety * 50
+                    + w_equity * normalized_score(delta_by_scenario.get(scenario_id, 0.0))
+                    + w_climate * normalized_score(-vmt_by_scenario.get(scenario_id, 0.0))
+                    + w_feasibility * 50,
                     3,
                 ),
                 "sensitivity_flag": "HIGH",
@@ -632,7 +676,12 @@ def compute_project_scores(
         equity = parse_float(project.get("equity"), 50)
         climate = parse_float(project.get("climate"), 50)
         feasibility = parse_float(project.get("feasibility"), 50)
-        total = 0.30 * safety + 0.25 * equity + 0.25 * climate + 0.20 * feasibility
+        total = (
+            w_safety * safety
+            + w_equity * equity
+            + w_climate * climate
+            + w_feasibility * feasibility
+        )
         assumption_count = sum(
             1 for key in ("safety", "equity", "climate", "feasibility") if not project.get(key)
         )

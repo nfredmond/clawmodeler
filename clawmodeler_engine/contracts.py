@@ -6,7 +6,8 @@ from typing import Any
 from .workspace import InputValidationError
 
 CURRENT_SCHEMA_VERSION = "1.0.0"
-CURRENT_MANIFEST_VERSION = "1.0.0"
+CURRENT_MANIFEST_VERSION = "1.1.0"
+LEGACY_MANIFEST_VERSIONS: tuple[str, ...] = ("1.0.0",)
 
 
 REQUIRED_KEYS: dict[str, tuple[str, ...]] = {

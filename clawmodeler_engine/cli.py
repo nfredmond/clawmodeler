@@ -530,6 +530,74 @@ def build_parser() -> argparse.ArgumentParser:
     )
     diff.set_defaults(func=command_diff)
 
+    what_if = subparsers.add_parser(
+        "what-if",
+        help=(
+            "Derive a new run from a finished baseline by applying "
+            "deterministic parameter overrides (scoring weights, "
+            "threshold_pct, project filters)."
+        ),
+    )
+    what_if.add_argument("--workspace", required=True, type=Path)
+    what_if.add_argument(
+        "--base-run-id",
+        dest="base_run_id",
+        required=True,
+        help="Finished run ID to derive from.",
+    )
+    what_if.add_argument(
+        "--new-run-id",
+        dest="new_run_id",
+        required=True,
+        help="New run ID (must not collide with an existing run).",
+    )
+    what_if.add_argument("--weight-safety", type=float, default=None)
+    what_if.add_argument("--weight-equity", type=float, default=None)
+    what_if.add_argument("--weight-climate", type=float, default=None)
+    what_if.add_argument("--weight-feasibility", type=float, default=None)
+    what_if.add_argument(
+        "--reference-vmt-per-capita",
+        dest="reference_vmt_per_capita",
+        type=float,
+        default=None,
+        help="Recorded in manifest overrides for later planner-pack ceqa-vmt runs.",
+    )
+    what_if.add_argument(
+        "--threshold-pct",
+        dest="threshold_pct",
+        type=float,
+        default=None,
+        help="CEQA VMT threshold fraction (0-1). Recorded in manifest overrides.",
+    )
+    what_if.add_argument(
+        "--include-project",
+        dest="include_project",
+        action="append",
+        default=None,
+        help="Project ID to include (repeatable).",
+    )
+    what_if.add_argument(
+        "--exclude-project",
+        dest="exclude_project",
+        action="append",
+        default=None,
+        help="Project ID to exclude (repeatable).",
+    )
+    what_if.add_argument(
+        "--sensitivity-floor",
+        dest="sensitivity_floor",
+        choices=["LOW", "MEDIUM", "HIGH"],
+        default=None,
+        help="Drop rows whose sensitivity_flag is more assumption-heavy than the floor.",
+    )
+    what_if.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the WhatIfResult as JSON.",
+    )
+    what_if.set_defaults(func=command_what_if)
+
     return parser
 
 
@@ -1134,4 +1202,48 @@ def command_diff(args: argparse.Namespace) -> None:
         f"Appended {summary['fact_block_count']} fact_block(s) to "
         f"{summary['diff_dir']}/fact_blocks.jsonl."
     )
+
+
+def command_what_if(args: argparse.Namespace) -> None:
+    from .what_if import WhatIfOverrides, write_what_if
+
+    ensure_workspace(args.workspace)
+    weight_keys = ("safety", "equity", "climate", "feasibility")
+    weight_values = [
+        getattr(args, f"weight_{key}") for key in weight_keys
+    ]
+    supplied = [v for v in weight_values if v is not None]
+    scoring_weights: dict[str, float] | None
+    if supplied:
+        if len(supplied) != len(weight_values):
+            raise ClawModelerError(
+                "--weight-safety/--weight-equity/--weight-climate/"
+                "--weight-feasibility must all be supplied together "
+                "(they must sum to 1.0)."
+            )
+        scoring_weights = dict(zip(weight_keys, weight_values))
+    else:
+        scoring_weights = None
+    overrides = WhatIfOverrides(
+        scoring_weights=scoring_weights,
+        reference_vmt_per_capita=args.reference_vmt_per_capita,
+        threshold_pct=args.threshold_pct,
+        project_ids_include=args.include_project,
+        project_ids_exclude=args.exclude_project,
+        sensitivity_floor=args.sensitivity_floor,
+    )
+    manifest_path, result = write_what_if(
+        args.workspace, args.base_run_id, args.new_run_id, overrides
+    )
+    if args.as_json:
+        print(json.dumps(result.to_json()))
+        return
+    print(
+        f"What-if: `{result.base_run_id}` → `{result.new_run_id}` "
+        f"({len(result.project_deltas)} project(s), "
+        f"{len(result.dropped_project_ids)} dropped, "
+        f"{result.new_fact_block_count} fact_block(s))."
+    )
+    print(f"Manifest: {manifest_path}")
+    print(f"Report:   {args.workspace}/reports/{result.new_run_id}_what_if.md")
 

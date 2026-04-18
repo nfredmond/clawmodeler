@@ -246,7 +246,7 @@ class ClawModelerEngineTest(unittest.TestCase):
             )
 
             manifest = json.loads((workspace / "runs" / "demo" / "manifest.json").read_text())
-            self.assertEqual(manifest["manifest_version"], "1.0.0")
+            self.assertEqual(manifest["manifest_version"], "1.1.0")
             self.assertEqual(manifest["engine"]["routing_engine"], "osmnx_networkx")
             self.assertEqual(len(manifest["scenarios"]), 2)
             self.assertGreater(manifest["fact_block_count"], 0)

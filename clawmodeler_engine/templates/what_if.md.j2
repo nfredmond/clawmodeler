@@ -1,0 +1,94 @@
+# What-If Scenario — `{{ result.base_run_id }}` → `{{ result.new_run_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ generated_at }}`
+- Base run: `{{ result.base_run_id }}`
+- New run: `{{ result.new_run_id }}`
+
+## Scope
+
+This report records a deterministic parameter override applied to a
+finished ClawModeler run. The new run's inputs, accessibility,
+VMT-screening, and transit-metrics artifacts are recomputed from the
+same staged inputs under `workspace/inputs/` as the base run;
+`project_scores.csv` reflects the override's scoring weights and row
+filters. No LLM is called and no narrative is generated — the grounding
+covenant is preserved. Every change is mirrored as a
+`what_if_scenario` or `what_if_project_delta` fact_block in the new
+run's `fact_blocks.jsonl`.
+
+## Applied overrides
+
+{% if result.applied_overrides -%}
+{% if "scoring_weights" in result.applied_overrides -%}
+- Scoring weights: safety **{{ "%.2f"|format(result.applied_overrides.scoring_weights.safety) }}**, equity **{{ "%.2f"|format(result.applied_overrides.scoring_weights.equity) }}**, climate **{{ "%.2f"|format(result.applied_overrides.scoring_weights.climate) }}**, feasibility **{{ "%.2f"|format(result.applied_overrides.scoring_weights.feasibility) }}** (default 0.30 / 0.25 / 0.25 / 0.20).
+{% endif -%}
+{% if "reference_vmt_per_capita" in result.applied_overrides -%}
+- Reference VMT per capita: **{{ "%.2f"|format(result.applied_overrides.reference_vmt_per_capita) }}** (recorded in manifest overrides; applied by subsequent `planner-pack ceqa-vmt` invocations).
+{% endif -%}
+{% if "threshold_pct" in result.applied_overrides -%}
+- CEQA §15064.3 threshold: **{{ "%.1f"|format(result.applied_overrides.threshold_pct * 100) }}%** below reference (recorded in manifest overrides; applied by subsequent `planner-pack ceqa-vmt` invocations). Default per OPR *Technical Advisory on Evaluating Transportation Impacts in CEQA* (December 2018) is 15%.
+{% endif -%}
+{% if "project_ids_include" in result.applied_overrides -%}
+- Project include list: {{ result.applied_overrides.project_ids_include|length }} project(s): `{{ result.applied_overrides.project_ids_include|join("`, `") }}`.
+{% endif -%}
+{% if "project_ids_exclude" in result.applied_overrides -%}
+- Project exclude list: {{ result.applied_overrides.project_ids_exclude|length }} project(s): `{{ result.applied_overrides.project_ids_exclude|join("`, `") }}`.
+{% endif -%}
+{% if "sensitivity_floor" in result.applied_overrides -%}
+- Sensitivity floor: **{{ result.applied_overrides.sensitivity_floor }}** (rows with more assumption-heavy flags were dropped).
+{% endif -%}
+{% else -%}
+_No overrides applied._
+{% endif %}
+
+## Scoring weights used
+
+| Criterion | Weight |
+|---|---:|
+| safety | {{ "%.2f"|format(result.scoring_weights_used.safety) }} |
+| equity | {{ "%.2f"|format(result.scoring_weights_used.equity) }} |
+| climate | {{ "%.2f"|format(result.scoring_weights_used.climate) }} |
+| feasibility | {{ "%.2f"|format(result.scoring_weights_used.feasibility) }} |
+
+## Project deltas
+
+{% if result.project_deltas -%}
+| Project | Name | Base total | New total | Δ | Status |
+|---|---|---:|---:|---:|:---:|
+{% for d in result.project_deltas -%}
+| `{{ d.project_id }}` | {{ d.name }} | {{ "%.3f"|format(d.base_total_score) }} | {{ "%.3f"|format(d.new_total_score) }} | {{ "%+0.3f"|format(d.score_delta) }} | {{ d.status }} |
+{% endfor %}
+{%- else -%}
+_No projects survived the overrides._
+{%- endif %}
+
+{% if result.dropped_project_ids -%}
+## Dropped projects
+
+The following project id(s) were removed by include/exclude or sensitivity-floor filters: `{{ result.dropped_project_ids|join("`, `") }}`.
+{%- endif %}
+
+## Citations
+
+- California Government Code §65080 — Regional Transportation Plan scoring frameworks and update cycles.
+- California Public Resources Code §21099 + CEQA Guidelines §15064.3 — transportation-impact VMT significance (threshold overrides referenced here flow to the new run's manifest for Planner Pack CEQA reruns).
+- Governor's Office of Planning and Research, *Technical Advisory on Evaluating Transportation Impacts in CEQA* (December 2018) — 15% default threshold below regional/citywide reference VMT per capita.
+- California Streets & Highways Code §§2380–2383 — Active Transportation Program weighting criteria (ATP weights 30/25/25/20 → safety/equity/climate/feasibility mirror the ClawModeler default).
+
+## Notes
+
+- This report is a **screening-level** record of a parameter override.
+  It does not constitute a formal CEQA finding, RTP amendment, or ATP
+  resubmission.
+- Planner Pack artifacts (CEQA, LAPM, RTP, equity, ATP) are **not**
+  automatically re-generated for the new run. Run
+  `clawmodeler-engine planner-pack <module> --run-id {{ result.new_run_id }}`
+  for any Planner Pack deliverable you need on this scenario.
+- The manifest at `runs/{{ result.new_run_id }}/manifest.json` records
+  the applied overrides and `base_run_id` so downstream diff + QA
+  workflows can trace provenance.
+
+---
+
+*ClawModeler what-if simulator — v{{ engine_version }}.*
