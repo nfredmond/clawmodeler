@@ -4,6 +4,16 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] — 2026-04-18
+
+### Fixed
+
+- **Dev-mode Tauri sidecar fallback.** `desktop/src-tauri/src/lib.rs` — `repo_root()` was walking three `.parent()` hops from `CARGO_MANIFEST_DIR` (`desktop/src-tauri`) and landing on the grandparent of the repo root. Fresh checkouts without `pip install -e .` fell back to `python3 -m clawmodeler_engine` with the wrong `current_dir`, so the engine module failed to import. Now correctly walks two hops to the repo root.
+
+### Changed
+
+- **CLI `--json` flag consistency.** `clawmodeler-engine doctor` and `clawmodeler-engine tools` now expose the flag through `dest="as_json"` to match every other subparser (11 commands). Behavior is unchanged — `--json` still produces machine-readable output — and `args.as_json` replaces the previous `args.json` reads inside the two command handlers. Removes accidental shadowing of the `json` module reference and restores uniformity across the CLI surface.
+
 ## [0.8.2] — 2026-04-18
 
 ### Added

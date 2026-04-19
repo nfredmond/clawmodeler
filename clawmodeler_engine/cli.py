@@ -116,11 +116,21 @@ def build_parser() -> argparse.ArgumentParser:
     export.set_defaults(func=command_export)
 
     doctor = subparsers.add_parser("doctor", help="Check ClawModeler runtime dependencies.")
-    doctor.add_argument("--json", action="store_true", help="Output machine-readable JSON.")
+    doctor.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output machine-readable JSON.",
+    )
     doctor.set_defaults(func=command_doctor)
 
     tools = subparsers.add_parser("tools", help="List the ClawModeler agent toolbox.")
-    tools.add_argument("--json", action="store_true", help="Output machine-readable JSON.")
+    tools.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output machine-readable JSON.",
+    )
     tools.set_defaults(func=command_tools)
 
     demo = subparsers.add_parser("demo", help="Create and run a complete demo workspace.")
@@ -698,7 +708,7 @@ def command_doctor(args: argparse.Namespace) -> None:
     ]
     ok = all(check["status"] in {"ok", "optional"} for check in checks)
     payload = {"ok": ok, "checks": checks, "toolbox": toolbox}
-    if args.json:
+    if args.as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         for check in checks:
@@ -712,7 +722,7 @@ def command_doctor(args: argparse.Namespace) -> None:
 
 def command_tools(args: argparse.Namespace) -> None:
     assessment = assess_toolbox()
-    if args.json:
+    if args.as_json:
         print(json.dumps(assessment, indent=2, sort_keys=True))
         return
     print("\n".join(toolbox_summary_lines(assessment)))

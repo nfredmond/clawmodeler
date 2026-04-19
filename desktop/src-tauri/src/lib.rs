@@ -47,7 +47,6 @@ fn repo_root() -> PathBuf {
     manifest_dir
         .parent()
         .and_then(Path::parent)
-        .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or(manifest_dir)
 }

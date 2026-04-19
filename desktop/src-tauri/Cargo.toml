@@ -1,6 +1,6 @@
 [package]
 name = "clawmodeler-desktop"
-version = "0.8.2"
+version = "0.8.3"
 description = "ClawModeler local-first transportation sketch-planning desktop app"
 authors = ["ClawModeler contributors"]
 edition = "2021"
