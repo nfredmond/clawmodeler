@@ -4,6 +4,15 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] — 2026-04-18
+
+### Added
+
+- **What-if desktop panel.** The v0.8.0 CLI `clawmodeler-engine what-if` is now drivable from the Tauri workbench. New "What-if" section (step 6) renders below Chat and includes: base/new run ID inputs, an opt-in scoring-weights block with four sliders (safety / equity / climate / feasibility) that rebalance the other three proportionally to keep the sum at exactly 1.0, reference VMT/capita + CEQA threshold inputs, include/exclude project-id textareas, and a sensitivity-floor dropdown (LOW / MEDIUM / HIGH). Submit validates client-side (sum = 1.0 to 1e-6, no include/exclude overlap, threshold fraction strictly between 0 and 1, at least one override supplied), then invokes the engine via the new Tauri command; on success the workbench's active run id switches to the new run and the artifacts panel refreshes automatically.
+- `desktop/src-tauri/src/lib.rs` — `clawmodeler_what_if` Tauri command. Accepts workspace / base_run_id / new_run_id / four optional f64 weights / reference_vmt_per_capita / threshold_pct / include_projects / exclude_projects / sensitivity_floor, validates that the four weights are supplied together or not at all, and composes the `what-if --json` CLI invocation through the shared `run_engine_args` sidecar path. Registered alongside the existing five commands.
+- `desktop/src/workbench.ts` — six new pure helpers: `DEFAULT_WHAT_IF_WEIGHTS` (0.30/0.25/0.25/0.20 — California ATP-aligned), `whatIfWeightSum`, `isValidWhatIfWeights`, `rebalanceWhatIfWeights` (clamps to [0,1] and redistributes the remaining three proportionally, with equal-share fallback when the other three sum to zero), `parseProjectIdList`, and `validateWhatIfForm` (returns a discriminated union — `{ok: true, payload}` or `{ok: false, error}` — with friendly human-readable error strings for every rejection path).
+- `desktop/src/workbench.test.ts` — 11 new Vitest cases covering: default-weight constants, rebalance preserves sum=1, slider-range clamping, invalid-weight detection, form-level rejection paths (weight sum, same-id, include/exclude overlap, empty overrides, out-of-range threshold), valid weight-only submission round-trip, and `parseProjectIdList` comma/newline handling. 21/21 total Vitest pass; Python suite 216/216 unchanged.
+
 ## [0.8.0] — 2026-04-18
 
 ### Added

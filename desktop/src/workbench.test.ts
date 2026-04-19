@@ -3,14 +3,20 @@ import {
   buildFullWorkflowArgs,
   chatTurnBadge,
   countJsonLines,
+  DEFAULT_WHAT_IF_WEIGHTS,
   deriveQuestionSavePath,
   friendlyError,
+  isValidWhatIfWeights,
   manifestOutputCategories,
   normalizePathList,
   normalizeScenarios,
   parseChatTurn,
+  parseProjectIdList,
+  rebalanceWhatIfWeights,
   segmentChatText,
   summarizeQa,
+  validateWhatIfForm,
+  whatIfWeightSum,
 } from "./workbench.js";
 
 describe("clawmodeler workbench helpers", () => {
@@ -159,5 +165,173 @@ describe("clawmodeler workbench helpers", () => {
       "/tmp/custom.json",
     );
     expect(deriveQuestionSavePath("", "")).toBe("question.json");
+  });
+
+  it("defaults what-if weights to 0.30/0.25/0.25/0.20 summing to 1", () => {
+    expect(DEFAULT_WHAT_IF_WEIGHTS).toEqual({
+      safety: 0.3,
+      equity: 0.25,
+      climate: 0.25,
+      feasibility: 0.2,
+    });
+    expect(whatIfWeightSum(DEFAULT_WHAT_IF_WEIGHTS)).toBeCloseTo(1, 9);
+    expect(isValidWhatIfWeights(DEFAULT_WHAT_IF_WEIGHTS)).toBe(true);
+  });
+
+  it("rebalances remaining weights proportionally to preserve sum=1", () => {
+    const next = rebalanceWhatIfWeights(DEFAULT_WHAT_IF_WEIGHTS, "safety", 0.5);
+    expect(next.safety).toBeCloseTo(0.5, 9);
+    expect(whatIfWeightSum(next)).toBeCloseTo(1, 9);
+    expect(isValidWhatIfWeights(next)).toBe(true);
+    expect(next.equity).toBeCloseTo(
+      (DEFAULT_WHAT_IF_WEIGHTS.equity / 0.7) * 0.5,
+      9,
+    );
+  });
+
+  it("clamps slider values into [0,1] on rebalance", () => {
+    const over = rebalanceWhatIfWeights(DEFAULT_WHAT_IF_WEIGHTS, "safety", 5);
+    expect(over.safety).toBe(1);
+    expect(whatIfWeightSum(over)).toBeCloseTo(1, 9);
+    const under = rebalanceWhatIfWeights(DEFAULT_WHAT_IF_WEIGHTS, "safety", -2);
+    expect(under.safety).toBe(0);
+    expect(whatIfWeightSum(under)).toBeCloseTo(1, 9);
+  });
+
+  it("invalid what-if weights fail isValidWhatIfWeights", () => {
+    expect(
+      isValidWhatIfWeights({ safety: 0.25, equity: 0.25, climate: 0.25, feasibility: 0.2 }),
+    ).toBe(false);
+    expect(
+      isValidWhatIfWeights({ safety: 1.1, equity: 0, climate: 0, feasibility: 0 }),
+    ).toBe(false);
+    expect(
+      isValidWhatIfWeights({ safety: -0.1, equity: 0.4, climate: 0.4, feasibility: 0.3 }),
+    ).toBe(false);
+  });
+
+  it("validateWhatIfForm rejects sub-unity weight sums when enabled", () => {
+    const res = validateWhatIfForm({
+      workspace: "/tmp/ws",
+      baseRunId: "demo",
+      newRunId: "alt",
+      weightsEnabled: true,
+      weights: { safety: 0.25, equity: 0.25, climate: 0.25, feasibility: 0.2 },
+      referenceVmtPerCapita: "",
+      thresholdPct: "",
+      includeProjects: "",
+      excludeProjects: "",
+      sensitivityFloor: "",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/sum to 1/);
+    }
+  });
+
+  it("validateWhatIfForm rejects same base/new run id", () => {
+    const res = validateWhatIfForm({
+      workspace: "/tmp/ws",
+      baseRunId: "demo",
+      newRunId: "demo",
+      weightsEnabled: false,
+      weights: DEFAULT_WHAT_IF_WEIGHTS,
+      referenceVmtPerCapita: "",
+      thresholdPct: "",
+      includeProjects: "",
+      excludeProjects: "",
+      sensitivityFloor: "",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/must differ/);
+    }
+  });
+
+  it("validateWhatIfForm rejects include/exclude overlap", () => {
+    const res = validateWhatIfForm({
+      workspace: "/tmp/ws",
+      baseRunId: "demo",
+      newRunId: "alt",
+      weightsEnabled: false,
+      weights: DEFAULT_WHAT_IF_WEIGHTS,
+      referenceVmtPerCapita: "",
+      thresholdPct: "",
+      includeProjects: "p1, p2",
+      excludeProjects: "p2",
+      sensitivityFloor: "",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/p2/);
+    }
+  });
+
+  it("validateWhatIfForm rejects empty override set", () => {
+    const res = validateWhatIfForm({
+      workspace: "/tmp/ws",
+      baseRunId: "demo",
+      newRunId: "alt",
+      weightsEnabled: false,
+      weights: DEFAULT_WHAT_IF_WEIGHTS,
+      referenceVmtPerCapita: "",
+      thresholdPct: "",
+      includeProjects: "",
+      excludeProjects: "",
+      sensitivityFloor: "",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/at least one override/);
+    }
+  });
+
+  it("validateWhatIfForm accepts a valid weight-only override", () => {
+    const res = validateWhatIfForm({
+      workspace: "/tmp/ws",
+      baseRunId: "demo",
+      newRunId: "alt",
+      weightsEnabled: true,
+      weights: { safety: 0.4, equity: 0.3, climate: 0.2, feasibility: 0.1 },
+      referenceVmtPerCapita: "",
+      thresholdPct: "",
+      includeProjects: "",
+      excludeProjects: "",
+      sensitivityFloor: "",
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.payload.weights).toEqual({
+        safety: 0.4,
+        equity: 0.3,
+        climate: 0.2,
+        feasibility: 0.1,
+      });
+      expect(res.payload.includeProjects).toEqual([]);
+    }
+  });
+
+  it("validateWhatIfForm rejects out-of-range CEQA threshold", () => {
+    const res = validateWhatIfForm({
+      workspace: "/tmp/ws",
+      baseRunId: "demo",
+      newRunId: "alt",
+      weightsEnabled: false,
+      weights: DEFAULT_WHAT_IF_WEIGHTS,
+      referenceVmtPerCapita: "",
+      thresholdPct: "1.5",
+      includeProjects: "",
+      excludeProjects: "",
+      sensitivityFloor: "",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toMatch(/fraction/);
+    }
+  });
+
+  it("parseProjectIdList accepts newlines and commas", () => {
+    expect(parseProjectIdList("p1, p2\np3")).toEqual(["p1", "p2", "p3"]);
+    expect(parseProjectIdList("")).toEqual([]);
   });
 });

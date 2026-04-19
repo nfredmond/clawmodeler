@@ -170,6 +170,103 @@ fn clawmodeler_chat(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn clawmodeler_what_if(
+    app: tauri::AppHandle,
+    workspace: String,
+    base_run_id: String,
+    new_run_id: String,
+    weight_safety: Option<f64>,
+    weight_equity: Option<f64>,
+    weight_climate: Option<f64>,
+    weight_feasibility: Option<f64>,
+    reference_vmt_per_capita: Option<f64>,
+    threshold_pct: Option<f64>,
+    include_projects: Option<Vec<String>>,
+    exclude_projects: Option<Vec<String>>,
+    sensitivity_floor: Option<String>,
+) -> Result<EngineResult, String> {
+    let workspace = workspace.trim().to_string();
+    let base_run_id = base_run_id.trim().to_string();
+    let new_run_id = new_run_id.trim().to_string();
+    if workspace.is_empty() {
+        return Err("workspace is required".to_string());
+    }
+    if base_run_id.is_empty() {
+        return Err("base_run_id is required".to_string());
+    }
+    if new_run_id.is_empty() {
+        return Err("new_run_id is required".to_string());
+    }
+    if base_run_id == new_run_id {
+        return Err("base_run_id and new_run_id must differ".to_string());
+    }
+
+    let weights = [
+        weight_safety,
+        weight_equity,
+        weight_climate,
+        weight_feasibility,
+    ];
+    let supplied = weights.iter().filter(|w| w.is_some()).count();
+    if supplied != 0 && supplied != 4 {
+        return Err("weights must be supplied together or not at all".to_string());
+    }
+
+    let mut args: Vec<String> = vec![
+        "what-if".into(),
+        "--workspace".into(),
+        workspace,
+        "--base-run-id".into(),
+        base_run_id,
+        "--new-run-id".into(),
+        new_run_id,
+        "--json".into(),
+    ];
+    if supplied == 4 {
+        args.push("--weight-safety".into());
+        args.push(format!("{}", weight_safety.unwrap()));
+        args.push("--weight-equity".into());
+        args.push(format!("{}", weight_equity.unwrap()));
+        args.push("--weight-climate".into());
+        args.push(format!("{}", weight_climate.unwrap()));
+        args.push("--weight-feasibility".into());
+        args.push(format!("{}", weight_feasibility.unwrap()));
+    }
+    if let Some(value) = reference_vmt_per_capita {
+        args.push("--reference-vmt-per-capita".into());
+        args.push(format!("{value}"));
+    }
+    if let Some(value) = threshold_pct {
+        args.push("--threshold-pct".into());
+        args.push(format!("{value}"));
+    }
+    for project_id in include_projects.unwrap_or_default() {
+        let trimmed = project_id.trim().to_string();
+        if !trimmed.is_empty() {
+            args.push("--include-project".into());
+            args.push(trimmed);
+        }
+    }
+    for project_id in exclude_projects.unwrap_or_default() {
+        let trimmed = project_id.trim().to_string();
+        if !trimmed.is_empty() {
+            args.push("--exclude-project".into());
+            args.push(trimmed);
+        }
+    }
+    if let Some(floor) = sensitivity_floor {
+        let trimmed = floor.trim().to_string();
+        if !trimmed.is_empty() {
+            args.push("--sensitivity-floor".into());
+            args.push(trimmed);
+        }
+    }
+
+    run_engine_args(&app, args)
+}
+
+#[tauri::command]
 fn clawmodeler_workspace(workspace: String, run_id: String) -> Result<ArtifactResult, String> {
     let workspace_path = PathBuf::from(workspace.trim());
     if workspace_path.as_os_str().is_empty() {
@@ -242,7 +339,8 @@ pub fn run() {
             clawmodeler_tools,
             clawmodeler_run,
             clawmodeler_workspace,
-            clawmodeler_chat
+            clawmodeler_chat,
+            clawmodeler_what_if
         ])
         .run(tauri::generate_context!())
     {

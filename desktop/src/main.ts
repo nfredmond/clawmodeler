@@ -5,14 +5,19 @@ import {
   buildFullWorkflowArgs,
   type ChatTurn,
   chatTurnBadge,
+  DEFAULT_WHAT_IF_WEIGHTS,
   deriveQuestionSavePath,
   friendlyError,
   manifestOutputCategories,
   normalizePathList,
   normalizeScenarios,
   parseChatTurn,
+  rebalanceWhatIfWeights,
   segmentChatText,
   summarizeQa,
+  validateWhatIfForm,
+  whatIfWeightSum,
+  type WhatIfWeights,
 } from "./workbench.js";
 
 type ApiResult<T = unknown> = {
@@ -56,6 +61,21 @@ type WorkspaceArtifacts = {
   filesTruncated: boolean;
 };
 
+type WhatIfState = {
+  baseRunId: string;
+  newRunId: string;
+  weightsEnabled: boolean;
+  weights: WhatIfWeights;
+  referenceVmtPerCapita: string;
+  thresholdPct: string;
+  includeProjects: string;
+  excludeProjects: string;
+  sensitivityFloor: string;
+  busy: boolean;
+  status: string;
+  lastResult: Record<string, unknown> | null;
+};
+
 type AppState = {
   workspace: string;
   runId: string;
@@ -74,6 +94,7 @@ type AppState = {
   chatBusy: boolean;
   chatNoHistory: boolean;
   chatStatus: string;
+  whatIf: WhatIfState;
 };
 
 const state: AppState = {
@@ -94,6 +115,20 @@ const state: AppState = {
   chatBusy: false,
   chatNoHistory: false,
   chatStatus: "",
+  whatIf: {
+    baseRunId: localStorage.getItem("clawmodeler.whatIf.baseRunId") || "",
+    newRunId: localStorage.getItem("clawmodeler.whatIf.newRunId") || "",
+    weightsEnabled: localStorage.getItem("clawmodeler.whatIf.weightsEnabled") === "true",
+    weights: { ...DEFAULT_WHAT_IF_WEIGHTS },
+    referenceVmtPerCapita: "",
+    thresholdPct: "",
+    includeProjects: "",
+    excludeProjects: "",
+    sensitivityFloor: "",
+    busy: false,
+    status: "",
+    lastResult: null,
+  },
 };
 
 function markOnboarded() {
@@ -205,6 +240,9 @@ async function tauriApi<T = unknown>(path: string, body?: unknown): Promise<ApiR
       message: stringField(payload, "message"),
       noHistory: payload.noHistory === true,
     });
+  }
+  if (path === "/api/clawmodeler/what-if") {
+    return await invoke<ApiResult<T>>("clawmodeler_what_if", payload);
   }
   throw new Error(`Unsupported ClawModeler API path: ${path}`);
 }
@@ -342,6 +380,66 @@ async function sendChat() {
     state.chatStatus = friendlyError(raw);
   } finally {
     state.chatBusy = false;
+    render();
+  }
+}
+
+function saveWhatIfForm() {
+  localStorage.setItem("clawmodeler.whatIf.baseRunId", state.whatIf.baseRunId);
+  localStorage.setItem("clawmodeler.whatIf.newRunId", state.whatIf.newRunId);
+  localStorage.setItem(
+    "clawmodeler.whatIf.weightsEnabled",
+    String(state.whatIf.weightsEnabled),
+  );
+}
+
+async function submitWhatIf() {
+  const validation = validateWhatIfForm({
+    workspace: state.workspace,
+    baseRunId: state.whatIf.baseRunId,
+    newRunId: state.whatIf.newRunId,
+    weightsEnabled: state.whatIf.weightsEnabled,
+    weights: state.whatIf.weights,
+    referenceVmtPerCapita: state.whatIf.referenceVmtPerCapita,
+    thresholdPct: state.whatIf.thresholdPct,
+    includeProjects: state.whatIf.includeProjects,
+    excludeProjects: state.whatIf.excludeProjects,
+    sensitivityFloor: state.whatIf.sensitivityFloor,
+  });
+  if (!validation.ok) {
+    state.whatIf.status = validation.error;
+    render();
+    return;
+  }
+  const payload = validation.payload;
+  state.whatIf.busy = true;
+  state.whatIf.status = `Running what-if into ${payload.newRunId}…`;
+  render();
+  try {
+    const result = await api<Record<string, unknown>>("/api/clawmodeler/what-if", {
+      workspace: payload.workspace,
+      baseRunId: payload.baseRunId,
+      newRunId: payload.newRunId,
+      weightSafety: payload.weights?.safety ?? null,
+      weightEquity: payload.weights?.equity ?? null,
+      weightClimate: payload.weights?.climate ?? null,
+      weightFeasibility: payload.weights?.feasibility ?? null,
+      referenceVmtPerCapita: payload.referenceVmtPerCapita,
+      thresholdPct: payload.thresholdPct,
+      includeProjects: payload.includeProjects,
+      excludeProjects: payload.excludeProjects,
+      sensitivityFloor: payload.sensitivityFloor,
+    });
+    state.whatIf.lastResult = result.json ?? null;
+    state.whatIf.status = `Created run ${payload.newRunId}.`;
+    state.runId = payload.newRunId;
+    saveForm();
+    await refreshArtifacts(false);
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    state.whatIf.status = friendlyError(raw);
+  } finally {
+    state.whatIf.busy = false;
     render();
   }
 }
@@ -587,6 +685,62 @@ function bindControls() {
     ?.addEventListener("click", () => {
       void sendChat();
     });
+
+  appRoot.querySelector<HTMLInputElement>("#what-if-base")?.addEventListener("input", (event) => {
+    state.whatIf.baseRunId = (event.target as HTMLInputElement).value;
+    saveWhatIfForm();
+  });
+  appRoot.querySelector<HTMLInputElement>("#what-if-new")?.addEventListener("input", (event) => {
+    state.whatIf.newRunId = (event.target as HTMLInputElement).value;
+    saveWhatIfForm();
+  });
+  appRoot
+    .querySelector<HTMLInputElement>("#what-if-weights-enabled")
+    ?.addEventListener("change", (event) => {
+      state.whatIf.weightsEnabled = (event.target as HTMLInputElement).checked;
+      saveWhatIfForm();
+      render();
+    });
+  appRoot.querySelectorAll<HTMLInputElement>("input[data-weight-key]").forEach((el) => {
+    el.addEventListener("input", (event) => {
+      const target = event.target as HTMLInputElement;
+      const key = target.dataset.weightKey as keyof WhatIfWeights | undefined;
+      if (!key) return;
+      const value = Number(target.value);
+      state.whatIf.weights = rebalanceWhatIfWeights(state.whatIf.weights, key, value);
+      render();
+    });
+  });
+  appRoot
+    .querySelector<HTMLInputElement>("#what-if-ref-vmt")
+    ?.addEventListener("input", (event) => {
+      state.whatIf.referenceVmtPerCapita = (event.target as HTMLInputElement).value;
+    });
+  appRoot
+    .querySelector<HTMLInputElement>("#what-if-threshold")
+    ?.addEventListener("input", (event) => {
+      state.whatIf.thresholdPct = (event.target as HTMLInputElement).value;
+    });
+  appRoot
+    .querySelector<HTMLTextAreaElement>("#what-if-include")
+    ?.addEventListener("input", (event) => {
+      state.whatIf.includeProjects = (event.target as HTMLTextAreaElement).value;
+    });
+  appRoot
+    .querySelector<HTMLTextAreaElement>("#what-if-exclude")
+    ?.addEventListener("input", (event) => {
+      state.whatIf.excludeProjects = (event.target as HTMLTextAreaElement).value;
+    });
+  appRoot
+    .querySelector<HTMLSelectElement>("#what-if-floor")
+    ?.addEventListener("change", (event) => {
+      state.whatIf.sensitivityFloor = (event.target as HTMLSelectElement).value;
+    });
+  appRoot
+    .querySelector<HTMLButtonElement>("[data-action='what-if-submit']")
+    ?.addEventListener("click", () => {
+      void submitWhatIf();
+    });
 }
 
 function renderWelcome(): string {
@@ -700,6 +854,96 @@ function renderChat(): string {
   `;
 }
 
+function renderWhatIf(): string {
+  const w = state.whatIf;
+  const sum = whatIfWeightSum(w.weights);
+  const sumLabel = sum.toFixed(3);
+  const sumOk = Math.abs(sum - 1) < 1e-6;
+  const disabled = w.busy;
+  const summary = (() => {
+    const r = w.lastResult;
+    if (!r) return "";
+    const deltas = Array.isArray(r.project_deltas) ? r.project_deltas : [];
+    const dropped = Array.isArray(r.dropped_project_ids) ? r.dropped_project_ids : [];
+    return `
+      <div class="what-if-summary">
+        <p><strong>Result:</strong> base <code>${escapeHtml(r.base_run_id)}</code> → new <code>${escapeHtml(r.new_run_id)}</code></p>
+        <p>${deltas.length} project delta(s); ${dropped.length} dropped.</p>
+      </div>
+    `;
+  })();
+  return `
+    <section class="panel what-if-panel" id="what-if">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow"><span class="step-num">6</span> What-if</p>
+          <h2>What-if Simulator</h2>
+        </div>
+        <span>${escapeHtml(w.status || "Derive a new run from a finished baseline")}</span>
+      </div>
+      <p class="muted">Pick a finished run as the baseline, apply overrides (scoring weights, CEQA threshold, project filters, sensitivity floor), and produce a new run tree that flows through diff, Planner Pack, chat, and export.</p>
+      <div class="what-if-grid">
+        <label>
+          Base run ID
+          <input id="what-if-base" value="${escapeHtml(w.baseRunId)}" spellcheck="false" ${disabled ? "disabled" : ""} />
+        </label>
+        <label>
+          New run ID
+          <input id="what-if-new" value="${escapeHtml(w.newRunId)}" spellcheck="false" placeholder="e.g., ${escapeHtml(w.baseRunId || "demo")}-safety-heavy" ${disabled ? "disabled" : ""} />
+        </label>
+      </div>
+      <label class="check-row">
+        <input id="what-if-weights-enabled" type="checkbox" ${w.weightsEnabled ? "checked" : ""} ${disabled ? "disabled" : ""} />
+        Override scoring weights
+      </label>
+      <div class="what-if-weights ${w.weightsEnabled ? "" : "disabled"}">
+        ${(["safety", "equity", "climate", "feasibility"] as const)
+          .map(
+            (key) => `
+          <label class="weight-slider">
+            <span>${escapeHtml(key)}: <strong>${w.weights[key].toFixed(3)}</strong></span>
+            <input type="range" min="0" max="1" step="0.01" value="${w.weights[key]}" data-weight-key="${key}" ${!w.weightsEnabled || disabled ? "disabled" : ""} />
+          </label>
+        `,
+          )
+          .join("")}
+        <small class="help">Sum: <strong class="${sumOk ? "ok" : "bad"}">${escapeHtml(sumLabel)}</strong> (must equal 1.000). Sliders rebalance the remaining three proportionally.</small>
+      </div>
+      <div class="what-if-grid">
+        <label>
+          Reference VMT/capita
+          <input id="what-if-ref-vmt" value="${escapeHtml(w.referenceVmtPerCapita)}" placeholder="e.g., 20.5" spellcheck="false" ${disabled ? "disabled" : ""} />
+        </label>
+        <label>
+          CEQA threshold fraction
+          <input id="what-if-threshold" value="${escapeHtml(w.thresholdPct)}" placeholder="0.15 (OPR default)" spellcheck="false" ${disabled ? "disabled" : ""} />
+        </label>
+      </div>
+      <label>
+        Include project IDs (one per line or comma-separated; blank = all)
+        <textarea id="what-if-include" rows="2" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(w.includeProjects)}</textarea>
+      </label>
+      <label>
+        Exclude project IDs (one per line or comma-separated)
+        <textarea id="what-if-exclude" rows="2" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(w.excludeProjects)}</textarea>
+      </label>
+      <label>
+        Sensitivity floor
+        <select id="what-if-floor" ${disabled ? "disabled" : ""}>
+          <option value="" ${w.sensitivityFloor === "" ? "selected" : ""}>(no floor)</option>
+          <option value="LOW" ${w.sensitivityFloor === "LOW" ? "selected" : ""}>LOW — only rock-solid projects</option>
+          <option value="MEDIUM" ${w.sensitivityFloor === "MEDIUM" ? "selected" : ""}>MEDIUM — drop assumption-heavy</option>
+          <option value="HIGH" ${w.sensitivityFloor === "HIGH" ? "selected" : ""}>HIGH — keep everything</option>
+        </select>
+      </label>
+      <div class="what-if-actions">
+        <button data-action="what-if-submit" ${disabled ? "disabled" : ""}>${w.busy ? "Running…" : "Run what-if"}</button>
+      </div>
+      ${summary}
+    </section>
+  `;
+}
+
 function renderArtifacts() {
   const artifacts = state.artifacts;
   const qa = summarizeQa(artifacts?.qaReport ?? null);
@@ -767,6 +1011,7 @@ function render() {
           <a href="#qa">QA</a>
           <a href="#report">Report</a>
           <a href="#chat">Chat</a>
+          <a href="#what-if">What-if</a>
         </nav>
         <p class="rail-note">Screening-level outputs. Use a detailed modeling workflow for final engineering decisions.</p>
       </aside>
@@ -886,6 +1131,8 @@ function render() {
         </div>
 
         ${renderChat()}
+
+        ${renderWhatIf()}
       </section>
     </main>
   `;
