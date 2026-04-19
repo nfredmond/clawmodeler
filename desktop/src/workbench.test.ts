@@ -1,20 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDiffArgs,
   buildFullWorkflowArgs,
   chatTurnBadge,
   countJsonLines,
   DEFAULT_WHAT_IF_WEIGHTS,
   deriveQuestionSavePath,
+  formatDacShare,
+  formatMeanScore,
   friendlyError,
   isValidWhatIfWeights,
   manifestOutputCategories,
   normalizePathList,
   normalizeScenarios,
   parseChatTurn,
+  parsePortfolioPayload,
   parseProjectIdList,
   rebalanceWhatIfWeights,
   segmentChatText,
+  sortPortfolioRuns,
   summarizeQa,
+  toggleRunSelection,
+  validateDiffSelection,
   validateWhatIfForm,
   whatIfWeightSum,
 } from "./workbench.js";
@@ -333,5 +340,138 @@ describe("clawmodeler workbench helpers", () => {
   it("parseProjectIdList accepts newlines and commas", () => {
     expect(parseProjectIdList("p1, p2\np3")).toEqual(["p1", "p2", "p3"]);
     expect(parseProjectIdList("")).toEqual([]);
+  });
+
+  it("parsePortfolioPayload converts snake_case JSON to typed runs + summary", () => {
+    const payload = parsePortfolioPayload({
+      workspace_path: "/tmp/ws",
+      run_count: 2,
+      generated_at: "2026-04-18T00:00:00Z",
+      csv_path: "/tmp/ws/portfolio/summary.csv",
+      json_path: "/tmp/ws/portfolio/summary.json",
+      report_path: "/tmp/ws/reports/portfolio.md",
+      fact_blocks_path: "/tmp/ws/portfolio/fact_blocks.jsonl",
+      fact_block_count: 3,
+      summary: {
+        run_count: 2,
+        export_ready_count: 1,
+        mean_portfolio_score: 0.42,
+        total_vmt_flagged_count: 3,
+        mean_dac_share: 0.25,
+        engine_versions: ["0.8.2"],
+        lineage_edges: [{ from: "alpha", to: "alpha-safety" }],
+      },
+      runs: [
+        {
+          run_id: "alpha",
+          engine_version: "0.8.2",
+          created_at: "2026-04-18T00:00:00Z",
+          base_run_id: null,
+          scenario_count: 2,
+          project_count: 12,
+          mean_total_score: 0.45,
+          top_project_id: "p1",
+          top_project_name: "Top",
+          top_project_score: 0.9,
+          vmt_flagged_count: 2,
+          dac_share: 0.25,
+          fact_block_count: 10,
+          export_ready: true,
+          qa_blockers: [],
+          planner_pack_artifacts: ["ceqa_vmt", "equity_lens"],
+          has_what_if_overrides: false,
+        },
+      ],
+    });
+    expect(payload).not.toBeNull();
+    expect(payload?.runCount).toBe(2);
+    expect(payload?.runs[0]?.runId).toBe("alpha");
+    expect(payload?.runs[0]?.meanTotalScore).toBe(0.45);
+    expect(payload?.runs[0]?.plannerPackArtifacts).toEqual(["ceqa_vmt", "equity_lens"]);
+    expect(payload?.summary?.lineageEdges[0]).toEqual({ from: "alpha", to: "alpha-safety" });
+    expect(payload?.csvPath).toBe("/tmp/ws/portfolio/summary.csv");
+    expect(parsePortfolioPayload(null)).toBeNull();
+  });
+
+  it("sortPortfolioRuns sorts mixed numeric + string columns with nulls last", () => {
+    const makeRun = (runId: string, mean: number | null, createdAt: string | null) => ({
+      runId,
+      engineVersion: "0.8.2",
+      createdAt,
+      baseRunId: null,
+      scenarioCount: 1,
+      projectCount: 1,
+      meanTotalScore: mean,
+      topProjectId: null,
+      topProjectName: null,
+      topProjectScore: null,
+      vmtFlaggedCount: 0,
+      dacShare: null,
+      factBlockCount: 0,
+      exportReady: false,
+      qaBlockers: [],
+      plannerPackArtifacts: [],
+      hasWhatIfOverrides: false,
+    });
+    const runs = [
+      makeRun("bravo", null, "2026-04-18T00:00:00Z"),
+      makeRun("alpha", 0.5, "2026-04-17T00:00:00Z"),
+      makeRun("charlie", 0.9, "2026-04-19T00:00:00Z"),
+    ];
+    const byScoreDesc = sortPortfolioRuns(runs, "meanTotalScore", "desc");
+    expect(byScoreDesc.map((r) => r.runId)).toEqual(["charlie", "alpha", "bravo"]);
+    const byCreatedAsc = sortPortfolioRuns(runs, "createdAt", "asc");
+    expect(byCreatedAsc.map((r) => r.runId)).toEqual(["alpha", "bravo", "charlie"]);
+    const byRunIdAsc = sortPortfolioRuns(runs, "runId", "asc");
+    expect(byRunIdAsc.map((r) => r.runId)).toEqual(["alpha", "bravo", "charlie"]);
+  });
+
+  it("toggleRunSelection caps the selection at a 2-run ceiling", () => {
+    expect(toggleRunSelection([], "alpha")).toEqual(["alpha"]);
+    expect(toggleRunSelection(["alpha"], "alpha")).toEqual([]);
+    expect(toggleRunSelection(["alpha"], "bravo")).toEqual(["alpha", "bravo"]);
+    const capped = toggleRunSelection(["alpha", "bravo"], "charlie");
+    expect(capped.length).toBe(2);
+    expect(capped).toContain("charlie");
+  });
+
+  it("validateDiffSelection requires exactly two distinct runs", () => {
+    expect(validateDiffSelection([])).toEqual({
+      ok: false,
+      error: "Pick exactly two runs to diff.",
+    });
+    expect(validateDiffSelection(["alpha"])).toEqual({
+      ok: false,
+      error: "Pick exactly two runs to diff.",
+    });
+    expect(validateDiffSelection(["alpha", "alpha"])).toEqual({
+      ok: false,
+      error: "Pick two different runs.",
+    });
+    expect(validateDiffSelection(["alpha", "bravo"])).toEqual({
+      ok: true,
+      runA: "alpha",
+      runB: "bravo",
+    });
+  });
+
+  it("buildDiffArgs produces the diff CLI args the Tauri bridge expects", () => {
+    expect(buildDiffArgs({ workspace: "/tmp/ws", runA: "alpha", runB: "bravo" })).toEqual([
+      "diff",
+      "--workspace",
+      "/tmp/ws",
+      "--run-a",
+      "alpha",
+      "--run-b",
+      "bravo",
+      "--json",
+    ]);
+  });
+
+  it("formatMeanScore/formatDacShare render null as em-dash", () => {
+    expect(formatMeanScore(null)).toBe("—");
+    expect(formatMeanScore(0.4567)).toBe("0.457");
+    expect(formatDacShare(null)).toBe("—");
+    expect(formatDacShare(0.236)).toBe("23.6%");
   });
 });

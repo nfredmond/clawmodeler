@@ -4,6 +4,17 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] — 2026-04-18
+
+### Added
+
+- **Workspace portfolio dashboard.** New `clawmodeler_engine/portfolio.py` module + `clawmodeler-engine portfolio --workspace [--json]` CLI subcommand + desktop "Portfolio" panel (step 7). Summarizes every run in a workspace as one KPI row — `engine_version`, `created_at`, `base_run_id` (what-if lineage), scenario count, project count, mean `total_score`, top-scored project, VMT-flagged count (read from `vmt_screening.csv`), SB 535 DAC share (read from `equity_lens.csv` when present), Planner Pack artifact coverage (`ceqa_vmt`, `lapm_exhibit`, `rtp_chapter`, `equity_lens`, `atp_packet`), QA `export_ready` state, and a `has_what_if_overrides` flag. Writes `portfolio/summary.csv`, `portfolio/summary.json`, `portfolio/fact_blocks.jsonl` (`method_ref="portfolio.run_summary"`, `artifact_refs=[{"path": <summary.csv>, "type": "table"}]` — v0.7.1 QA-gate compliant), and `reports/portfolio.md`. No LLM is called; every cell is read deterministically from a run's shipped artifacts or labeled *not yet available*.
+- `clawmodeler_engine/templates/portfolio.md.j2` — Markdown dashboard template with portfolio totals (export-ready ratio, mean score, total VMT flags, mean DAC share, engine versions, lineage edge count), per-run KPI table, and a what-if lineage table linking each what-if run back to its base.
+- `tests/test_portfolio.py` — 10-test regression suite: empty workspace raises `InsufficientDataError`, missing `runs/` directory returns `[]`, single-run summary has KPIs, Planner Pack coverage + DAC share surface after `planner-pack equity-lens`, what-if runs surface `base_run_id` + `lineage_edges`, CSV/JSON/Markdown/fact_blocks round-trip, fact_blocks pass `qa.is_valid_fact_block`, scratch directories without manifests are skipped, and `portfolio --json` CLI round-trips.
+- `desktop/src-tauri/src/lib.rs` — `clawmodeler_portfolio` Tauri command routing through the shared `run_engine_args` sidecar path; registered alongside the existing six commands.
+- `desktop/src/main.ts` + `desktop/src/workbench.ts` + `desktop/src/styles.css` — workspace-level Portfolio panel (step 7). Sortable KPI table (run id, created, engine, base, projects, mean score, VMT flagged, DAC share, Planner Pack, ready), what-if tag for runs produced by `write_what_if`, two-checkbox quick-diff launcher (hard-capped to two selections), "Open" button that switches the workbench's active run id and refreshes artifacts, and a persisted sort-key + direction via localStorage.
+- `desktop/src/workbench.test.ts` — 6 new Vitest cases covering `parsePortfolioPayload`, `sortPortfolioRuns` (numeric + string columns, nulls last, stable), `toggleRunSelection` (2-run cap), `validateDiffSelection` (exactly two distinct runs), `buildDiffArgs` shape, and `formatMeanScore`/`formatDacShare` em-dash rendering. 27/27 Vitest pass; Python suite 226/226 pass; ruff clean; `cargo check` clean.
+
 ## [0.8.1] — 2026-04-18
 
 ### Added

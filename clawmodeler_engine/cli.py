@@ -598,6 +598,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     what_if.set_defaults(func=command_what_if)
 
+    portfolio = subparsers.add_parser(
+        "portfolio",
+        help=(
+            "Summarize every run in the workspace as a single KPI row "
+            "(screening score, VMT-flagged count, DAC share, engine "
+            "version, base-run lineage)."
+        ),
+    )
+    portfolio.add_argument("--workspace", required=True, type=Path)
+    portfolio.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the PortfolioResult as JSON.",
+    )
+    portfolio.set_defaults(func=command_portfolio)
+
     return parser
 
 
@@ -1246,4 +1263,23 @@ def command_what_if(args: argparse.Namespace) -> None:
     )
     print(f"Manifest: {manifest_path}")
     print(f"Report:   {args.workspace}/reports/{result.new_run_id}_what_if.md")
+
+
+def command_portfolio(args: argparse.Namespace) -> None:
+    from .portfolio import write_portfolio
+
+    ensure_workspace(args.workspace)
+    summary = write_portfolio(args.workspace)
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    portfolio_summary = summary.get("summary") or {}
+    print(
+        f"Portfolio: {summary['run_count']} run(s), "
+        f"{portfolio_summary.get('export_ready_count', 0)} export-ready, "
+        f"{summary['fact_block_count']} fact_block(s)."
+    )
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
 

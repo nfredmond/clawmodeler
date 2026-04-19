@@ -1,0 +1,64 @@
+# ClawModeler Portfolio — `{{ result.workspace_path }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ generated_at }}`
+- Runs tracked: **{{ result.run_count }}**
+
+## Overview
+
+This dashboard lists every run in the workspace with screening-level
+KPIs drawn from each run's `project_scores.csv`, `vmt_screening.csv`,
+and `equity_lens.csv` when present. Runs created via
+`clawmodeler-engine what-if` are linked back to their baseline through
+the `base_run_id` column so a planner can trace lineage across
+scenarios.
+
+No LLM is called. Every portfolio cell is read deterministically from
+a run's shipped artifacts or labeled as *not yet available* when the
+relevant Planner Pack module hasn't been invoked for that run.
+
+## Portfolio totals
+
+{% if summary -%}
+- Export-ready runs: **{{ summary.export_ready_count }}** / {{ summary.run_count }}
+- Mean portfolio total_score: {% if summary.mean_portfolio_score is none %}—{% else %}**{{ "%.3f"|format(summary.mean_portfolio_score) }}**{% endif %}
+- Total VMT-flagged scenario(s): **{{ summary.total_vmt_flagged_count }}**
+- Mean SB 535 DAC share: {% if summary.mean_dac_share is none %}—{% else %}**{{ "%.1f"|format(summary.mean_dac_share * 100) }}%**{% endif %}
+- Engine version(s) observed: {% if summary.engine_versions %}`{{ summary.engine_versions|join("`, `") }}`{% else %}—{% endif %}
+- What-if lineage edges: **{{ summary.lineage_edges|length }}**
+{%- else -%}
+_No summary produced._
+{%- endif %}
+
+## Runs
+
+| Run | Engine | Base run | Scenarios | Projects | Mean score | Top project | VMT flagged | DAC share | Planner Pack | Ready |
+|---|---|---|---:|---:|---:|---|---:|---:|---|:---:|
+{% for run in runs -%}
+| `{{ run.run_id }}` | `{{ run.engine_version or "—" }}` | {% if run.base_run_id %}`{{ run.base_run_id }}`{% else %}—{% endif %} | {{ run.scenario_count }} | {{ run.project_count }} | {% if run.mean_total_score is none %}—{% else %}{{ "%.3f"|format(run.mean_total_score) }}{% endif %} | {% if run.top_project_id %}`{{ run.top_project_id }}` ({% if run.top_project_score is none %}—{% else %}{{ "%.3f"|format(run.top_project_score) }}{% endif %}){% else %}—{% endif %} | {{ run.vmt_flagged_count }} | {% if run.dac_share is none %}—{% else %}{{ "%.1f"|format(run.dac_share * 100) }}%{% endif %} | {% if run.planner_pack_artifacts %}`{{ run.planner_pack_artifacts|join("`, `") }}`{% else %}—{% endif %} | {% if run.export_ready %}yes{% else %}no{% endif %} |
+{% endfor %}
+
+{% set lineage_rows = [] %}{% for run in runs if run.base_run_id %}{% set _ = lineage_rows.append(run) %}{% endfor %}
+{% if lineage_rows -%}
+## What-if lineage
+
+| New run | Base run |
+|---|---|
+{% for run in lineage_rows -%}
+| `{{ run.run_id }}` | `{{ run.base_run_id }}` |
+{% endfor %}
+{%- endif %}
+
+## Notes
+
+- Rows without a `mean_total_score` either have no `project_scores.csv`
+  or the file has no scored rows.
+- The `DAC share` column is read from each run's `equity_lens.csv` —
+  runs that have not invoked `planner-pack equity-lens` show `—`.
+- The `Ready` column reflects the v0.7.1 QA gate (`export_ready` in
+  the run's `qa_report.json`); a non-ready run has blockers listed in
+  that file.
+
+---
+
+*ClawModeler portfolio dashboard — v{{ engine_version }}.*

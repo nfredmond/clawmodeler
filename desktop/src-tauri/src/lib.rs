@@ -267,6 +267,23 @@ fn clawmodeler_what_if(
 }
 
 #[tauri::command]
+fn clawmodeler_portfolio(app: tauri::AppHandle, workspace: String) -> Result<EngineResult, String> {
+    let workspace = workspace.trim().to_string();
+    if workspace.is_empty() {
+        return Err("workspace is required".to_string());
+    }
+    run_engine_args(
+        &app,
+        vec![
+            "portfolio".into(),
+            "--workspace".into(),
+            workspace,
+            "--json".into(),
+        ],
+    )
+}
+
+#[tauri::command]
 fn clawmodeler_workspace(workspace: String, run_id: String) -> Result<ArtifactResult, String> {
     let workspace_path = PathBuf::from(workspace.trim());
     if workspace_path.as_os_str().is_empty() {
@@ -340,7 +357,8 @@ pub fn run() {
             clawmodeler_run,
             clawmodeler_workspace,
             clawmodeler_chat,
-            clawmodeler_what_if
+            clawmodeler_what_if,
+            clawmodeler_portfolio
         ])
         .run(tauri::generate_context!())
     {

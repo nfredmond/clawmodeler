@@ -2,19 +2,30 @@ import "./styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  buildDiffArgs,
   buildFullWorkflowArgs,
   type ChatTurn,
   chatTurnBadge,
   DEFAULT_WHAT_IF_WEIGHTS,
   deriveQuestionSavePath,
+  formatDacShare,
+  formatMeanScore,
   friendlyError,
   manifestOutputCategories,
   normalizePathList,
   normalizeScenarios,
   parseChatTurn,
+  parsePortfolioPayload,
+  type PortfolioResult,
+  type PortfolioRun,
+  type PortfolioSortDirection,
+  type PortfolioSortKey,
   rebalanceWhatIfWeights,
   segmentChatText,
+  sortPortfolioRuns,
   summarizeQa,
+  toggleRunSelection,
+  validateDiffSelection,
   validateWhatIfForm,
   whatIfWeightSum,
   type WhatIfWeights,
@@ -61,6 +72,16 @@ type WorkspaceArtifacts = {
   filesTruncated: boolean;
 };
 
+type PortfolioState = {
+  result: PortfolioResult | null;
+  selectedRunIds: string[];
+  sortKey: PortfolioSortKey;
+  sortDirection: PortfolioSortDirection;
+  busy: boolean;
+  status: string;
+  lastDiffPath: string | null;
+};
+
 type WhatIfState = {
   baseRunId: string;
   newRunId: string;
@@ -95,6 +116,7 @@ type AppState = {
   chatNoHistory: boolean;
   chatStatus: string;
   whatIf: WhatIfState;
+  portfolio: PortfolioState;
 };
 
 const state: AppState = {
@@ -128,6 +150,17 @@ const state: AppState = {
     busy: false,
     status: "",
     lastResult: null,
+  },
+  portfolio: {
+    result: null,
+    selectedRunIds: [],
+    sortKey: (localStorage.getItem("clawmodeler.portfolio.sortKey") as PortfolioSortKey) || "createdAt",
+    sortDirection:
+      (localStorage.getItem("clawmodeler.portfolio.sortDirection") as PortfolioSortDirection) ||
+      "desc",
+    busy: false,
+    status: "",
+    lastDiffPath: null,
   },
 };
 
@@ -243,6 +276,20 @@ async function tauriApi<T = unknown>(path: string, body?: unknown): Promise<ApiR
   }
   if (path === "/api/clawmodeler/what-if") {
     return await invoke<ApiResult<T>>("clawmodeler_what_if", payload);
+  }
+  if (path === "/api/clawmodeler/portfolio") {
+    return await invoke<ApiResult<T>>("clawmodeler_portfolio", {
+      workspace: stringField(payload, "workspace"),
+    });
+  }
+  if (path === "/api/clawmodeler/diff") {
+    return await invoke<ApiResult<T>>("clawmodeler_run", {
+      args: buildDiffArgs({
+        workspace: stringField(payload, "workspace"),
+        runA: stringField(payload, "runA"),
+        runB: stringField(payload, "runB"),
+      }),
+    });
   }
   throw new Error(`Unsupported ClawModeler API path: ${path}`);
 }
@@ -442,6 +489,103 @@ async function submitWhatIf() {
     state.whatIf.busy = false;
     render();
   }
+}
+
+async function loadPortfolio() {
+  const workspace = state.workspace.trim();
+  if (!workspace) {
+    state.portfolio.status = "Pick a workspace folder first.";
+    render();
+    return;
+  }
+  state.portfolio.busy = true;
+  state.portfolio.status = "Reading workspace portfolio…";
+  render();
+  try {
+    const result = await api<Record<string, unknown>>("/api/clawmodeler/portfolio", {
+      workspace,
+    });
+    const parsed = parsePortfolioPayload(result.json ?? null);
+    state.portfolio.result = parsed;
+    state.portfolio.status = parsed
+      ? `Loaded ${parsed.runCount} run(s).`
+      : "Portfolio call returned no payload.";
+    // Drop selection entries that no longer exist in the result.
+    if (parsed) {
+      const runIds = new Set(parsed.runs.map((run) => run.runId));
+      state.portfolio.selectedRunIds = state.portfolio.selectedRunIds.filter((id) =>
+        runIds.has(id),
+      );
+    }
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    state.portfolio.status = friendlyError(raw);
+  } finally {
+    state.portfolio.busy = false;
+    render();
+  }
+}
+
+async function diffSelectedRuns() {
+  const validation = validateDiffSelection(state.portfolio.selectedRunIds);
+  if (!validation.ok) {
+    state.portfolio.status = validation.error;
+    render();
+    return;
+  }
+  const workspace = state.workspace.trim();
+  if (!workspace) {
+    state.portfolio.status = "Pick a workspace folder first.";
+    render();
+    return;
+  }
+  state.portfolio.busy = true;
+  state.portfolio.status = `Diffing ${validation.runA} → ${validation.runB}…`;
+  render();
+  try {
+    const result = await api<Record<string, unknown>>("/api/clawmodeler/diff", {
+      workspace,
+      runA: validation.runA,
+      runB: validation.runB,
+    });
+    const diffPath =
+      (result.json && typeof result.json === "object"
+        ? (result.json as Record<string, unknown>).diff_report_path
+        : undefined) ?? null;
+    state.portfolio.lastDiffPath = typeof diffPath === "string" ? diffPath : null;
+    state.portfolio.status = state.portfolio.lastDiffPath
+      ? `Diff report written to ${state.portfolio.lastDiffPath}.`
+      : `Diff completed for ${validation.runA} → ${validation.runB}.`;
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    state.portfolio.status = friendlyError(raw);
+  } finally {
+    state.portfolio.busy = false;
+    render();
+  }
+}
+
+function setPortfolioSort(key: PortfolioSortKey) {
+  if (state.portfolio.sortKey === key) {
+    state.portfolio.sortDirection = state.portfolio.sortDirection === "asc" ? "desc" : "asc";
+  } else {
+    state.portfolio.sortKey = key;
+    state.portfolio.sortDirection = "asc";
+  }
+  localStorage.setItem("clawmodeler.portfolio.sortKey", state.portfolio.sortKey);
+  localStorage.setItem("clawmodeler.portfolio.sortDirection", state.portfolio.sortDirection);
+  render();
+}
+
+function togglePortfolioSelection(runId: string) {
+  state.portfolio.selectedRunIds = toggleRunSelection(state.portfolio.selectedRunIds, runId);
+  render();
+}
+
+function openRunFromPortfolio(runId: string) {
+  state.runId = runId;
+  saveForm();
+  void refreshArtifacts();
 }
 
 async function pickWorkspaceFolder() {
@@ -741,6 +885,35 @@ function bindControls() {
     ?.addEventListener("click", () => {
       void submitWhatIf();
     });
+
+  appRoot
+    .querySelector<HTMLButtonElement>("[data-action='portfolio-refresh']")
+    ?.addEventListener("click", () => {
+      void loadPortfolio();
+    });
+  appRoot
+    .querySelector<HTMLButtonElement>("[data-action='portfolio-diff']")
+    ?.addEventListener("click", () => {
+      void diffSelectedRuns();
+    });
+  appRoot.querySelectorAll<HTMLButtonElement>("[data-sort-key]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const key = el.dataset.sortKey as PortfolioSortKey | undefined;
+      if (key) setPortfolioSort(key);
+    });
+  });
+  appRoot.querySelectorAll<HTMLInputElement>("[data-portfolio-select]").forEach((el) => {
+    el.addEventListener("change", () => {
+      const runId = el.dataset.portfolioSelect;
+      if (runId) togglePortfolioSelection(runId);
+    });
+  });
+  appRoot.querySelectorAll<HTMLButtonElement>("[data-portfolio-open]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const runId = el.dataset.portfolioOpen;
+      if (runId) openRunFromPortfolio(runId);
+    });
+  });
 }
 
 function renderWelcome(): string {
@@ -944,6 +1117,156 @@ function renderWhatIf(): string {
   `;
 }
 
+type PortfolioColumn = {
+  key: PortfolioSortKey | null;
+  label: string;
+  align?: "right" | "center";
+};
+
+const PORTFOLIO_COLUMNS: PortfolioColumn[] = [
+  { key: "runId", label: "Run" },
+  { key: "createdAt", label: "Created" },
+  { key: "engineVersion", label: "Engine" },
+  { key: "baseRunId", label: "Base" },
+  { key: "projectCount", label: "Projects", align: "right" },
+  { key: "meanTotalScore", label: "Mean score", align: "right" },
+  { key: "vmtFlaggedCount", label: "VMT flagged", align: "right" },
+  { key: "dacShare", label: "DAC share", align: "right" },
+  { key: null, label: "Planner Pack" },
+  { key: "exportReady", label: "Ready", align: "center" },
+  { key: null, label: "Actions" },
+];
+
+function renderPortfolioRow(run: PortfolioRun): string {
+  const selected = state.portfolio.selectedRunIds.includes(run.runId);
+  const base = run.baseRunId ? `<code>${escapeHtml(run.baseRunId)}</code>` : "—";
+  const ppack = run.plannerPackArtifacts.length
+    ? run.plannerPackArtifacts.map((a) => `<code>${escapeHtml(a)}</code>`).join(" ")
+    : "—";
+  const ready = run.exportReady
+    ? `<span class="pf-ready ok">ready</span>`
+    : `<span class="pf-ready bad">blocked</span>`;
+  const created = run.createdAt ? run.createdAt.slice(0, 19).replace("T", " ") : "—";
+  return `
+    <tr class="${selected ? "pf-row selected" : "pf-row"}">
+      <td class="pf-select">
+        <input type="checkbox" data-portfolio-select="${escapeHtml(run.runId)}" ${selected ? "checked" : ""} />
+      </td>
+      <td><code>${escapeHtml(run.runId)}</code>${run.hasWhatIfOverrides ? '<span class="pf-tag">what-if</span>' : ""}</td>
+      <td>${escapeHtml(created)}</td>
+      <td>${escapeHtml(run.engineVersion ?? "—")}</td>
+      <td>${base}</td>
+      <td class="pf-num">${run.projectCount}</td>
+      <td class="pf-num">${escapeHtml(formatMeanScore(run.meanTotalScore))}</td>
+      <td class="pf-num">${run.vmtFlaggedCount}</td>
+      <td class="pf-num">${escapeHtml(formatDacShare(run.dacShare))}</td>
+      <td>${ppack}</td>
+      <td class="pf-center">${ready}</td>
+      <td><button type="button" data-portfolio-open="${escapeHtml(run.runId)}" class="link-btn">Open</button></td>
+    </tr>
+  `;
+}
+
+function renderPortfolioHeader(): string {
+  const { sortKey, sortDirection } = state.portfolio;
+  return PORTFOLIO_COLUMNS.map((col) => {
+    if (!col.key) {
+      return `<th class="${col.align === "center" ? "pf-center" : ""}">${escapeHtml(col.label)}</th>`;
+    }
+    const active = sortKey === col.key;
+    const arrow = active ? (sortDirection === "asc" ? " ▲" : " ▼") : "";
+    const cls = [
+      col.align === "right" ? "pf-num" : col.align === "center" ? "pf-center" : "",
+      "pf-sortable",
+      active ? "active" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return `
+      <th class="${cls}">
+        <button type="button" data-sort-key="${col.key}" class="pf-sort-btn">${escapeHtml(col.label)}${arrow}</button>
+      </th>
+    `;
+  }).join("");
+}
+
+function renderPortfolio(): string {
+  const pf = state.portfolio;
+  const result = pf.result;
+  const selection = pf.selectedRunIds;
+  const canDiff = selection.length === 2 && selection[0] !== selection[1];
+  const status = pf.status || (result ? "Ready" : "Refresh to load runs");
+  const totals = (() => {
+    const summary = result?.summary;
+    if (!summary) return "";
+    const meanScore =
+      summary.meanPortfolioScore === null ? "—" : summary.meanPortfolioScore.toFixed(3);
+    const dac = formatDacShare(summary.meanDacShare);
+    const engines = summary.engineVersions.length
+      ? summary.engineVersions.map((v) => `<code>${escapeHtml(v)}</code>`).join(", ")
+      : "—";
+    return `
+      <div class="pf-totals">
+        <span><strong>${summary.exportReadyCount}</strong> / ${summary.runCount} export-ready</span>
+        <span>Mean portfolio score: <strong>${escapeHtml(meanScore)}</strong></span>
+        <span>VMT flagged (total): <strong>${summary.totalVmtFlaggedCount}</strong></span>
+        <span>Mean DAC share: <strong>${escapeHtml(dac)}</strong></span>
+        <span>Engines: ${engines}</span>
+        <span>What-if edges: <strong>${summary.lineageEdges.length}</strong></span>
+      </div>
+    `;
+  })();
+  const table =
+    result && result.runs.length > 0
+      ? `
+        <div class="pf-scroll">
+          <table class="pf-table">
+            <thead>
+              <tr>
+                <th class="pf-select-head">Pick</th>
+                ${renderPortfolioHeader()}
+              </tr>
+            </thead>
+            <tbody>
+              ${sortPortfolioRuns(result.runs, pf.sortKey, pf.sortDirection)
+                .map(renderPortfolioRow)
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `
+      : `<p class="muted">No runs loaded yet. Run the demo or any workflow, then click <strong>Refresh portfolio</strong>.</p>`;
+  const selectionHint =
+    selection.length === 0
+      ? "Tick two runs to diff them."
+      : selection.length === 1
+        ? `Selected <code>${escapeHtml(selection[0])}</code>. Pick one more.`
+        : `Selected <code>${escapeHtml(selection[0])}</code> and <code>${escapeHtml(selection[1])}</code>.`;
+  const lastDiff = pf.lastDiffPath
+    ? `<p class="pf-last-diff">Last diff report: <code>${escapeHtml(pf.lastDiffPath)}</code></p>`
+    : "";
+  return `
+    <section class="panel portfolio-panel" id="portfolio">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow"><span class="step-num">7</span> Portfolio</p>
+          <h2>Workspace Portfolio</h2>
+        </div>
+        <span>${escapeHtml(status)}</span>
+      </div>
+      <p class="muted">Every run in this workspace at a glance — mean score, VMT flags, DAC share, Planner Pack coverage, QA readiness, and what-if lineage. Pick any two rows to diff them.</p>
+      <div class="pf-toolbar">
+        <button data-action="portfolio-refresh" ${pf.busy ? "disabled" : ""}>${pf.busy ? "Loading…" : "Refresh portfolio"}</button>
+        <button data-action="portfolio-diff" ${pf.busy || !canDiff ? "disabled" : ""}>Diff selected</button>
+        <span class="pf-selection-hint">${selectionHint}</span>
+      </div>
+      ${totals}
+      ${table}
+      ${lastDiff}
+    </section>
+  `;
+}
+
 function renderArtifacts() {
   const artifacts = state.artifacts;
   const qa = summarizeQa(artifacts?.qaReport ?? null);
@@ -1012,6 +1335,7 @@ function render() {
           <a href="#report">Report</a>
           <a href="#chat">Chat</a>
           <a href="#what-if">What-if</a>
+          <a href="#portfolio">Portfolio</a>
         </nav>
         <p class="rail-note">Screening-level outputs. Use a detailed modeling workflow for final engineering decisions.</p>
       </aside>
@@ -1133,6 +1457,8 @@ function render() {
         ${renderChat()}
 
         ${renderWhatIf()}
+
+        ${renderPortfolio()}
       </section>
     </main>
   `;

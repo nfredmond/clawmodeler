@@ -407,6 +407,257 @@ export function validateWhatIfForm(params: {
   };
 }
 
+export type PortfolioRun = {
+  runId: string;
+  engineVersion: string | null;
+  createdAt: string | null;
+  baseRunId: string | null;
+  scenarioCount: number;
+  projectCount: number;
+  meanTotalScore: number | null;
+  topProjectId: string | null;
+  topProjectName: string | null;
+  topProjectScore: number | null;
+  vmtFlaggedCount: number;
+  dacShare: number | null;
+  factBlockCount: number;
+  exportReady: boolean;
+  qaBlockers: string[];
+  plannerPackArtifacts: string[];
+  hasWhatIfOverrides: boolean;
+};
+
+export type PortfolioSummary = {
+  runCount: number;
+  exportReadyCount: number;
+  meanPortfolioScore: number | null;
+  totalVmtFlaggedCount: number;
+  meanDacShare: number | null;
+  engineVersions: string[];
+  lineageEdges: Array<{ from: string; to: string }>;
+};
+
+export type PortfolioResult = {
+  workspacePath: string;
+  runCount: number;
+  runs: PortfolioRun[];
+  summary: PortfolioSummary | null;
+  generatedAt: string;
+  csvPath: string | null;
+  jsonPath: string | null;
+  reportPath: string | null;
+  factBlocksPath: string | null;
+  factBlockCount: number;
+};
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function asInt(value: unknown, fallback = 0): number {
+  const n = asNumber(value);
+  return n === null ? fallback : Math.trunc(n);
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((v) => String(v)).filter(Boolean) : [];
+}
+
+export function parsePortfolioPayload(payload: unknown): PortfolioResult | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  const runCount = asInt(p.run_count);
+  const rawRuns = Array.isArray(p.runs) ? p.runs : [];
+  const runs: PortfolioRun[] = rawRuns.map((item) => {
+    const r = (item || {}) as Record<string, unknown>;
+    return {
+      runId: typeof r.run_id === "string" ? r.run_id : "",
+      engineVersion: asString(r.engine_version),
+      createdAt: asString(r.created_at),
+      baseRunId: asString(r.base_run_id),
+      scenarioCount: asInt(r.scenario_count),
+      projectCount: asInt(r.project_count),
+      meanTotalScore: asNumber(r.mean_total_score),
+      topProjectId: asString(r.top_project_id),
+      topProjectName: asString(r.top_project_name),
+      topProjectScore: asNumber(r.top_project_score),
+      vmtFlaggedCount: asInt(r.vmt_flagged_count),
+      dacShare: asNumber(r.dac_share),
+      factBlockCount: asInt(r.fact_block_count),
+      exportReady: r.export_ready === true,
+      qaBlockers: asStringArray(r.qa_blockers),
+      plannerPackArtifacts: asStringArray(r.planner_pack_artifacts),
+      hasWhatIfOverrides: r.has_what_if_overrides === true,
+    };
+  });
+  let summary: PortfolioSummary | null = null;
+  if (p.summary && typeof p.summary === "object") {
+    const s = p.summary as Record<string, unknown>;
+    const edges = Array.isArray(s.lineage_edges) ? s.lineage_edges : [];
+    summary = {
+      runCount: asInt(s.run_count),
+      exportReadyCount: asInt(s.export_ready_count),
+      meanPortfolioScore: asNumber(s.mean_portfolio_score),
+      totalVmtFlaggedCount: asInt(s.total_vmt_flagged_count),
+      meanDacShare: asNumber(s.mean_dac_share),
+      engineVersions: asStringArray(s.engine_versions),
+      lineageEdges: edges.map((edge) => {
+        const e = (edge || {}) as Record<string, unknown>;
+        return {
+          from: typeof e.from === "string" ? e.from : "",
+          to: typeof e.to === "string" ? e.to : "",
+        };
+      }),
+    };
+  }
+  return {
+    workspacePath: typeof p.workspace_path === "string" ? p.workspace_path : "",
+    runCount,
+    runs,
+    summary,
+    generatedAt: typeof p.generated_at === "string" ? p.generated_at : "",
+    csvPath: asString(p.csv_path),
+    jsonPath: asString(p.json_path),
+    reportPath: asString(p.report_path),
+    factBlocksPath: asString(p.fact_blocks_path),
+    factBlockCount: asInt(p.fact_block_count),
+  };
+}
+
+export type PortfolioSortKey =
+  | "runId"
+  | "createdAt"
+  | "engineVersion"
+  | "baseRunId"
+  | "projectCount"
+  | "meanTotalScore"
+  | "vmtFlaggedCount"
+  | "dacShare"
+  | "exportReady";
+
+export type PortfolioSortDirection = "asc" | "desc";
+
+function portfolioSortValue(run: PortfolioRun, key: PortfolioSortKey): unknown {
+  switch (key) {
+    case "runId":
+      return run.runId;
+    case "createdAt":
+      return run.createdAt ?? "";
+    case "engineVersion":
+      return run.engineVersion ?? "";
+    case "baseRunId":
+      return run.baseRunId ?? "";
+    case "projectCount":
+      return run.projectCount;
+    case "meanTotalScore":
+      return run.meanTotalScore;
+    case "vmtFlaggedCount":
+      return run.vmtFlaggedCount;
+    case "dacShare":
+      return run.dacShare;
+    case "exportReady":
+      return run.exportReady ? 1 : 0;
+    default:
+      return null;
+  }
+}
+
+export function sortPortfolioRuns(
+  runs: PortfolioRun[],
+  key: PortfolioSortKey,
+  direction: PortfolioSortDirection,
+): PortfolioRun[] {
+  const copy = runs.slice();
+  const dir = direction === "asc" ? 1 : -1;
+  copy.sort((a, b) => {
+    const av = portfolioSortValue(a, key);
+    const bv = portfolioSortValue(b, key);
+    // Nulls always fall to the end regardless of direction.
+    const aNull = av === null || av === undefined || av === "";
+    const bNull = bv === null || bv === undefined || bv === "";
+    if (aNull && bNull) return 0;
+    if (aNull) return 1;
+    if (bNull) return -1;
+    if (typeof av === "number" && typeof bv === "number") {
+      return (av - bv) * dir;
+    }
+    return String(av).localeCompare(String(bv)) * dir;
+  });
+  return copy;
+}
+
+export function toggleRunSelection(
+  selected: ReadonlyArray<string>,
+  runId: string,
+  limit = 2,
+): string[] {
+  const set = new Set(selected);
+  if (set.has(runId)) {
+    set.delete(runId);
+  } else {
+    set.add(runId);
+  }
+  const next = Array.from(set);
+  if (next.length <= limit) return next;
+  // Drop the oldest (front of the array) to keep the limit.
+  return next.slice(next.length - limit);
+}
+
+export type DiffSelectionValidation =
+  | { ok: true; runA: string; runB: string }
+  | { ok: false; error: string };
+
+export function validateDiffSelection(
+  selected: ReadonlyArray<string>,
+): DiffSelectionValidation {
+  if (selected.length !== 2) {
+    return { ok: false, error: "Pick exactly two runs to diff." };
+  }
+  const [runA, runB] = selected;
+  if (!runA || !runB) {
+    return { ok: false, error: "Pick exactly two runs to diff." };
+  }
+  if (runA === runB) {
+    return { ok: false, error: "Pick two different runs." };
+  }
+  return { ok: true, runA, runB };
+}
+
+export function buildDiffArgs(params: {
+  workspace: string;
+  runA: string;
+  runB: string;
+}): string[] {
+  return [
+    "diff",
+    "--workspace",
+    params.workspace,
+    "--run-a",
+    params.runA,
+    "--run-b",
+    params.runB,
+    "--json",
+  ];
+}
+
+export function formatDacShare(share: number | null): string {
+  if (share === null) return "—";
+  return `${(share * 100).toFixed(1)}%`;
+}
+
+export function formatMeanScore(score: number | null): string {
+  return score === null ? "—" : score.toFixed(3);
+}
+
 export function deriveQuestionSavePath(workspace: string, currentQuestion: string): string {
   const trimmedQuestion = currentQuestion.trim();
   if (trimmedQuestion) {
