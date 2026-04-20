@@ -72,9 +72,22 @@
 
 ## Bridge Packages
 
-{% if bridges %}| Engine | Status | Notes |
-|---|---|---|
-{% for bridge in bridges %}| `{{ bridge.bridge }}` | `{{ bridge.status }}` | {{ bridge.notes }} |
-{% endfor %}{% else %}_No bridge packages emitted._
+{% if bridges %}| Engine | Package status | Forecast readiness | Notes |
+|---|---|---|---|
+{% for bridge in bridges %}| `{{ bridge.bridge }}` | `{{ bridge.status }}` | `{{ bridge.forecast_readiness.status if bridge.forecast_readiness else "handoff_only" }}` | {{ bridge.notes }} |
+{% endfor %}
+
+{% for bridge in bridges %}{% if bridge.forecast_readiness %}### {{ bridge.bridge }} readiness
+
+- Status: **{{ bridge.forecast_readiness.status_label }}**
+- Summary: {{ bridge.forecast_readiness.summary }}
+{% if bridge.forecast_readiness.method_notes %}- Method notes:
+{% for note in bridge.forecast_readiness.method_notes %}  - {{ note }}
+{% endfor %}{% endif %}
+{% if bridge.forecast_readiness.missing_readiness_blockers %}- Missing readiness blockers:
+{% for blocker in bridge.forecast_readiness.missing_readiness_blockers %}  - {{ blocker }}
+{% endfor %}{% endif %}
+
+{% endif %}{% endfor %}{% else %}_No bridge packages emitted._
 {% endif %}
 {% endblock %}

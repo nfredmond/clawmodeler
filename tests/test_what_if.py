@@ -294,7 +294,7 @@ class WhatIfComposesWithExistingFeaturesTest(unittest.TestCase):
 
 
 class ManifestSchemaRoundTripTest(unittest.TestCase):
-    def test_new_manifest_has_1_1_0_with_base_run_id_and_overrides(self) -> None:
+    def test_new_manifest_has_1_2_0_with_base_run_id_and_overrides(self) -> None:
         with demo_workspace() as (workspace, base):
             write_what_if(
                 workspace, base, "alt",
@@ -305,9 +305,10 @@ class ManifestSchemaRoundTripTest(unittest.TestCase):
             self.assertEqual(
                 manifest["manifest_version"], CURRENT_MANIFEST_VERSION
             )
-            self.assertEqual(manifest["manifest_version"], "1.1.0")
+            self.assertEqual(manifest["manifest_version"], "1.2.0")
             self.assertEqual(manifest["base_run_id"], base)
             self.assertEqual(manifest["overrides"], {"threshold_pct": 0.10})
+            self.assertIn("detailed_engine_readiness", manifest)
             validate_contract(manifest, "run_manifest")
 
     def test_legacy_1_0_0_manifest_still_validates(self) -> None:

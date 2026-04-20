@@ -6,6 +6,7 @@ from xml.etree import ElementTree
 
 from .contracts import stamp_contract, validate_contract
 from .model import load_socio, load_zones
+from .readiness import build_bridge_forecast_readiness
 from .sumo_bridge import load_sumo_network_edges, safe_id
 from .workspace import InsufficientDataError, load_receipt, read_json, utc_now, write_json
 
@@ -37,24 +38,25 @@ def prepare_matsim_bridge(workspace: Path, run_id: str, scenario_id: str = "base
 
     bridge_manifest = stamp_contract(
         {
-        "bridge": "matsim",
-        "run_id": run_id,
-        "scenario_id": scenario_id,
-        "created_at": utc_now(),
-        "status": "ready_for_matsim",
-        "inputs": {
-            "network": str(network_path),
-            "population": str(population_path),
-            "config": str(config_path),
-        },
-        "person_count": person_count,
-        "commands": {
-            "run": f"bash {bridge_dir / 'run-matsim.sh'}",
-        },
-        "notes": [
-            "This is a first MATSim handoff package from zone-level screening inputs.",
-            "It is not a calibrated agent-based demand model without richer population data.",
-        ],
+            "bridge": "matsim",
+            "run_id": run_id,
+            "scenario_id": scenario_id,
+            "created_at": utc_now(),
+            "status": "ready_for_matsim",
+            "inputs": {
+                "network": str(network_path),
+                "population": str(population_path),
+                "config": str(config_path),
+            },
+            "person_count": person_count,
+            "commands": {
+                "run": f"bash {bridge_dir / 'run-matsim.sh'}",
+            },
+            "forecast_readiness": build_bridge_forecast_readiness("matsim", workspace),
+            "notes": [
+                "This is a first MATSim handoff package from zone-level screening inputs.",
+                "It is not a calibrated agent-based demand model without richer population data.",
+            ],
         },
         "bridge_manifest",
     )
@@ -188,6 +190,7 @@ def update_base_bridge_manifest(
     data["status"] = matsim_manifest["status"]
     data["matsim_bridge_manifest"] = str(matsim_manifest_path)
     data["matsim_person_count"] = matsim_manifest["person_count"]
+    data["forecast_readiness"] = matsim_manifest.get("forecast_readiness")
     data["notes"] = [
         "MATSim bridge package generated from staged zone-level network and demand inputs.",
         "Use run-matsim.sh or a project-specific MATSim launcher to execute it.",

@@ -9,6 +9,7 @@ from .contracts import stamp_contract, validate_contract
 from .demo import write_demo_inputs
 from .orchestration import write_export, write_intake, write_plan, write_run
 from .project import init_workspace
+from .readiness import build_detailed_engine_readiness
 from .toolbox import assess_toolbox
 from .workspace import (
     discover_workspace_inputs,
@@ -70,6 +71,9 @@ def run_full_workflow(
             "bridge_validation": read_json(bridge_validation_path)
             if bridge_validation_path
             else None,
+            "detailed_engine_readiness": read_json(manifest_path).get(
+                "detailed_engine_readiness"
+            ),
         },
         "workflow_report",
     )
@@ -131,6 +135,7 @@ def run_report_only_workflow(
             "bridge_validation": read_json(bridge_validation_path)
             if bridge_validation_path
             else None,
+            "detailed_engine_readiness": build_detailed_engine_readiness(workspace),
         },
         "workflow_report",
     )
@@ -164,6 +169,7 @@ def diagnose_workflow(workspace: Path, run_id: str | None = None) -> Path:
         if run_root
         else None
     )
+    detailed_engine_readiness = build_detailed_engine_readiness(workspace)
     recommendations = workflow_recommendations(
         input_kinds=input_kinds,
         toolbox=toolbox,
@@ -171,6 +177,7 @@ def diagnose_workflow(workspace: Path, run_id: str | None = None) -> Path:
         qa_report=qa_report,
         bridge_prepare=bridge_prepare,
         bridge_validation=bridge_validation,
+        detailed_engine_readiness=detailed_engine_readiness,
     )
     diagnosis = stamp_contract(
         {
@@ -188,6 +195,7 @@ def diagnose_workflow(workspace: Path, run_id: str | None = None) -> Path:
             "qa": qa_report,
             "bridge_prepare": bridge_prepare,
             "bridge_validation": bridge_validation,
+            "detailed_engine_readiness": detailed_engine_readiness,
             "recommendations": recommendations,
         },
         "workflow_diagnosis",
@@ -220,6 +228,7 @@ def workflow_recommendations(
     qa_report: dict[str, Any] | None,
     bridge_prepare: dict[str, Any] | None,
     bridge_validation: dict[str, Any] | None,
+    detailed_engine_readiness: dict[str, Any] | None,
 ) -> list[str]:
     recommendations: list[str] = []
     if "zones_geojson" not in input_kinds:
@@ -243,8 +252,11 @@ def workflow_recommendations(
         recommendations.append(f"Add missing inputs for skipped bridge packages: {skipped}.")
     if bridge_validation and not bridge_validation.get("export_ready"):
         blockers = ", ".join(bridge_validation.get("blockers", []))
+        recommendations.append(f"Resolve bridge validation blockers: {blockers}.")
+    if detailed_engine_readiness and not detailed_engine_readiness.get("validation_ready_count"):
         recommendations.append(
-            f"Resolve bridge validation blockers: {blockers}."
+            "Record calibration inputs, validation targets, model year, geography, and method "
+            "notes before presenting any detailed-engine handoff as an authoritative forecast."
         )
 
     ready_models = [model["id"] for model in toolbox.get("model_inventory", []) if model["ready"]]

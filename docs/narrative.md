@@ -64,7 +64,7 @@ Python 3.10+ package, installable via `pip install -e .`. The CLI entry point is
 
 Core modules worth reading in this order:
 1. `workspace.py` — workspace layout, `ENGINE_VERSION`, the directory skeleton.
-2. `contracts.py` — manifest schema versioning (currently **1.1.0**, with **1.0.0**
+2. `contracts.py` — manifest schema versioning (currently **1.2.0**, with **1.0.0**
    listed in `LEGACY_MANIFEST_VERSIONS`), `stamp_contract`, `validate_contract`.
 3. `model.py` — scenario scoring, `DEFAULT_SCORING_WEIGHTS` (California
    ATP-aligned: safety 0.30, equity 0.25, climate 0.25, feasibility 0.20),
@@ -149,7 +149,7 @@ workspace/
 │   ├── raw/             # original uploads
 │   └── processed/       # normalized, validated
 ├── runs/<run_id>/
-│   ├── manifest.json    # schema 1.1.0 — the spine of the run
+│   ├── manifest.json    # schema 1.2.0 — the spine of the run
 │   ├── qa_report.json   # export_ready: bool + blockers
 │   ├── chat_history.jsonl
 │   └── outputs/
@@ -294,6 +294,7 @@ release composed with every prior release.
   every `write_*`. This is the highest-value 30-line patch in the whole arc.
 - **v0.8.0** — what-if simulator (engine + CLI). Manifest schema bumped 1.0.0 →
   1.1.0 additive: optional `base_run_id` + `overrides` fields, legacy versions
+  1.2.0 additive: optional `detailed_engine_readiness` on run manifests and `forecast_readiness` on bridge manifests so bridge handoff readiness stays separate from calibrated forecast readiness.
   remain readable. `model.py` scoring refactored to accept weight overrides
   (defaults unchanged — byte-identical for every existing caller). 22-test
   regression suite. The diff engine, which had been underpowered because users

@@ -40,6 +40,12 @@ This is a **screening-level** look at the scenarios you asked about. It was prod
 - Every claim on this page ties back to a fact-block in the technical report (see `Evidence` section). Ask your modeler to walk you through any claim you want to verify.
 - Limitations below explain where this screening could mislead if taken literally.
 
+## Detailed-model handoff status
+
+{% if detailed_engine_readiness and detailed_engine_readiness.engines %}{% for bridge_id, readiness in detailed_engine_readiness.engines.items() %}- **{{ bridge_id }}:** {{ readiness.status_label }}. {{ readiness.summary }}
+{% endfor %}{% else %}_No detailed-engine readiness recorded._
+{% endif %}
+
 ## Plain-language limitations
 
 {% for assumption in assumptions %}- {{ assumption }}

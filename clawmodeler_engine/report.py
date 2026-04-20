@@ -105,7 +105,11 @@ def build_context(
     maps = describe_maps(outputs.get("maps", []), reports_dir, fact_blocks)
     headlines = build_headlines(fact_blocks, manifest)
     findings = build_findings(fact_blocks, manifest)
-    bridges = read_bridge_statuses(run_root / "outputs" / "bridges")
+    detailed_engine_readiness = manifest.get("detailed_engine_readiness") or {}
+    bridges = read_bridge_statuses(
+        run_root / "outputs" / "bridges",
+        detailed_engine_readiness,
+    )
 
     title_by_type = {
         "technical": "ClawModeler Technical Report",
@@ -129,6 +133,7 @@ def build_context(
         "assumptions": manifest.get("assumptions", []),
         "outputs": outputs,
         "bridges": bridges,
+        "detailed_engine_readiness": detailed_engine_readiness,
         "headlines": headlines,
         "findings": findings,
         "question_summary": extract_question_summary(workspace_root),
@@ -322,12 +327,21 @@ def extract_question_summary(workspace_root: Path) -> str | None:
     return str(summary) if summary else None
 
 
-def read_bridge_statuses(path: Path) -> list[dict[str, Any]]:
+def read_bridge_statuses(
+    path: Path,
+    detailed_engine_readiness: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     statuses: list[dict[str, Any]] = []
     if not path.exists():
         return statuses
+    readiness_lookup = (
+        (detailed_engine_readiness or {}).get("engines", {})
+        if isinstance(detailed_engine_readiness, dict)
+        else {}
+    )
     for manifest_path in sorted(path.glob("*/bridge_manifest.json")):
         manifest = read_json(manifest_path)
+        bridge = str(manifest.get("bridge", manifest_path.parent.name))
         counts: list[str] = []
         for key, label in (
             ("sumo_trip_count", "trips"),
@@ -342,11 +356,13 @@ def read_bridge_statuses(path: Path) -> list[dict[str, Any]]:
                 counts.append(f"{label}: {value}")
         if manifest.get("bridge_qa_export_ready") is not None:
             counts.append(f"bridge QA ready: {manifest['bridge_qa_export_ready']}")
+        forecast_readiness = manifest.get("forecast_readiness") or readiness_lookup.get(bridge)
         statuses.append(
             {
-                "bridge": manifest.get("bridge", manifest_path.parent.name),
+                "bridge": bridge,
                 "status": manifest.get("status", "unknown"),
-                "notes": ", ".join(counts) if counts else "—",
+                "notes": ", ".join(counts) if counts else "none recorded",
+                "forecast_readiness": forecast_readiness,
             }
         )
     return statuses

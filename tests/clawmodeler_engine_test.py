@@ -246,10 +246,15 @@ class ClawModelerEngineTest(unittest.TestCase):
             )
 
             manifest = json.loads((workspace / "runs" / "demo" / "manifest.json").read_text())
-            self.assertEqual(manifest["manifest_version"], "1.1.0")
+            self.assertEqual(manifest["manifest_version"], "1.2.0")
             self.assertEqual(manifest["engine"]["routing_engine"], "osmnx_networkx")
             self.assertEqual(len(manifest["scenarios"]), 2)
             self.assertGreater(manifest["fact_block_count"], 0)
+            self.assertIn("detailed_engine_readiness", manifest)
+            self.assertEqual(
+                manifest["detailed_engine_readiness"]["engines"]["sumo"]["status"],
+                "handoff_only",
+            )
 
             qa_report = json.loads((workspace / "runs" / "demo" / "qa_report.json").read_text())
             self.assertTrue(qa_report["export_ready"])
@@ -518,8 +523,17 @@ class ClawModelerEngineTest(unittest.TestCase):
             )
             self.assertTrue(workflow_report["qa"]["export_ready"])
             self.assertTrue(workflow_report["bridge_validation"]["export_ready"])
+            self.assertFalse(workflow_report["bridge_validation"]["detailed_forecast_ready"])
+            self.assertGreater(
+                len(workflow_report["bridge_validation"]["detailed_forecast_blockers"]),
+                0,
+            )
             self.assertTrue((workspace / "reports" / "full_report.md").exists())
             self.assertEqual(len(workflow_report["bridges"]["prepared"]), 5)
+            self.assertEqual(
+                workflow_report["detailed_engine_readiness"]["engines"]["sumo"]["status"],
+                "handoff_only",
+            )
 
     def test_manual_and_workflow_paths_share_core_artifact_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -642,6 +656,11 @@ class ClawModelerEngineTest(unittest.TestCase):
             )
             self.assertEqual(workflow_report["workflow"], "full")
             self.assertTrue(workflow_report["bridge_validation"]["export_ready"])
+            self.assertFalse(workflow_report["bridge_validation"]["detailed_forecast_ready"])
+            self.assertEqual(
+                workflow_report["detailed_engine_readiness"]["engines"]["matsim"]["status"],
+                "handoff_only",
+            )
             self.run_engine(
                 "workflow",
                 "report-only",
@@ -724,6 +743,14 @@ class ClawModelerEngineTest(unittest.TestCase):
             self.assertEqual(complete_diagnosis["run_id"], "demo")
             self.assertTrue(complete_diagnosis["qa"]["export_ready"])
             self.assertTrue(complete_diagnosis["bridge_validation"]["export_ready"])
+            self.assertEqual(
+                complete_diagnosis["detailed_engine_readiness"]["engines"]["urbansim"]["status"],
+                "handoff_only",
+            )
+            self.assertIn(
+                "Record calibration inputs, validation targets, model year, geography, and method notes",
+                " ".join(complete_diagnosis["recommendations"]),
+            )
 
     def test_bridge_sumo_prepare_writes_executable_package(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -864,14 +891,112 @@ class ClawModelerEngineTest(unittest.TestCase):
             )
             self.assertEqual(len(prepare_report["prepared"]), 5)
             self.assertEqual(prepare_report["failed"], [])
+            self.assertEqual(
+                prepare_report["detailed_engine_readiness"]["engines"]["dtalite"]["status"],
+                "handoff_only",
+            )
+            self.assertEqual(
+                prepare_report["prepared"][0]["forecast_readiness"]["status"],
+                "handoff_only",
+            )
             validation = json.loads(
                 (bridge_dir / "bridge_validation_report.json").read_text(encoding="utf-8")
             )
             self.assertTrue(validation["export_ready"])
+            self.assertFalse(validation["detailed_forecast_ready"])
             self.assertEqual(validation["blockers"], [])
+            self.assertGreater(len(validation["detailed_forecast_blockers"]), 0)
             self.assertEqual(
                 {bridge["bridge"] for bridge in validation["bridges"]},
                 {"sumo", "matsim", "urbansim", "dtalite", "tbest"},
+            )
+
+    def test_bridge_commands_surface_calibrated_readiness_statuses(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "demo"
+            inputs = write_demo_inputs(workspace)
+            question_data = json.loads(inputs["question"].read_text(encoding="utf-8"))
+            question_data["model_year"] = "2027"
+            question_data["calibration_geography"] = "Grass Valley core"
+            question_data["detailed_engine_readiness"] = {
+                "sumo": {
+                    "method_notes": ["Validated against weekday PM peak turning movement counts."],
+                    "provided_calibration_inputs": [
+                        {"id": "observed_counts", "label": "Observed counts"},
+                        {"id": "network_controls", "label": "Signal timing set"},
+                        {"id": "demand_controls", "label": "OD seed matrix"},
+                    ],
+                    "provided_validation_targets": [
+                        {"id": "travel_times", "label": "Observed travel times"},
+                        {"id": "delay_or_queue", "label": "Queue observations"},
+                    ],
+                }
+            }
+            inputs["question"].write_text(json.dumps(question_data), encoding="utf-8")
+
+            self.run_engine(
+                "workflow",
+                "full",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(inputs["zones"]),
+                str(inputs["socio"]),
+                str(inputs["projects"]),
+                str(inputs["network_edges"]),
+                str(inputs["gtfs"]),
+                "--question",
+                str(inputs["question"]),
+                "--run-id",
+                "ready",
+                "--scenarios",
+                "baseline",
+            )
+            prepare_stdout = json.loads(
+                self.run_engine(
+                    "bridge",
+                    "prepare-all",
+                    "--workspace",
+                    str(workspace),
+                    "--run-id",
+                    "ready",
+                ).stdout
+            )
+            self.assertEqual(
+                prepare_stdout["detailed_engine_statuses"]["sumo"],
+                "validation_ready",
+            )
+            validate_stdout = json.loads(
+                self.run_engine(
+                    "bridge",
+                    "validate",
+                    "--workspace",
+                    str(workspace),
+                    "--run-id",
+                    "ready",
+                ).stdout
+            )
+            self.assertFalse(validate_stdout["detailed_forecast_ready"])
+            bridge_report = json.loads(
+                (
+                    workspace
+                    / "runs"
+                    / "ready"
+                    / "outputs"
+                    / "bridges"
+                    / "bridge_validation_report.json"
+                ).read_text(encoding="utf-8")
+            )
+            sumo_row = next(
+                row for row in bridge_report["bridges"] if row["bridge"] == "sumo"
+            )
+            self.assertEqual(
+                sumo_row["forecast_readiness"]["status"],
+                "validation_ready",
+            )
+            self.assertIn(
+                "matsim:method_notes_missing",
+                bridge_report["detailed_forecast_blockers"],
             )
 
     def test_graphml_cache_drives_accessibility_when_edge_csv_absent(self) -> None:

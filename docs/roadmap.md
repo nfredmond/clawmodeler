@@ -18,10 +18,12 @@ ClawModeler should let a planner install the desktop app or run `clawmodeler-eng
 
 ## Current Checkpoint
 
-The 0.9.5 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop workbench with hardened release gates:
+The current post-0.9.5 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop workbench with hardened release gates and calibrated-model execution readiness:
 
 - `clawmodeler-engine doctor`, `tools`, `workflow full`, `workflow demo-full`, `workflow report-only`, and `workflow diagnose` cover the core workflow.
 - Bridge packages are generated and validated for SUMO, MATSim, UrbanSim, DTALite, and TBEST where inputs support them.
+- Run manifests, bridge manifests, workflow summaries, reports, and desktop summaries now distinguish handoff-only bridge readiness from calibrated forecast readiness.
+- Detailed-engine readiness records method notes, required calibration inputs, required validation targets, and missing readiness blockers.
 - QA blocks unsupported report export and validates manifest and fact-block evidence.
 - Planner Pack emitters cover CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP.
 - Diff, what-if, portfolio, and grounded chat are deterministic downstream tools over finished runs.
@@ -32,23 +34,15 @@ The 0.9.5 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop work
 
 ## Next Engineering Milestones
 
-1. **Release 0.9.5 cleanly.**
-
-   Keep this release to packaged release confidence: preserve 0.9.4 desktop behavior, keep the sidecar smoke and asset gates green, and verify GitHub marks only the highest SemVer release as Latest.
-
-2. **Add calibrated-model execution gates.**
-
-   Before detailed engines are presented as authoritative forecasts, require project-specific calibration inputs, validation targets, and method notes in the manifest.
-
-3. **Harden fixture and bridge confidence.**
+1. **Harden fixture and bridge confidence.**
 
    Expand the tiny public fixture only when it improves acceptance coverage, then improve bridge validation messages before adding deeper external-engine execution.
 
-4. **Upgrade the data/routing engine.**
+2. **Upgrade the data/routing engine.**
 
    Make DuckDB spatial ingestion and deeper OSMnx/NetworkX routing controls the next core data-path upgrade.
 
-5. **Add optional ML workflows last.**
+3. **Add optional ML workflows last.**
 
    Expose ML libraries through the toolbox only when there is a defined training target, validation set, and model-governance story.
 
@@ -74,4 +68,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when detailed-engine commands expose calibration/validation readiness in manifests and desktop summaries without presenting uncalibrated bridge packages as detailed forecasts.
+The next pass is done when the fixture and acceptance coverage prove the calibrated-readiness language stays intact across CLI, bridge validation, reports, and desktop surfaces while bridge-package messaging remains concise and planner-readable.

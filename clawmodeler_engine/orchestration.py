@@ -12,6 +12,7 @@ from .contracts import (
 )
 from .model import run_full_stack
 from .qa import build_qa_report, load_qa_report
+from .readiness import build_detailed_engine_readiness
 from .report import REPORT_TYPES, render_report
 from .workspace import (
     ENGINE_VERSION,
@@ -122,8 +123,14 @@ def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path,
     paths = run_paths(workspace, run_id)
     engine_path = workspace / "engine_selection.json"
     engine = read_json(engine_path) if engine_path.exists() else select_engine({}, {})
+    question = _read_question(workspace)
 
     stack_result = run_full_stack(workspace, run_id, receipt, scenarios, paths)
+    detailed_engine_readiness = build_detailed_engine_readiness(
+        workspace,
+        question=question,
+        receipt=receipt,
+    )
     manifest = stamp_contract(
         {
             "manifest_version": CURRENT_MANIFEST_VERSION,
@@ -138,8 +145,12 @@ def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path,
             "scenarios": [{"scenario_id": scenario_id} for scenario_id in scenarios],
             "methods": stack_result["methods"],
             "outputs": stack_result["outputs"],
-            "assumptions": stack_result["assumptions"],
+            "assumptions": _augment_assumptions(
+                stack_result["assumptions"],
+                detailed_engine_readiness,
+            ),
             "fact_block_count": stack_result["fact_block_count"],
+            "detailed_engine_readiness": detailed_engine_readiness,
         },
         "run_manifest",
     )
@@ -305,6 +316,33 @@ def _write_qa_block_report(
         ]
     blocked_path.write_text("\n".join(lines), encoding="utf-8")
     return blocked_path
+
+
+def _read_question(workspace: Path) -> dict[str, Any]:
+    analysis_plan_path = workspace / "analysis_plan.json"
+    if not analysis_plan_path.exists():
+        return {}
+    return read_json(analysis_plan_path).get("question", {}) or {}
+
+
+def _augment_assumptions(
+    assumptions: list[str],
+    detailed_engine_readiness: dict[str, Any],
+) -> list[str]:
+    augmented = list(assumptions)
+    if detailed_engine_readiness.get("validation_ready_count"):
+        augmented.append(
+            "Detailed-engine readiness evidence is recorded for at least one bridge, but "
+            "authoritative forecast language still depends on executing the external model and "
+            "reviewing results under project QA."
+        )
+    else:
+        augmented.append(
+            "Bridge packages may be ready for handoff and structural validation while detailed "
+            "forecast readiness remains blocked until project-specific calibration inputs, "
+            "validation targets, and method notes are recorded."
+        )
+    return augmented
 
 
 def _write_single_report(

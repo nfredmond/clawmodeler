@@ -96,6 +96,8 @@ clawmodeler-engine bridge matsim prepare --workspace ./demo --run-id demo
 clawmodeler-engine bridge urbansim prepare --workspace ./demo --run-id demo
 ```
 
+`workflow full`, `workflow demo-full`, `workflow report-only`, `workflow diagnose`, `bridge prepare-all`, and `bridge validate` now emit stable readiness summaries for detailed engines. Structural bridge-package readiness can pass while `detailed_forecast_ready` remains false if calibration inputs, validation targets, model year, geography, or method notes are missing.
+
 ## Graph Commands
 
 ```bash

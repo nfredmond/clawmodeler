@@ -895,6 +895,12 @@ def command_workflow_full(args: argparse.Namespace) -> None:
                     if report.get("bridge_validation")
                     else None
                 ),
+                "detailed_engine_statuses": {
+                    bridge: readiness["status"]
+                    for bridge, readiness in (
+                        report.get("detailed_engine_readiness", {}) or {}
+                    ).get("engines", {}).items()
+                },
             }
         )
     )
@@ -911,6 +917,12 @@ def command_workflow_demo_full(args: argparse.Namespace) -> None:
                 "report": report["artifacts"]["report"],
                 "qa_export_ready": report["qa"]["export_ready"],
                 "bridge_export_ready": report["bridge_validation"]["export_ready"],
+                "detailed_engine_statuses": {
+                    bridge: readiness["status"]
+                    for bridge, readiness in (
+                        report.get("detailed_engine_readiness", {}) or {}
+                    ).get("engines", {}).items()
+                },
             }
         )
     )
@@ -937,6 +949,12 @@ def command_workflow_report_only(args: argparse.Namespace) -> None:
                     if report.get("bridge_validation")
                     else None
                 ),
+                "detailed_engine_statuses": {
+                    bridge: readiness["status"]
+                    for bridge, readiness in (
+                        report.get("detailed_engine_readiness", {}) or {}
+                    ).get("engines", {}).items()
+                },
             }
         )
     )
@@ -952,6 +970,12 @@ def command_workflow_diagnose(args: argparse.Namespace) -> None:
                 "workflow_diagnosis": str(path),
                 "run_id": diagnosis["run_id"],
                 "recommendation_count": len(diagnosis["recommendations"]),
+                "detailed_engine_statuses": {
+                    bridge: readiness["status"]
+                    for bridge, readiness in (
+                        diagnosis.get("detailed_engine_readiness", {}) or {}
+                    ).get("engines", {}).items()
+                },
             }
         )
     )
@@ -974,6 +998,12 @@ def command_bridge_prepare_all(args: argparse.Namespace) -> None:
                 "prepared_count": len(report["prepared"]),
                 "skipped_count": len(report["skipped"]),
                 "failed_count": len(report["failed"]),
+                "detailed_engine_statuses": {
+                    bridge: readiness["status"]
+                    for bridge, readiness in (
+                        report.get("detailed_engine_readiness", {}) or {}
+                    ).get("engines", {}).items()
+                },
             }
         )
     )
@@ -985,7 +1015,12 @@ def command_bridge_validate(args: argparse.Namespace) -> None:
     report = read_json(path)
     print(
         json.dumps(
-            {"bridge_validation_report": str(path), "export_ready": report["export_ready"]}
+            {
+                "bridge_validation_report": str(path),
+                "export_ready": report["export_ready"],
+                "detailed_forecast_ready": report.get("detailed_forecast_ready"),
+                "detailed_forecast_blockers": report.get("detailed_forecast_blockers", []),
+            }
         )
     )
 

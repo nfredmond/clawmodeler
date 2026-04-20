@@ -127,6 +127,16 @@ describe("clawmodeler workbench helpers", () => {
         artifacts: {
           cmaq_overlay_csv: "inputs/missing_cmaq.csv",
         },
+        detailed_engine_readiness: {
+          engines: {
+            sumo: {
+              status: "handoff_only",
+              status_label: "Handoff only",
+              summary: "Bridge package only.",
+              missing_readiness_blockers: ["model_year_missing"],
+            },
+          },
+        },
       },
       qaReport: { export_ready: true, blockers: [] },
       workflowReport: {
@@ -153,7 +163,11 @@ describe("clawmodeler workbench helpers", () => {
             },
           ],
         },
-        bridge_validation: { export_ready: false, blockers: ["sumo_not_ready"] },
+        bridge_validation: {
+          export_ready: false,
+          detailed_forecast_ready: false,
+          blockers: ["sumo_not_ready"],
+        },
       },
       reportMarkdown: null,
       files: ["/tmp/ws/runs/demo/outputs/tables/ceqa_vmt.csv"],
@@ -165,6 +179,16 @@ describe("clawmodeler workbench helpers", () => {
     expect(summary?.scenarioIds).toEqual(["baseline", "build"]);
     expect(summary?.qaExportReady).toBe(true);
     expect(summary?.bridgeExportReady).toBe(false);
+    expect(summary?.detailedForecastReady).toBe(false);
+    expect(summary?.detailedForecastStatuses).toEqual([
+      {
+        bridge: "sumo",
+        status: "handoff_only",
+        statusLabel: "Handoff only",
+        blockers: ["model_year_missing"],
+        summary: "Bridge package only.",
+      },
+    ]);
     expect(summary?.bridgeGeneratedFileCount).toBe(2);
     expect(summary?.bridgeSkippedInputs).toEqual([
       {
@@ -181,6 +205,9 @@ describe("clawmodeler workbench helpers", () => {
     ]);
     expect(summary?.missingSidecars).toEqual(["cmaq_overlay_csv: inputs/missing_cmaq.csv"]);
     expect(summary?.warnings).toContain("Bridge blocker: sumo_not_ready");
+    expect(summary?.warnings).toContain(
+      "Detailed forecast blocker (sumo): model_year_missing",
+    );
   });
 
   it("flattens manifest outputs and detects planner-pack tables", () => {

@@ -6,6 +6,7 @@ from typing import Any
 
 from .contracts import stamp_contract, validate_contract
 from .model import artifact_paths, read_gtfs_csv, write_csv
+from .readiness import build_bridge_forecast_readiness
 from .workspace import (
     InputValidationError,
     InsufficientDataError,
@@ -54,25 +55,26 @@ def prepare_tbest_bridge(workspace: Path, run_id: str, scenario_id: str = "basel
 
     bridge_manifest = stamp_contract(
         {
-        "bridge": "tbest",
-        "run_id": run_id,
-        "scenario_id": scenario_id,
-        "created_at": utc_now(),
-        "status": "ready_for_tbest",
-        "inputs": {
-            "stops": str(stops_path),
-            "routes": str(routes_path),
-            "service": str(service_path),
-            "config": str(config_path),
-        },
-        "stop_count": len(stops),
-        "route_count": len(routes),
-        "service_row_count": len(service_rows),
-        "commands": {"run": f"bash {bridge_dir / 'run-tbest.sh'}"},
-        "notes": [
-            "TBEST bridge package generated from staged GTFS schedule inputs.",
-            "Use observed ridership and stop context data for calibrated TBEST modeling.",
-        ],
+            "bridge": "tbest",
+            "run_id": run_id,
+            "scenario_id": scenario_id,
+            "created_at": utc_now(),
+            "status": "ready_for_tbest",
+            "inputs": {
+                "stops": str(stops_path),
+                "routes": str(routes_path),
+                "service": str(service_path),
+                "config": str(config_path),
+            },
+            "stop_count": len(stops),
+            "route_count": len(routes),
+            "service_row_count": len(service_rows),
+            "commands": {"run": f"bash {bridge_dir / 'run-tbest.sh'}"},
+            "forecast_readiness": build_bridge_forecast_readiness("tbest", workspace),
+            "notes": [
+                "TBEST bridge package generated from staged GTFS schedule inputs.",
+                "Use observed ridership and stop context data for calibrated TBEST modeling.",
+            ],
         },
         "bridge_manifest",
     )
@@ -172,6 +174,7 @@ def update_base_bridge_manifest(
     data["tbest_bridge_manifest"] = str(tbest_manifest_path)
     data["tbest_stop_count"] = tbest_manifest["stop_count"]
     data["tbest_route_count"] = tbest_manifest["route_count"]
+    data["forecast_readiness"] = tbest_manifest.get("forecast_readiness")
     data["notes"] = [
         "TBEST bridge package generated from staged GTFS schedule inputs.",
         "Use run-tbest.sh or a project-specific TBEST workflow to execute it.",

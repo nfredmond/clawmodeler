@@ -28,6 +28,8 @@
 
 - Screening-level analysis. Detailed modeling required before committing capital or adopting regulations.
 - QA status: **{{ qa_status }}**. Export is {% if qa.export_allowed %}allowed{% else %}blocked{% endif %}.
+{% if detailed_engine_readiness and detailed_engine_readiness.validation_ready_count == 0 %}- Detailed-engine bridge packages are still handoff artifacts, not authoritative forecasts.
+{% endif %}
 {% for assumption in assumptions[:3] %}- {{ assumption }}
 {% endfor %}
 

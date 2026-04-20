@@ -22,6 +22,7 @@ def validate_all_bridges(
     if (bridges_dir / "sumo" / "sumo_run_manifest.json").exists():
         qa_path = validate_sumo_bridge(workspace, run_id, scenario_id=scenario_id)
         qa = read_json(qa_path)
+        sumo_manifest = read_json(bridges_dir / "sumo" / "sumo_run_manifest.json")
         results.append(
             {
                 "bridge": "sumo",
@@ -29,6 +30,7 @@ def validate_all_bridges(
                 "manifest": str(bridges_dir / "sumo" / "sumo_run_manifest.json"),
                 "qa_report": str(qa_path),
                 "blockers": qa["blockers"],
+                "forecast_readiness": sumo_manifest.get("forecast_readiness"),
                 "generated_files": manifest_file_links(
                     bridges_dir / "sumo" / "sumo_run_manifest.json"
                 )
@@ -44,18 +46,30 @@ def validate_all_bridges(
     if (bridges_dir / "tbest" / "tbest_bridge_manifest.json").exists():
         results.append(validate_csv_manifest_bridge(bridges_dir / "tbest", "tbest"))
 
+    detailed_forecast_blockers = [
+        f"{result['bridge']}:{blocker}"
+        for result in results
+        for blocker in (result.get("forecast_readiness") or {}).get("missing_readiness_blockers", [])
+    ]
     summary = stamp_contract(
         {
             "run_id": run_id,
             "scenario_id": scenario_id,
             "created_at": utc_now(),
             "export_ready": all(result["ready"] for result in results),
+            "detailed_forecast_ready": all(
+                (result.get("forecast_readiness") or {}).get("status") == "validation_ready"
+                for result in results
+            )
+            if results
+            else False,
             "bridges": results,
             "blockers": [
                 f"{result['bridge']}:{blocker}"
                 for result in results
                 for blocker in result.get("blockers", [])
             ],
+            "detailed_forecast_blockers": detailed_forecast_blockers,
         },
         "bridge_validation_report",
     )
@@ -85,6 +99,7 @@ def validate_matsim_bridge(bridge_dir: Path) -> dict[str, Any]:
         "ready": not blockers,
         "manifest": str(manifest_path),
         "blockers": blockers,
+        "forecast_readiness": manifest.get("forecast_readiness"),
         "generated_files": manifest_file_links(manifest_path),
     }
 
@@ -109,6 +124,7 @@ def validate_urbansim_bridge(bridge_dir: Path) -> dict[str, Any]:
         "ready": not blockers,
         "manifest": str(manifest_path),
         "blockers": blockers,
+        "forecast_readiness": manifest.get("forecast_readiness"),
         "generated_files": manifest_file_links(manifest_path),
     }
 
@@ -129,6 +145,7 @@ def validate_csv_manifest_bridge(bridge_dir: Path, bridge_id: str) -> dict[str, 
         "ready": not blockers,
         "manifest": str(manifest_path),
         "blockers": blockers,
+        "forecast_readiness": manifest.get("forecast_readiness"),
         "generated_files": manifest_file_links(manifest_path),
     }
 

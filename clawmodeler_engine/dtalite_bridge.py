@@ -5,6 +5,7 @@ from typing import Any
 
 from .contracts import stamp_contract, validate_contract
 from .model import load_socio, load_zones, write_csv
+from .readiness import build_bridge_forecast_readiness
 from .sumo_bridge import load_sumo_network_edges
 from .workspace import InsufficientDataError, load_receipt, read_json, utc_now, write_json
 
@@ -50,23 +51,24 @@ def prepare_dtalite_bridge(workspace: Path, run_id: str, scenario_id: str = "bas
 
     bridge_manifest = stamp_contract(
         {
-        "bridge": "dtalite",
-        "run_id": run_id,
-        "scenario_id": scenario_id,
-        "created_at": utc_now(),
-        "status": "ready_for_dtalite",
-        "inputs": {
-            "node": str(node_path),
-            "link": str(link_path),
-            "demand": str(demand_path),
-            "settings": str(settings_path),
-        },
-        "demand_row_count": demand_count,
-        "commands": {"run": f"bash {bridge_dir / 'run-dtalite.sh'}"},
-        "notes": [
-            "DTALite bridge package generated from staged zone-level network edges.",
-            "Use detailed network and OD inputs for calibrated dynamic assignment.",
-        ],
+            "bridge": "dtalite",
+            "run_id": run_id,
+            "scenario_id": scenario_id,
+            "created_at": utc_now(),
+            "status": "ready_for_dtalite",
+            "inputs": {
+                "node": str(node_path),
+                "link": str(link_path),
+                "demand": str(demand_path),
+                "settings": str(settings_path),
+            },
+            "demand_row_count": demand_count,
+            "commands": {"run": f"bash {bridge_dir / 'run-dtalite.sh'}"},
+            "forecast_readiness": build_bridge_forecast_readiness("dtalite", workspace),
+            "notes": [
+                "DTALite bridge package generated from staged zone-level network edges.",
+                "Use detailed network and OD inputs for calibrated dynamic assignment.",
+            ],
         },
         "bridge_manifest",
     )
@@ -157,6 +159,7 @@ def update_base_bridge_manifest(
     data["status"] = dtalite_manifest["status"]
     data["dtalite_bridge_manifest"] = str(dtalite_manifest_path)
     data["dtalite_demand_row_count"] = dtalite_manifest["demand_row_count"]
+    data["forecast_readiness"] = dtalite_manifest.get("forecast_readiness")
     data["notes"] = [
         "DTALite bridge package generated from staged zone-level network and demand.",
         "Use run-dtalite.sh or a project-specific DTALite workflow to execute it.",

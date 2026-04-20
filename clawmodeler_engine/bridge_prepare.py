@@ -7,6 +7,7 @@ from .contracts import stamp_contract, validate_contract
 from .dtalite_bridge import prepare_dtalite_bridge
 from .matsim_bridge import prepare_matsim_bridge
 from .model import artifact_paths
+from .readiness import build_bridge_forecast_readiness, build_detailed_engine_readiness
 from .sumo_bridge import prepare_sumo_bridge
 from .tbest_bridge import prepare_tbest_bridge
 from .urbansim_bridge import prepare_urbansim_bridge
@@ -58,6 +59,11 @@ def prepare_all_bridges(
                     "required_inputs": list(bridge["requires"]),
                     "missing_inputs": missing,
                     "reason": f"Missing required inputs: {', '.join(missing)}",
+                    "forecast_readiness": build_bridge_forecast_readiness(
+                        bridge["id"],
+                        workspace,
+                        receipt=receipt,
+                    ),
                 }
             )
             continue
@@ -66,15 +72,26 @@ def prepare_all_bridges(
             path = prepare(workspace, run_id, scenario_id)
         except ClawModelerError as error:
             results.append(
-                {"bridge": bridge["id"], "status": "failed", "reason": str(error)}
+                {
+                    "bridge": bridge["id"],
+                    "status": "failed",
+                    "reason": str(error),
+                    "forecast_readiness": build_bridge_forecast_readiness(
+                        bridge["id"],
+                        workspace,
+                        receipt=receipt,
+                    ),
+                }
             )
         else:
+            manifest = read_json(path)
             results.append(
                 {
                     "bridge": bridge["id"],
                     "status": "prepared",
                     "manifest": str(path),
                     "generated_files": manifest_file_links(path),
+                    "forecast_readiness": manifest.get("forecast_readiness"),
                 }
             )
 
@@ -88,6 +105,10 @@ def prepare_all_bridges(
             "skipped": [result for result in results if result["status"] == "skipped"],
             "failed": [result for result in results if result["status"] == "failed"],
             "results": results,
+            "detailed_engine_readiness": build_detailed_engine_readiness(
+                workspace,
+                receipt=receipt,
+            ),
         },
         "bridge_prepare_report",
     )

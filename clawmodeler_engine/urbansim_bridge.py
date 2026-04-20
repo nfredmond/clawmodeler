@@ -12,6 +12,7 @@ from .model import (
     normalize_scenarios,
     write_csv,
 )
+from .readiness import build_bridge_forecast_readiness
 from .workspace import InsufficientDataError, load_receipt, read_json, utc_now, write_json
 
 
@@ -62,28 +63,29 @@ def prepare_urbansim_bridge(
 
     bridge_manifest = stamp_contract(
         {
-        "bridge": "urbansim",
-        "run_id": run_id,
-        "scenario_id": scenario_id,
-        "created_at": utc_now(),
-        "status": "ready_for_urbansim",
-        "inputs": {
-            "zones": str(zones_path),
-            "households": str(households_path),
-            "jobs": str(jobs_path),
-            "buildings": str(buildings_path),
-            "config": str(config_path),
-        },
-        "household_count": household_count,
-        "job_count": job_count,
-        "building_count": building_count,
-        "commands": {
-            "run": f"bash {bridge_dir / 'run-urbansim.sh'}",
-        },
-        "notes": [
-            "UrbanSim bridge package generated from staged zone-level socio inputs.",
-            "This package is a land-use scenario handoff, not a calibrated forecast.",
-        ],
+            "bridge": "urbansim",
+            "run_id": run_id,
+            "scenario_id": scenario_id,
+            "created_at": utc_now(),
+            "status": "ready_for_urbansim",
+            "inputs": {
+                "zones": str(zones_path),
+                "households": str(households_path),
+                "jobs": str(jobs_path),
+                "buildings": str(buildings_path),
+                "config": str(config_path),
+            },
+            "household_count": household_count,
+            "job_count": job_count,
+            "building_count": building_count,
+            "commands": {
+                "run": f"bash {bridge_dir / 'run-urbansim.sh'}",
+            },
+            "forecast_readiness": build_bridge_forecast_readiness("urbansim", workspace),
+            "notes": [
+                "UrbanSim bridge package generated from staged zone-level socio inputs.",
+                "This package is a land-use scenario handoff, not a calibrated forecast.",
+            ],
         },
         "bridge_manifest",
     )
@@ -189,6 +191,7 @@ def update_base_bridge_manifest(
     data["urbansim_bridge_manifest"] = str(urbansim_manifest_path)
     data["urbansim_household_count"] = urbansim_manifest["household_count"]
     data["urbansim_job_count"] = urbansim_manifest["job_count"]
+    data["forecast_readiness"] = urbansim_manifest.get("forecast_readiness")
     data["notes"] = [
         "UrbanSim bridge package generated from staged zone-level socio inputs.",
         "Use run-urbansim.sh or a project-specific UrbanSim workflow to execute it.",

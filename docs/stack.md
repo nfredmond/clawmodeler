@@ -29,9 +29,10 @@ clawmodeler-engine portfolio --workspace ./demo --json
 
 The CLI and end-to-end workflows share the same core stage functions:
 
-- `clawmodeler_engine/orchestration.py` owns intake, planning, engine selection, run manifest creation, QA-gated export, and report writing.
+- `clawmodeler_engine/orchestration.py` owns intake, planning, engine selection, run manifest creation, calibrated-readiness stamping, QA-gated export, and report writing.
 - `clawmodeler_engine/workflow.py` composes those shared stages into full, demo, report-only, and diagnose workflows.
 - `clawmodeler_engine/cli.py` parses command-line arguments and prints concise JSON command results.
+- `clawmodeler_engine/readiness.py` centralizes detailed-engine forecast-readiness rules, evidence discovery, and blocker summaries.
 - `clawmodeler_engine/report.py` renders Markdown reports from manifests and fact-block artifacts.
 - `desktop/src-tauri/src/lib.rs` exposes the sidecar to the desktop shell.
 - `desktop/src/workbench.ts` owns browser-safe UI helpers and shared client-side validation.
@@ -45,10 +46,10 @@ Each workspace follows the plan contract:
 - `inputs/` contains staged user inputs.
 - `cache/graphs/` is reserved for OSMnx GraphML caches.
 - `cache/gtfs/` is reserved for transit feed cache material.
-- `runs/{run_id}/manifest.json` records inputs, hashes, methods, assumptions, scenarios, outputs, and engine selection.
+- `runs/{run_id}/manifest.json` records inputs, hashes, methods, assumptions, scenarios, outputs, engine selection, and `detailed_engine_readiness`.
 - `runs/{run_id}/qa_report.json` records export gate status.
 - `runs/{run_id}/outputs/tables/` contains CSV and JSONL outputs.
-- `runs/{run_id}/outputs/bridges/` contains external engine handoff manifests.
+- `runs/{run_id}/outputs/bridges/` contains external engine handoff manifests, each with `forecast_readiness` when applicable.
 - `reports/` contains exported reports.
 
 Core JSON artifacts are versioned with `schema_version` and `artifact_type`. The sidecar validates these contracts in `clawmodeler_engine/contracts.py` before writing or loading key artifacts. Current contract-covered artifacts include:
@@ -81,13 +82,14 @@ The current stack implements these plan modules:
 - Project Scoring: writes weighted safety, equity, climate, and feasibility scores.
 - Narrative Engine: exports Markdown only when QA confirms manifest and fact-block evidence are present.
 - Bridge Exports: creates MATSim, SUMO, UrbanSim, DTALite, and TBEST handoff manifests.
+- Calibrated-model execution gates: record whether each detailed-engine package is handoff-only, calibration-required, or validation-ready based on project-specific evidence.
 - SUMO Bridge: generates and validates SUMO plain node, edge, trip, config, and shell script files from staged zone-level network and demand inputs.
 - MATSim Bridge: generates MATSim network, population, config, and shell script files from staged zone-level network and demand inputs.
 - UrbanSim Bridge: generates zone, household, job, building, and config tables from staged zone-level socioeconomic inputs.
 - DTALite Bridge: generates node, link, demand, and settings files from staged zone-level network and demand inputs.
 - TBEST Bridge: generates stop, route, service, and config tables from staged GTFS inputs.
 - Bridge Prepare All: prepares every applicable bridge package and records skipped packages with reasons.
-- Bridge Validation: writes a combined bridge validation report across prepared external-engine packages.
+- Bridge Validation: writes a combined bridge validation report across prepared external-engine packages and separates structural package readiness from detailed forecast readiness.
 - Planner Pack: writes CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP artifacts from finished runs.
 - What-if: derives a new run from a baseline with deterministic overrides.
 - Diff: compares two runs across engine and Planner Pack tables.
@@ -102,7 +104,7 @@ The current planner-facing flow is guided by a top-level Workflow Guide. It link
 
 1. Pick or create a workspace.
 2. Run the built-in demo or a full workflow.
-3. Review QA readiness, bridge readiness, bridge generated-file counts, manifest path, generated artifacts, warnings, and sidecars.
+3. Review QA readiness, bridge package readiness, detailed forecast readiness, bridge generated-file counts, manifest path, generated artifacts, warnings, and sidecars.
 4. Preview the report.
 5. Generate Planner Pack artifacts.
 6. Preview generated text artifacts.
@@ -124,7 +126,7 @@ pnpm release:sidecar-smoke
 
 Release asset names and Latest-release policy are checked by `scripts/check-release-assets.mjs` and `scripts/release-latest-policy.mjs`.
 
-The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract.
+The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract. Until project-specific calibration inputs, validation targets, model year, geography, and method notes are recorded, detailed-engine bridge packages remain handoff artifacts rather than authoritative forecasts.
 
 When OSMnx is installed, `openclaw clawmodeler graph osmnx` can build a GraphML cache in `cache/graphs/`. The accessibility engine can consume GraphML cache files with edge `minutes`, `travel_time_min`, `travel_time_minutes`, OSMnx-style `travel_time` seconds, or `length` plus `speed_kph` values. Run `openclaw clawmodeler graph map-zones` after intake to generate and register `inputs/zone_node_map.csv` from staged zones and GraphML node coordinates, or stage a CSV with `zone_id,node_id` columns when a custom mapping is required.
 

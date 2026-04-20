@@ -6,8 +6,8 @@ from typing import Any
 from .workspace import InputValidationError
 
 CURRENT_SCHEMA_VERSION = "1.0.0"
-CURRENT_MANIFEST_VERSION = "1.1.0"
-LEGACY_MANIFEST_VERSIONS: tuple[str, ...] = ("1.0.0",)
+CURRENT_MANIFEST_VERSION = "1.2.0"
+LEGACY_MANIFEST_VERSIONS: tuple[str, ...] = ("1.0.0", "1.1.0")
 
 
 REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
@@ -122,11 +122,20 @@ def validate_artifact_shape(data: dict[str, Any], artifact_type: str, label: str
 
     if artifact_type == "run_manifest":
         require_non_empty_string(data, "run_id", label)
+        require_non_empty_string(data, "manifest_version", label)
+        if data["manifest_version"] not in {CURRENT_MANIFEST_VERSION, *LEGACY_MANIFEST_VERSIONS}:
+            raise InputValidationError(
+                f"{label} has unsupported manifest_version {data['manifest_version']!r}; "
+                f"expected {CURRENT_MANIFEST_VERSION!r} or one of {LEGACY_MANIFEST_VERSIONS!r}"
+            )
         require_dict(data, "app", label)
         require_dict(data, "engine", label)
         require_dict(data, "workspace", label)
         require_list(data, "inputs", label)
         require_dict(data, "outputs", label)
+        detailed_readiness = data.get("detailed_engine_readiness")
+        if detailed_readiness is not None and not isinstance(detailed_readiness, dict):
+            raise InputValidationError(f"{label} detailed_engine_readiness must be an object")
         return
 
     if artifact_type in {"intake_receipt", "analysis_plan"}:
@@ -143,6 +152,9 @@ def validate_artifact_shape(data: dict[str, Any], artifact_type: str, label: str
         require_non_empty_string(data, "bridge", label)
         require_non_empty_string(data, "run_id", label)
         require_non_empty_string(data, "status", label)
+        forecast_readiness = data.get("forecast_readiness")
+        if forecast_readiness is not None and not isinstance(forecast_readiness, dict):
+            raise InputValidationError(f"{label} forecast_readiness must be an object")
         return
 
 

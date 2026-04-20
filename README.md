@@ -44,11 +44,12 @@ ClawModeler coordinates:
 - transit schedule metrics,
 - project scoring,
 - bridge exports for heavier transportation models,
+- calibrated-model readiness tracking for detailed engines,
 - reproducibility manifests,
 - fact-block evidence,
 - QA-gated report export.
 
-Current analysis outputs are intentionally labeled as screening-level when proxy methods are used. The stack is built so detailed engines can replace or augment those proxy methods without changing the user-facing workflow.
+Current analysis outputs are intentionally labeled as screening-level when proxy methods are used. The stack is built so detailed engines can replace or augment those proxy methods without changing the user-facing workflow. Bridge packages can be structurally ready for handoff before they are forecast-ready. ClawModeler now records detailed-engine readiness explicitly so uncalibrated handoff artifacts are not presented as authoritative forecasts.
 
 ## Quick Start
 
@@ -180,9 +181,9 @@ Agents should follow this sequence:
 9. Run planning and modeling.
 10. Prepare bridge packages with `bridge prepare-all`, or use specific commands such as `bridge sumo prepare`, `bridge matsim prepare`, or `bridge urbansim prepare`.
 11. Validate bridge packages with commands such as `bridge sumo validate` or `bridge validate`.
-12. Inspect `qa_report.json`.
+12. Inspect `qa_report.json`, `manifest.json` detailed-engine readiness, and any bridge forecast-readiness blockers.
 13. Export only if QA passes.
-14. Summarize outputs by citing artifacts and limitations.
+14. Summarize outputs by citing artifacts and limitations, and distinguish bridge-package readiness from calibrated forecast readiness.
 
 Agents must not invent data, silently bypass QA, or present screening-level outputs as detailed engineering forecasts.
 
@@ -201,6 +202,14 @@ Useful inputs include:
 - optional local model handoff files.
 
 If required data is missing, ClawModeler should either run a reduced analysis with explicit limitations or ask for the missing data.
+
+For detailed-engine forecast readiness, helpful question or staged-input evidence includes:
+
+- model year,
+- calibration geography,
+- method notes,
+- observed counts, ridership, or land-use controls,
+- validation targets such as travel times, boardings, or screenlines.
 
 ## Workspace Layout
 

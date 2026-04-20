@@ -29,6 +29,14 @@ export type BridgeSkippedSummary = {
   reason: string | null;
 };
 
+export type DetailedForecastStatusSummary = {
+  bridge: string;
+  status: string;
+  statusLabel: string;
+  blockers: string[];
+  summary: string | null;
+};
+
 export type RunSummary = {
   runId: string;
   workspacePath: string;
@@ -37,6 +45,8 @@ export type RunSummary = {
   scenarioIds: string[];
   qaExportReady: boolean | null;
   bridgeExportReady: boolean | null;
+  detailedForecastReady: boolean | null;
+  detailedForecastStatuses: DetailedForecastStatusSummary[];
   bridgeGeneratedFileCount: number | null;
   bridgeSkippedInputs: BridgeSkippedSummary[];
   plannerPackArtifacts: string[];
@@ -297,6 +307,64 @@ function bridgeExportReady(workflowReport: Record<string, unknown> | null): bool
   return typeof value === "boolean" ? value : null;
 }
 
+function detailedEngineReadinessPayload(
+  workflowReport: Record<string, unknown> | null,
+  manifest: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const workflowReadiness = workflowReport?.detailed_engine_readiness;
+  if (workflowReadiness && typeof workflowReadiness === "object" && !Array.isArray(workflowReadiness)) {
+    return workflowReadiness as Record<string, unknown>;
+  }
+  const manifestReadiness = manifest?.detailed_engine_readiness;
+  if (manifestReadiness && typeof manifestReadiness === "object" && !Array.isArray(manifestReadiness)) {
+    return manifestReadiness as Record<string, unknown>;
+  }
+  return null;
+}
+
+function detailedForecastStatuses(
+  workflowReport: Record<string, unknown> | null,
+  manifest: Record<string, unknown> | null,
+): DetailedForecastStatusSummary[] {
+  const readiness = detailedEngineReadinessPayload(workflowReport, manifest);
+  const engines = readiness?.engines;
+  if (!engines || typeof engines !== "object" || Array.isArray(engines)) {
+    return [];
+  }
+  return Object.entries(engines)
+    .map(([bridge, raw]) => {
+      const row = raw && typeof raw === "object" && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+      return {
+        bridge,
+        status: typeof row.status === "string" ? row.status : "handoff_only",
+        statusLabel: typeof row.status_label === "string" ? row.status_label : bridge,
+        blockers: asStringArray(row.missing_readiness_blockers),
+        summary: asString(row.summary),
+      };
+    })
+    .sort((a, b) => a.bridge.localeCompare(b.bridge));
+}
+
+function detailedForecastReady(
+  workflowReport: Record<string, unknown> | null,
+  manifest: Record<string, unknown> | null,
+): boolean | null {
+  const bridgeValidation = workflowReport?.bridge_validation;
+  if (bridgeValidation && typeof bridgeValidation === "object" && !Array.isArray(bridgeValidation)) {
+    const value = (bridgeValidation as Record<string, unknown>).detailed_forecast_ready;
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  const statuses = detailedForecastStatuses(workflowReport, manifest);
+  if (statuses.length === 0) {
+    return null;
+  }
+  return statuses.every((item) => item.status === "validation_ready");
+}
+
 function bridgeGeneratedFileCount(workflowReport: Record<string, unknown> | null): number | null {
   const seen = new Set<string>();
   const bridgePrepare = workflowReport?.bridges;
@@ -362,10 +430,16 @@ function collectWarnings(artifacts: WorkspaceArtifacts): string[] {
           (blocker) => `Bridge blocker: ${blocker}`,
         )
       : [];
+  const detailedForecastBlockers = detailedForecastStatuses(
+    artifacts.workflowReport,
+    artifacts.manifest,
+  ).flatMap((item) =>
+    item.blockers.map((blocker) => `Detailed forecast blocker (${item.bridge}): ${blocker}`),
+  );
   if (artifacts.filesTruncated) {
     warnings.push("File list truncated; only the first 500 artifacts are shown.");
   }
-  return [...warnings, ...qaBlockers, ...bridgeBlockers];
+  return [...warnings, ...qaBlockers, ...bridgeBlockers, ...detailedForecastBlockers];
 }
 
 function missingManifestSidecars(artifacts: WorkspaceArtifacts): string[] {
@@ -403,6 +477,8 @@ export function summarizeRunArtifacts(artifacts: WorkspaceArtifacts | null): Run
     qaExportReady:
       typeof artifacts.qaReport?.export_ready === "boolean" ? artifacts.qaReport.export_ready : null,
     bridgeExportReady: bridgeExportReady(artifacts.workflowReport),
+    detailedForecastReady: detailedForecastReady(artifacts.workflowReport, artifacts.manifest),
+    detailedForecastStatuses: detailedForecastStatuses(artifacts.workflowReport, artifacts.manifest),
     bridgeGeneratedFileCount: bridgeGeneratedFileCount(artifacts.workflowReport),
     bridgeSkippedInputs: bridgeSkippedInputs(artifacts.workflowReport),
     plannerPackArtifacts: detectPlannerPackArtifacts(artifacts.files, artifacts.manifest),

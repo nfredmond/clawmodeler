@@ -9,6 +9,7 @@ from xml.etree import ElementTree
 
 from .contracts import stamp_contract, validate_artifact_file, validate_contract
 from .model import artifact_paths, load_socio, load_zones, parse_float
+from .readiness import build_bridge_forecast_readiness
 from .workspace import InsufficientDataError, load_receipt, read_json, utc_now, write_json
 
 DEFAULT_SUMO_TRIP_RATE = 0.03
@@ -86,6 +87,7 @@ def prepare_sumo_bridge(workspace: Path, run_id: str, scenario_id: str = "baseli
                 "build_net": f"bash {bridge_dir / 'build-net.sh'}",
                 "run": f"bash {bridge_dir / 'run-sumo.sh'}",
             },
+            "forecast_readiness": build_bridge_forecast_readiness("sumo", workspace),
             "notes": [
                 "This is a first executable bridge package from zone-level screening inputs.",
                 "It is suitable for smoke tests and handoff validation, not calibrated operations.",
@@ -467,6 +469,7 @@ def update_bridge_manifest(
     if run_manifest.get("bridge_qa_report"):
         manifest["bridge_qa_report"] = run_manifest["bridge_qa_report"]
         manifest["bridge_qa_export_ready"] = run_manifest.get("bridge_qa_export_ready")
+    manifest["forecast_readiness"] = run_manifest.get("forecast_readiness")
     manifest["notes"] = [
         "SUMO bridge package generated from staged zone-level network and demand inputs.",
         "Use build-net.sh and run-sumo.sh when SUMO binaries are installed.",

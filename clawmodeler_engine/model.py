@@ -10,6 +10,7 @@ from typing import Any
 from xml.etree import ElementTree
 
 from .contracts import stamp_contract, validate_contract
+from .readiness import build_bridge_forecast_readiness
 from .workspace import InputValidationError, read_json, utc_now, write_json
 
 DEFAULT_CUTOFFS_MIN = (15, 30, 45)
@@ -731,16 +732,17 @@ def write_bridge_exports(
         engine_dir.mkdir(parents=True, exist_ok=True)
         manifest = stamp_contract(
             {
-            "bridge": engine_id,
-            "run_id": run_id,
-            "created_at": utc_now(),
-            "local_engine_path": str(local_path) if local_path.exists() else None,
-            "status": "export_contract_ready" if local_path.exists() else "local_engine_missing",
-            "scenarios": scenarios,
-            "notes": [
-                "This bridge records export intent and scenario specs.",
-                "Detailed engine-specific network/demand conversion is a later integration step.",
-            ],
+                "bridge": engine_id,
+                "run_id": run_id,
+                "created_at": utc_now(),
+                "local_engine_path": str(local_path) if local_path.exists() else None,
+                "status": "export_contract_ready" if local_path.exists() else "local_engine_missing",
+                "scenarios": scenarios,
+                "forecast_readiness": build_bridge_forecast_readiness(engine_id, workspace),
+                "notes": [
+                    "This bridge records export intent and scenario specs.",
+                    "Detailed engine-specific network and demand conversion is a later integration step.",
+                ],
             },
             "bridge_manifest",
         )

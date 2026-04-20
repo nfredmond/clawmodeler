@@ -39,6 +39,7 @@ from typing import Any
 from .contracts import CURRENT_MANIFEST_VERSION, stamp_contract, validate_contract
 from .model import DEFAULT_SCORING_WEIGHTS, _resolve_scoring_weights, run_full_stack
 from .qa import build_qa_report
+from .readiness import build_detailed_engine_readiness
 from .report import read_fact_blocks
 from .workspace import (
     ENGINE_VERSION,
@@ -415,7 +416,7 @@ def write_what_if(
       4. Apply project include/exclude + sensitivity_floor filters to
          project_scores.csv and drop corresponding score_fact_blocks.
       5. Append ``what_if_scenario`` + per-project delta fact_blocks.
-      6. Stamp manifest with ``manifest_version="1.1.0"``, ``base_run_id``,
+      6. Stamp manifest with ``manifest_version="1.2.0"``, ``base_run_id``,
          and ``overrides``; build the QA report.
     """
 
@@ -526,6 +527,10 @@ def write_what_if(
             "methods": stack_result["methods"] + ["what_if"],
             "outputs": stack_result["outputs"],
             "assumptions": stack_result["assumptions"],
+            "detailed_engine_readiness": build_detailed_engine_readiness(
+                workspace,
+                receipt=receipt,
+            ),
             "fact_block_count": len(all_blocks),
         },
         "run_manifest",

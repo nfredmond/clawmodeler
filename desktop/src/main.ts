@@ -1572,6 +1572,22 @@ function renderArtifacts() {
     runSummary?.bridgeGeneratedFileCount === null || runSummary?.bridgeGeneratedFileCount === undefined
       ? "No bridge file links recorded"
       : `${runSummary.bridgeGeneratedFileCount} generated bridge file link(s)`;
+  const detailedForecastStatus =
+    runSummary?.detailedForecastReady === null
+      ? "unknown"
+      : runSummary.detailedForecastReady
+        ? "ready"
+        : "blocked";
+  const detailedForecastBreakdown =
+    runSummary && runSummary.detailedForecastStatuses.length > 0
+      ? `<ul>${runSummary.detailedForecastStatuses
+          .map((item) => {
+            const blockers = item.blockers.length > 0 ? ` Missing: ${escapeHtml(item.blockers.join(", "))}.` : "";
+            const summary = item.summary ? ` ${escapeHtml(item.summary)}` : "";
+            return `<li><strong>${escapeHtml(item.bridge)}</strong>: ${escapeHtml(item.statusLabel)}.${summary}${blockers}</li>`;
+          })
+          .join("")}</ul>`
+      : "<p>No detailed-forecast readiness summary recorded.</p>";
   const skippedBridges =
     runSummary && runSummary.bridgeSkippedInputs.length > 0
       ? `<ul>${runSummary.bridgeSkippedInputs
@@ -1621,8 +1637,12 @@ function renderArtifacts() {
           <span class="pf-ready ${runSummary?.qaExportReady ? "ok" : "bad"}">${runSummary?.qaExportReady === null ? "unknown" : runSummary.qaExportReady ? "ready" : "blocked"}</span>
         </div>
         <div>
-          <strong>Bridge export</strong>
+          <strong>Bridge package validation</strong>
           <span class="pf-ready ${runSummary?.bridgeExportReady ? "ok" : "bad"}">${runSummary?.bridgeExportReady === null ? "unknown" : runSummary.bridgeExportReady ? "ready" : "blocked"}</span>
+        </div>
+        <div>
+          <strong>Detailed forecast readiness</strong>
+          <span class="pf-ready ${runSummary?.detailedForecastReady ? "ok" : "bad"}">${escapeHtml(detailedForecastStatus)}</span>
         </div>
         <div>
           <strong>Bridge files</strong>
@@ -1648,6 +1668,10 @@ function renderArtifacts() {
       <details>
         <summary>Manifest sidecars</summary>
         ${missingSidecars}
+      </details>
+      <details>
+        <summary>Detailed forecast readiness</summary>
+        ${detailedForecastBreakdown}
       </details>
       <details>
         <summary>Bridge package inputs</summary>
