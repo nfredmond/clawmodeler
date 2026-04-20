@@ -92,11 +92,15 @@ Chat and AI narrative calls are downstream of a finished run. Every sentence mus
 clawmodeler-engine bridge prepare-all --workspace ./demo --run-id demo
 clawmodeler-engine bridge validate --workspace ./demo --run-id demo
 clawmodeler-engine bridge sumo prepare --workspace ./demo --run-id demo
+clawmodeler-engine bridge sumo execute --workspace ./demo --run-id demo --dry-run
 clawmodeler-engine bridge matsim prepare --workspace ./demo --run-id demo
+clawmodeler-engine bridge matsim execute --workspace ./demo --run-id demo --dry-run
 clawmodeler-engine bridge urbansim prepare --workspace ./demo --run-id demo
 ```
 
 `workflow full`, `workflow demo-full`, `workflow report-only`, `workflow diagnose`, `bridge prepare-all`, and `bridge validate` now emit stable readiness summaries for detailed engines. Structural bridge-package readiness can pass while `detailed_forecast_ready` remains false if calibration inputs, validation targets, model year, geography, or method notes are missing.
+
+`bridge <engine> execute` writes `bridge_execution_report.json` for SUMO, MATSim, UrbanSim, DTALite, and TBEST. Use `--dry-run` to validate execution readiness without running the command. Execution status only confirms that the external command ran; calibrated forecast claims still require validation-ready detailed-engine evidence.
 
 ## Graph Commands
 
@@ -107,6 +111,20 @@ clawmodeler-engine graph osmnx \
 
 clawmodeler-engine graph map-zones --workspace ./demo
 ```
+
+Runs may optionally set `question.routing`:
+
+```json
+{
+  "routing": {
+    "source": "auto",
+    "graph_id": "davis-drive",
+    "impedance": "minutes"
+  }
+}
+```
+
+Supported `source` values are `auto`, `network_edges_csv`, `graphml`, and `euclidean_proxy`. `minutes` is the only supported impedance in this pass.
 
 ## Notes
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from clawmodeler_engine.contracts import validate_artifact_file, validate_contract
 from clawmodeler_engine.demo import write_demo_inputs
 from clawmodeler_engine.model import graphml_edge_minutes, load_graphml_zone_graph
+from clawmodeler_engine.orchestration import normalize_scenario_ids
 from clawmodeler_engine.toolbox import assess_model_inventory, load_toolbox
 from clawmodeler_engine.workspace import InputValidationError
 
@@ -106,6 +107,53 @@ class ClawModelerEngineTest(unittest.TestCase):
         self.assertIn("matsim", inventory)
         self.assertIn("dtalite", inventory)
         self.assertIn("agent_next_step", inventory["sumo"])
+
+    def test_normalize_scenario_ids_defaults_to_baseline(self) -> None:
+        self.assertEqual(normalize_scenario_ids([]), ["baseline"])
+        self.assertEqual(normalize_scenario_ids(["", " build "]), ["build"])
+
+    def test_duckdb_sync_populates_input_and_run_tables_when_available(self) -> None:
+        try:
+            import duckdb  # type: ignore[import-not-found]
+        except ModuleNotFoundError:
+            self.skipTest("duckdb not installed")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "demo"
+            inputs = write_demo_inputs(workspace)
+            self.run_engine(
+                "workflow",
+                "full",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(inputs["zones"]),
+                str(inputs["socio"]),
+                str(inputs["projects"]),
+                str(inputs["network_edges"]),
+                "--question",
+                str(inputs["question"]),
+                "--run-id",
+                "demo",
+                "--skip-bridges",
+                "--scenarios",
+                "baseline",
+            )
+
+            connection = duckdb.connect(str(workspace / "project.duckdb"))
+            try:
+                self.assertGreater(connection.execute("SELECT count(*) FROM zones").fetchone()[0], 0)
+                self.assertGreater(connection.execute("SELECT count(*) FROM socio").fetchone()[0], 0)
+                self.assertGreater(
+                    connection.execute("SELECT count(*) FROM run_scenarios").fetchone()[0],
+                    0,
+                )
+                self.assertGreater(
+                    connection.execute("SELECT count(*) FROM run_fact_blocks").fetchone()[0],
+                    0,
+                )
+            finally:
+                connection.close()
 
     def test_toolbox_packaged_fallback_and_model_root_override(self) -> None:
         toolbox = load_toolbox()
@@ -383,6 +431,45 @@ class ClawModelerEngineTest(unittest.TestCase):
                 encoding="utf-8",
             )
             socio.write_text("zone_id,population,jobs\nmissing,10,5\n", encoding="utf-8")
+
+            result = self.run_engine(
+                "intake",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(zones),
+                str(socio),
+                expected_code=10,
+            )
+            self.assertIn("Socio join coverage", result.stderr)
+
+    def test_intake_rejects_missing_socio_for_zones(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            workspace = temp / "workspace"
+            zones = temp / "zones.geojson"
+            socio = temp / "socio.csv"
+            zones.write_text(
+                json.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z1"},
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                            },
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z2"},
+                                "geometry": {"type": "Point", "coordinates": [1, 1]},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            socio.write_text("zone_id,population,jobs\nz1,10,5\n", encoding="utf-8")
 
             result = self.run_engine(
                 "intake",
@@ -910,6 +997,10 @@ class ClawModelerEngineTest(unittest.TestCase):
                 {bridge["bridge"] for bridge in validation["bridges"]},
                 {"sumo", "matsim", "urbansim", "dtalite", "tbest"},
             )
+            for bridge in validation["bridges"]:
+                self.assertEqual(bridge["structural_blockers"], [])
+                self.assertGreater(len(bridge["forecast_blockers"]), 0)
+                self.assertIn("screening-level", bridge["planner_message"])
 
     def test_bridge_commands_surface_calibrated_readiness_statuses(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -999,6 +1090,39 @@ class ClawModelerEngineTest(unittest.TestCase):
                 bridge_report["detailed_forecast_blockers"],
             )
 
+    def test_bridge_execute_dry_run_writes_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "demo"
+            self.run_engine("demo", "--workspace", str(workspace), "--run-id", "sample")
+            self.run_engine(
+                "bridge",
+                "prepare-all",
+                "--workspace",
+                str(workspace),
+                "--run-id",
+                "sample",
+            )
+
+            stdout = json.loads(
+                self.run_engine(
+                    "bridge",
+                    "matsim",
+                    "execute",
+                    "--workspace",
+                    str(workspace),
+                    "--run-id",
+                    "sample",
+                    "--dry-run",
+                ).stdout
+            )
+
+            self.assertEqual(stdout["status"], "dry_run_ready")
+            report = json.loads(Path(stdout["bridge_execution_report"]).read_text())
+            self.assertEqual(report["artifact_type"], "bridge_execution_report")
+            self.assertTrue(report["execution_ready"])
+            self.assertEqual(report["blockers"], [])
+            self.assertEqual(report["bridge"], "matsim")
+
     def test_graphml_cache_drives_accessibility_when_edge_csv_absent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
@@ -1074,6 +1198,146 @@ class ClawModelerEngineTest(unittest.TestCase):
                 / "accessibility_by_zone.csv"
             ).read_text(encoding="utf-8")
             self.assertIn("graphml_dijkstra", accessibility)
+
+    def test_question_routing_graph_id_selects_named_graphml(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            workspace = temp / "workspace"
+            zones = temp / "zones.geojson"
+            socio = temp / "socio.csv"
+            zone_node_map = temp / "zone_node_map.csv"
+            question = temp / "question.json"
+            zones.write_text(
+                json.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "a"},
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                            },
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "b"},
+                                "geometry": {"type": "Point", "coordinates": [1, 0]},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            socio.write_text("zone_id,population,jobs\na,10,5\nb,20,80\n", encoding="utf-8")
+            zone_node_map.write_text("zone_id,node_id\na,n1\nb,n2\n", encoding="utf-8")
+            question.write_text(
+                json.dumps(
+                    {
+                        "question_type": "accessibility",
+                        "routing": {"source": "auto", "graph_id": "fast", "impedance": "minutes"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_engine(
+                "intake",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(zones),
+                str(socio),
+                str(zone_node_map),
+            )
+            graph_dir = workspace / "cache" / "graphs"
+            graph_dir.mkdir(parents=True, exist_ok=True)
+            for graph_id, seconds in (("slow", 1800), ("fast", 300)):
+                (graph_dir / f"{graph_id}.graphml").write_text(
+                    f"""<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <key id="d0" for="edge" attr.name="travel_time" attr.type="double"/>
+  <graph id="G" edgedefault="directed">
+    <node id="n1"/>
+    <node id="n2"/>
+    <edge source="n1" target="n2"><data key="d0">{seconds}</data></edge>
+  </graph>
+</graphml>
+""",
+                    encoding="utf-8",
+                )
+
+            self.run_engine("plan", "--workspace", str(workspace), "--question", str(question))
+            self.run_engine(
+                "run",
+                "--workspace",
+                str(workspace),
+                "--run-id",
+                "graphml",
+                "--scenarios",
+                "baseline",
+            )
+            accessibility = (
+                workspace
+                / "runs"
+                / "graphml"
+                / "outputs"
+                / "tables"
+                / "accessibility_by_zone.csv"
+            ).read_text(encoding="utf-8")
+            self.assertIn("graphml_dijkstra:fast", accessibility)
+
+    def test_question_routing_rejects_unsupported_impedance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            workspace = temp / "workspace"
+            zones = temp / "zones.geojson"
+            socio = temp / "socio.csv"
+            question = temp / "question.json"
+            zones.write_text(
+                json.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "a"},
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            socio.write_text("zone_id,population,jobs\na,10,5\n", encoding="utf-8")
+            question.write_text(
+                json.dumps(
+                    {
+                        "question_type": "accessibility",
+                        "routing": {"source": "auto", "impedance": "distance"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_engine(
+                "intake",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(zones),
+                str(socio),
+            )
+            self.run_engine("plan", "--workspace", str(workspace), "--question", str(question))
+            result = self.run_engine(
+                "run",
+                "--workspace",
+                str(workspace),
+                "--run-id",
+                "bad-routing",
+                "--scenarios",
+                "baseline",
+                expected_code=10,
+            )
+            self.assertIn("Unsupported routing impedance", result.stderr)
 
     def test_graph_map_zones_registers_generated_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

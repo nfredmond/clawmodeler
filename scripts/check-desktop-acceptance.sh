@@ -11,6 +11,7 @@ cleanup() {
 trap cleanup EXIT
 
 workspace="$work_dir/workspace"
+empty_scenarios_workspace="$work_dir/empty-scenarios-workspace"
 fixture="$repo_root/tests/fixtures/tiny_region"
 
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
@@ -52,15 +53,31 @@ echo "Running desktop workflow acceptance against tiny_region fixture"
   --workspace "$workspace" \
   --json >/dev/null
 
-"$python_bin" - "$workspace" <<'PY'
+"$python_bin" -m clawmodeler_engine workflow full \
+  --workspace "$empty_scenarios_workspace" \
+  --inputs \
+    "$fixture/zones.geojson" \
+    "$fixture/socio.csv" \
+    "$fixture/projects.csv" \
+    "$fixture/network_edges.csv" \
+  --question "$fixture/question.json" \
+  --run-id default-scenario \
+  --skip-bridges \
+  --scenarios
+
+"$python_bin" - "$workspace" "$empty_scenarios_workspace" <<'PY'
 from pathlib import Path
 import json
 import sys
 
 workspace = Path(sys.argv[1])
+empty_workspace = Path(sys.argv[2])
 workflow = json.loads((workspace / "runs" / "baseline" / "workflow_report.json").read_text())
 bridge_validation = workflow["bridge_validation"]
 portfolio = json.loads((workspace / "portfolio" / "summary.json").read_text())
+empty_manifest = json.loads(
+    (empty_workspace / "runs" / "default-scenario" / "manifest.json").read_text()
+)
 
 required_files = [
     workspace / "reports" / "baseline_report.md",
@@ -79,12 +96,27 @@ if not workflow["qa"]["export_ready"]:
     raise SystemExit("QA export readiness was false")
 if not bridge_validation["export_ready"]:
     raise SystemExit("bridge export readiness was false")
+if bridge_validation["detailed_forecast_ready"]:
+    raise SystemExit("detailed forecast readiness should remain blocked for fixture data")
+if not bridge_validation["detailed_forecast_blockers"]:
+    raise SystemExit("expected detailed forecast blockers for fixture bridge packages")
 if portfolio["run_count"] != 2:
     raise SystemExit(f"expected 2 portfolio runs, got {portfolio['run_count']}")
 
 prepared = {item["bridge"] for item in workflow["bridges"]["prepared"]}
 if prepared != {"sumo", "matsim", "urbansim", "dtalite"}:
     raise SystemExit(f"unexpected prepared bridges: {sorted(prepared)}")
+
+for bridge in bridge_validation["bridges"]:
+    if bridge["structural_blockers"]:
+        raise SystemExit(f"unexpected structural blockers for {bridge['bridge']}")
+    if not bridge["forecast_blockers"]:
+        raise SystemExit(f"expected forecast blockers for {bridge['bridge']}")
+    if "screening-level" not in bridge["planner_message"]:
+        raise SystemExit(f"missing planner-readable readiness message for {bridge['bridge']}")
+
+if empty_manifest["scenarios"] != [{"scenario_id": "baseline"}]:
+    raise SystemExit(f"empty --scenarios did not default to baseline: {empty_manifest['scenarios']}")
 
 print("Desktop workflow acceptance passed.")
 PY

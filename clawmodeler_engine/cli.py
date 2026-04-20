@@ -6,6 +6,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 
+from .bridge_execution import execute_bridge
 from .bridge_prepare import prepare_all_bridges
 from .bridge_validation import validate_all_bridges
 from .demo import write_demo_inputs
@@ -221,6 +222,11 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_sumo_run.add_argument("--run-id", required=True)
     bridge_sumo_run.add_argument("--scenario-id", default="baseline")
     bridge_sumo_run.set_defaults(func=command_bridge_sumo_run)
+    bridge_sumo_execute = bridge_sumo_subparsers.add_parser(
+        "execute",
+        help="Execute a validated SUMO bridge package and write an execution report.",
+    )
+    add_bridge_execute_arguments(bridge_sumo_execute, "sumo")
     bridge_sumo_validate = bridge_sumo_subparsers.add_parser(
         "validate",
         help="Validate a prepared SUMO bridge package.",
@@ -239,6 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_matsim_prepare.add_argument("--run-id", required=True)
     bridge_matsim_prepare.add_argument("--scenario-id", default="baseline")
     bridge_matsim_prepare.set_defaults(func=command_bridge_matsim_prepare)
+    bridge_matsim_execute = bridge_matsim_subparsers.add_parser(
+        "execute",
+        help="Execute a validated MATSim bridge package and write an execution report.",
+    )
+    add_bridge_execute_arguments(bridge_matsim_execute, "matsim")
     bridge_urbansim = bridge_subparsers.add_parser(
         "urbansim",
         help="Prepare UrbanSim bridge files.",
@@ -252,6 +263,11 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_urbansim_prepare.add_argument("--run-id", required=True)
     bridge_urbansim_prepare.add_argument("--scenario-id", default="baseline")
     bridge_urbansim_prepare.set_defaults(func=command_bridge_urbansim_prepare)
+    bridge_urbansim_execute = bridge_urbansim_subparsers.add_parser(
+        "execute",
+        help="Execute a validated UrbanSim bridge package and write an execution report.",
+    )
+    add_bridge_execute_arguments(bridge_urbansim_execute, "urbansim")
     bridge_dtalite = bridge_subparsers.add_parser(
         "dtalite",
         help="Prepare DTALite bridge files.",
@@ -265,6 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_dtalite_prepare.add_argument("--run-id", required=True)
     bridge_dtalite_prepare.add_argument("--scenario-id", default="baseline")
     bridge_dtalite_prepare.set_defaults(func=command_bridge_dtalite_prepare)
+    bridge_dtalite_execute = bridge_dtalite_subparsers.add_parser(
+        "execute",
+        help="Execute a validated DTALite bridge package and write an execution report.",
+    )
+    add_bridge_execute_arguments(bridge_dtalite_execute, "dtalite")
     bridge_tbest = bridge_subparsers.add_parser("tbest", help="Prepare TBEST bridge files.")
     bridge_tbest_subparsers = bridge_tbest.add_subparsers(required=True)
     bridge_tbest_prepare = bridge_tbest_subparsers.add_parser(
@@ -275,6 +296,11 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_tbest_prepare.add_argument("--run-id", required=True)
     bridge_tbest_prepare.add_argument("--scenario-id", default="baseline")
     bridge_tbest_prepare.set_defaults(func=command_bridge_tbest_prepare)
+    bridge_tbest_execute = bridge_tbest_subparsers.add_parser(
+        "execute",
+        help="Execute a validated TBEST bridge package and write an execution report.",
+    )
+    add_bridge_execute_arguments(bridge_tbest_execute, "tbest")
 
     graph = subparsers.add_parser("graph", help="Prepare routing graph caches.")
     graph_subparsers = graph.add_subparsers(required=True)
@@ -731,6 +757,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def add_bridge_execute_arguments(parser: argparse.ArgumentParser, bridge: str) -> None:
+    parser.add_argument("--workspace", required=True, type=Path)
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--scenario-id", default="baseline")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate execution readiness and write a report without running the command.",
+    )
+    parser.set_defaults(func=command_bridge_execute, bridge=bridge)
+
+
 def command_init(args: argparse.Namespace) -> None:
     result = init_workspace(args.workspace, force=args.force)
     print(json.dumps(result))
@@ -1029,6 +1067,29 @@ def command_bridge_sumo_run(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = run_sumo_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
     print(json.dumps({"sumo_run_manifest": str(path)}))
+
+
+def command_bridge_execute(args: argparse.Namespace) -> None:
+    ensure_workspace(args.workspace)
+    path = execute_bridge(
+        args.workspace,
+        args.run_id,
+        args.bridge,
+        scenario_id=args.scenario_id,
+        dry_run=args.dry_run,
+    )
+    report = read_json(path)
+    print(
+        json.dumps(
+            {
+                "bridge_execution_report": str(path),
+                "bridge": report["bridge"],
+                "status": report["status"],
+                "execution_ready": report["execution_ready"],
+                "blockers": report["blockers"],
+            }
+        )
+    )
 
 
 def command_bridge_sumo_validate(args: argparse.Namespace) -> None:

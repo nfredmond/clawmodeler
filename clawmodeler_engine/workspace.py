@@ -143,11 +143,259 @@ def ensure_project_database(path: Path) -> str:
               scenario_id VARCHAR,
               created_at TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS projects (
+              project_id VARCHAR,
+              name VARCHAR,
+              safety DOUBLE,
+              equity DOUBLE,
+              climate DOUBLE,
+              feasibility DOUBLE,
+              source_file VARCHAR,
+              ingested_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS network_edges (
+              from_zone_id VARCHAR,
+              to_zone_id VARCHAR,
+              minutes DOUBLE,
+              directed BOOLEAN,
+              source_file VARCHAR,
+              ingested_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS zone_node_map (
+              zone_id VARCHAR,
+              node_id VARCHAR,
+              distance_km DOUBLE,
+              source_file VARCHAR,
+              ingested_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS run_scenarios (
+              run_id VARCHAR,
+              scenario_id VARCHAR,
+              name VARCHAR,
+              population_multiplier DOUBLE,
+              jobs_multiplier DOUBLE,
+              transform_spec_json JSON,
+              created_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS run_fact_blocks (
+              run_id VARCHAR,
+              fact_id VARCHAR,
+              fact_type VARCHAR,
+              claim_text VARCHAR,
+              artifact_refs_json JSON,
+              scenario_id VARCHAR,
+              created_at TIMESTAMP
+            );
             """
         )
     finally:
         connection.close()
     return "ready"
+
+
+def sync_project_database(
+    workspace: Path,
+    *,
+    receipt: dict[str, Any] | None = None,
+    run_id: str | None = None,
+) -> str:
+    status = ensure_project_database(workspace / "project.duckdb")
+    if status != "ready":
+        return status
+
+    try:
+        import duckdb  # type: ignore[import-not-found]
+    except ModuleNotFoundError:
+        return "duckdb_python_module_missing"
+
+    connection = duckdb.connect(str(workspace / "project.duckdb"))
+    try:
+        if receipt:
+            sync_input_tables(connection, workspace, receipt)
+        if run_id:
+            sync_run_tables(connection, workspace, run_id)
+    finally:
+        connection.close()
+    return "ready"
+
+
+def sync_input_tables(connection: Any, workspace: Path, receipt: dict[str, Any]) -> None:
+    ingested_at = utc_now()
+    for table in ("zones", "socio", "projects", "network_edges", "zone_node_map"):
+        connection.execute(f"DELETE FROM {table}")
+
+    for item in receipt.get("inputs", []):
+        kind = item.get("kind")
+        path = resolve_workspace_path(workspace, receipt, item.get("staged_path"))
+        if not path.exists():
+            continue
+        if kind == "zones_geojson":
+            sync_zones_table(connection, path, ingested_at)
+        elif kind == "socio_csv":
+            sync_socio_table(connection, path, ingested_at)
+        elif kind == "candidate_projects_csv":
+            sync_projects_table(connection, path, ingested_at)
+        elif kind == "network_edges_csv":
+            sync_network_edges_table(connection, path, ingested_at)
+        elif kind == "zone_node_map_csv":
+            sync_zone_node_map_table(connection, path, ingested_at)
+
+
+def sync_run_tables(connection: Any, workspace: Path, run_id: str) -> None:
+    run_root = workspace / "runs" / run_id
+    scenario_path = run_root / "outputs" / "tables" / "scenario_diff_summary.csv"
+    fact_blocks_path = run_root / "outputs" / "tables" / "fact_blocks.jsonl"
+    created_at = utc_now()
+
+    connection.execute("DELETE FROM run_scenarios WHERE run_id = ?", [run_id])
+    connection.execute("DELETE FROM run_fact_blocks WHERE run_id = ?", [run_id])
+
+    if scenario_path.exists():
+        for row in read_csv_rows(scenario_path):
+            connection.execute(
+                """
+                INSERT INTO run_scenarios
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    run_id,
+                    str(row.get("scenario_id", "")),
+                    str(row.get("name", "")),
+                    parse_number(row.get("population_multiplier"), 1.0),
+                    parse_number(row.get("jobs_multiplier"), 1.0),
+                    row.get("zone_adjustments_json") or "{}",
+                    created_at,
+                ],
+            )
+
+    if fact_blocks_path.exists():
+        with fact_blocks_path.open("r", encoding="utf-8") as file:
+            for line in file:
+                if not line.strip():
+                    continue
+                block = json.loads(line)
+                connection.execute(
+                    """
+                    INSERT INTO run_fact_blocks
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        run_id,
+                        str(block.get("fact_id", "")),
+                        str(block.get("fact_type", "")),
+                        str(block.get("claim_text", "")),
+                        json.dumps(block.get("artifact_refs", []), sort_keys=True),
+                        str(block.get("scenario_id", "")),
+                        str(block.get("created_at") or created_at),
+                    ],
+                )
+
+
+def sync_zones_table(connection: Any, path: Path, ingested_at: str) -> None:
+    data = read_json(path)
+    crs = data.get("crs") if isinstance(data.get("crs"), dict) else {}
+    crs_properties = crs.get("properties") if isinstance(crs.get("properties"), dict) else {}
+    for feature in data.get("features", []):
+        properties = feature.get("properties", {}) if isinstance(feature, dict) else {}
+        zone_id = str(properties.get("zone_id", "")).strip()
+        if not zone_id:
+            continue
+        connection.execute(
+            "INSERT INTO zones VALUES (?, ?, ?, ?)",
+            [
+                zone_id,
+                str(properties.get("name") or zone_id),
+                str(crs_properties.get("name", "")),
+                ingested_at,
+            ],
+        )
+
+
+def sync_socio_table(connection: Any, path: Path, ingested_at: str) -> None:
+    for row in read_csv_rows(path):
+        connection.execute(
+            "INSERT INTO socio VALUES (?, ?, ?, ?, ?)",
+            [
+                str(row.get("zone_id", "")).strip(),
+                int(parse_number(row.get("base_year"), 2020)),
+                parse_number(row.get("population"), 0.0),
+                parse_number(row.get("jobs"), 0.0),
+                str(path),
+            ],
+        )
+
+
+def sync_projects_table(connection: Any, path: Path, ingested_at: str) -> None:
+    for row in read_csv_rows(path):
+        connection.execute(
+            "INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                str(row.get("project_id", "")).strip(),
+                str(row.get("name", "")),
+                parse_number(row.get("safety"), 0.0),
+                parse_number(row.get("equity"), 0.0),
+                parse_number(row.get("climate"), 0.0),
+                parse_number(row.get("feasibility"), 0.0),
+                str(path),
+                ingested_at,
+            ],
+        )
+
+
+def sync_network_edges_table(connection: Any, path: Path, ingested_at: str) -> None:
+    for row in read_csv_rows(path):
+        connection.execute(
+            "INSERT INTO network_edges VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                str(row.get("from_zone_id", "")).strip(),
+                str(row.get("to_zone_id", "")).strip(),
+                parse_number(row.get("minutes"), 0.0),
+                str(row.get("directed", "")).lower() in {"1", "true", "yes"},
+                str(path),
+                ingested_at,
+            ],
+        )
+
+
+def sync_zone_node_map_table(connection: Any, path: Path, ingested_at: str) -> None:
+    for row in read_csv_rows(path):
+        connection.execute(
+            "INSERT INTO zone_node_map VALUES (?, ?, ?, ?, ?)",
+            [
+                str(row.get("zone_id", "")).strip(),
+                str(row.get("node_id", "")).strip(),
+                parse_number(row.get("distance_km"), 0.0),
+                str(path),
+                ingested_at,
+            ],
+        )
+
+
+def read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
+        return list(csv.DictReader(file))
+
+
+def parse_number(value: object, fallback: float) -> float:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return fallback
+
+
+def resolve_workspace_path(workspace: Path, receipt: dict[str, Any], raw_path: object) -> Path:
+    path = Path(str(raw_path))
+    if path.is_absolute():
+        return path
+    receipt_root_raw = receipt.get("workspace", {}).get("root")
+    if receipt_root_raw:
+        receipt_root = Path(str(receipt_root_raw))
+        if not receipt_root.is_absolute():
+            try:
+                return workspace / path.relative_to(receipt_root)
+            except ValueError:
+                pass
+    return workspace / path
 
 
 def stage_inputs(workspace: Path, input_paths: list[Path]) -> list[InputArtifact]:
@@ -294,11 +542,15 @@ def validate_join_coverage(artifacts: list[InputArtifact]) -> None:
 
     zone_ids = set(zones.zone_ids)
     for socio in socios:
-        matched = sum(1 for zone_id in socio.zone_ids if zone_id in zone_ids)
-        coverage = matched / len(socio.zone_ids) if socio.zone_ids else 0
+        socio_zone_ids = set(socio.zone_ids)
+        matched_zone_ids = zone_ids & socio_zone_ids
+        socio_coverage = len(matched_zone_ids) / len(socio_zone_ids) if socio_zone_ids else 0
+        zone_coverage = len(matched_zone_ids) / len(zone_ids) if zone_ids else 0
+        coverage = min(socio_coverage, zone_coverage)
         if coverage < 0.95:
             raise InputValidationError(
-                f"Socio join coverage is {coverage:.1%}; expected at least 95%."
+                "Socio join coverage is "
+                f"{coverage:.1%}; expected at least 95% of both socio and zone IDs to match."
             )
 
 

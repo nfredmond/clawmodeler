@@ -24,18 +24,18 @@ def validate_all_bridges(
         qa = read_json(qa_path)
         sumo_manifest = read_json(bridges_dir / "sumo" / "sumo_run_manifest.json")
         results.append(
-            {
-                "bridge": "sumo",
-                "ready": qa["export_ready"],
-                "manifest": str(bridges_dir / "sumo" / "sumo_run_manifest.json"),
-                "qa_report": str(qa_path),
-                "blockers": qa["blockers"],
-                "forecast_readiness": sumo_manifest.get("forecast_readiness"),
-                "generated_files": manifest_file_links(
+            bridge_validation_row(
+                bridge="sumo",
+                ready=qa["export_ready"],
+                manifest=str(bridges_dir / "sumo" / "sumo_run_manifest.json"),
+                blockers=qa["blockers"],
+                forecast_readiness=sumo_manifest.get("forecast_readiness"),
+                generated_files=manifest_file_links(
                     bridges_dir / "sumo" / "sumo_run_manifest.json"
                 )
                 + [str(qa_path)],
-            }
+                qa_report=str(qa_path),
+            )
         )
     if (bridges_dir / "matsim" / "matsim_bridge_manifest.json").exists():
         results.append(validate_matsim_bridge(bridges_dir / "matsim"))
@@ -94,14 +94,14 @@ def validate_matsim_bridge(bridge_dir: Path) -> dict[str, Any]:
             blockers.append(f"{key}_xml_invalid")
     if int(manifest.get("person_count", 0)) <= 0:
         blockers.append("person_count_zero")
-    return {
-        "bridge": "matsim",
-        "ready": not blockers,
-        "manifest": str(manifest_path),
-        "blockers": blockers,
-        "forecast_readiness": manifest.get("forecast_readiness"),
-        "generated_files": manifest_file_links(manifest_path),
-    }
+    return bridge_validation_row(
+        bridge="matsim",
+        ready=not blockers,
+        manifest=str(manifest_path),
+        blockers=blockers,
+        forecast_readiness=manifest.get("forecast_readiness"),
+        generated_files=manifest_file_links(manifest_path),
+    )
 
 
 def validate_urbansim_bridge(bridge_dir: Path) -> dict[str, Any]:
@@ -119,14 +119,14 @@ def validate_urbansim_bridge(bridge_dir: Path) -> dict[str, Any]:
         blockers.append("household_count_zero")
     if int(manifest.get("job_count", 0)) <= 0:
         blockers.append("job_count_zero")
-    return {
-        "bridge": "urbansim",
-        "ready": not blockers,
-        "manifest": str(manifest_path),
-        "blockers": blockers,
-        "forecast_readiness": manifest.get("forecast_readiness"),
-        "generated_files": manifest_file_links(manifest_path),
-    }
+    return bridge_validation_row(
+        bridge="urbansim",
+        ready=not blockers,
+        manifest=str(manifest_path),
+        blockers=blockers,
+        forecast_readiness=manifest.get("forecast_readiness"),
+        generated_files=manifest_file_links(manifest_path),
+    )
 
 
 def validate_csv_manifest_bridge(bridge_dir: Path, bridge_id: str) -> dict[str, Any]:
@@ -140,14 +140,76 @@ def validate_csv_manifest_bridge(bridge_dir: Path, bridge_id: str) -> dict[str, 
             continue
         if path.suffix == ".csv" and count_csv_rows(path) <= 0:
             blockers.append(f"{key}_empty")
-    return {
-        "bridge": bridge_id,
-        "ready": not blockers,
-        "manifest": str(manifest_path),
+    return bridge_validation_row(
+        bridge=bridge_id,
+        ready=not blockers,
+        manifest=str(manifest_path),
+        blockers=blockers,
+        forecast_readiness=manifest.get("forecast_readiness"),
+        generated_files=manifest_file_links(manifest_path),
+    )
+
+
+def bridge_validation_row(
+    *,
+    bridge: str,
+    ready: bool,
+    manifest: str,
+    blockers: list[str],
+    forecast_readiness: dict[str, Any] | None,
+    generated_files: list[str],
+    qa_report: str | None = None,
+) -> dict[str, Any]:
+    forecast_blockers = list(
+        (forecast_readiness or {}).get("missing_readiness_blockers", [])
+    )
+    row = {
+        "bridge": bridge,
+        "ready": ready,
+        "status": "package_ready" if ready else "package_blocked",
+        "manifest": manifest,
         "blockers": blockers,
-        "forecast_readiness": manifest.get("forecast_readiness"),
-        "generated_files": manifest_file_links(manifest_path),
+        "structural_blockers": blockers,
+        "forecast_blockers": forecast_blockers,
+        "forecast_readiness": forecast_readiness,
+        "generated_files": generated_files,
+        "planner_message": bridge_planner_message(bridge, blockers, forecast_readiness),
     }
+    if qa_report:
+        row["qa_report"] = qa_report
+    return row
+
+
+def bridge_planner_message(
+    bridge: str,
+    structural_blockers: list[str],
+    forecast_readiness: dict[str, Any] | None,
+) -> str:
+    if structural_blockers:
+        return (
+            f"{bridge} package validation is blocked by structural handoff issues: "
+            f"{', '.join(structural_blockers)}."
+        )
+
+    forecast_status = (forecast_readiness or {}).get("status")
+    if forecast_status == "validation_ready":
+        return (
+            f"{bridge} package files are structurally valid and project-specific "
+            "calibration and validation evidence is recorded."
+        )
+    if forecast_status == "calibration_required":
+        blockers = ", ".join(
+            (forecast_readiness or {}).get("missing_readiness_blockers", [])
+        )
+        return (
+            f"{bridge} package files are structurally valid, but calibrated forecast "
+            f"readiness is still blocked by: {blockers}."
+        )
+    return (
+        f"{bridge} package files are structurally valid for handoff. Treat them as "
+        "screening-level until calibration inputs, validation targets, model year, "
+        "geography, and method notes are recorded."
+    )
 
 
 def count_csv_rows(path: Path) -> int:

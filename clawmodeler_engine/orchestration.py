@@ -25,6 +25,7 @@ from .workspace import (
     read_json,
     run_paths,
     stage_inputs,
+    sync_project_database,
     utc_now,
     write_json,
 )
@@ -48,6 +49,7 @@ def write_intake(workspace: Path, input_paths: list[Path]) -> Path:
     validate_contract(receipt, "intake_receipt")
     output_path = workspace / "intake_receipt.json"
     write_json(output_path, receipt)
+    sync_project_database(workspace, receipt=receipt)
     return output_path
 
 
@@ -117,6 +119,11 @@ def select_engine(question: dict[str, Any], flags: dict[str, bool]) -> dict[str,
     return {"routing_engine": "osmnx_networkx", "note": "Default MVP screening engine."}
 
 
+def normalize_scenario_ids(scenarios: list[str]) -> list[str]:
+    scenario_ids = [str(scenario).strip() for scenario in scenarios if str(scenario).strip()]
+    return scenario_ids or ["baseline"]
+
+
 def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path, Path]:
     workspace_info = ensure_workspace(workspace)
     receipt = load_receipt(workspace)
@@ -124,8 +131,9 @@ def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path,
     engine_path = workspace / "engine_selection.json"
     engine = read_json(engine_path) if engine_path.exists() else select_engine({}, {})
     question = _read_question(workspace)
+    scenario_ids = normalize_scenario_ids(scenarios)
 
-    stack_result = run_full_stack(workspace, run_id, receipt, scenarios, paths)
+    stack_result = run_full_stack(workspace, run_id, receipt, scenario_ids, paths)
     detailed_engine_readiness = build_detailed_engine_readiness(
         workspace,
         question=question,
@@ -142,7 +150,7 @@ def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path,
             "inputs": receipt.get("inputs", []),
             "input_hashes": collect_artifact_hashes(workspace / "inputs"),
             "output_hashes": collect_artifact_hashes(paths["outputs"]),
-            "scenarios": [{"scenario_id": scenario_id} for scenario_id in scenarios],
+            "scenarios": [{"scenario_id": scenario_id} for scenario_id in scenario_ids],
             "methods": stack_result["methods"],
             "outputs": stack_result["outputs"],
             "assumptions": _augment_assumptions(
@@ -158,6 +166,7 @@ def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path,
     manifest_path = paths["root"] / "manifest.json"
     write_json(manifest_path, manifest)
     build_qa_report(workspace, run_id)
+    sync_project_database(workspace, receipt=receipt, run_id=run_id)
     return manifest_path, paths["root"] / "qa_report.json"
 
 

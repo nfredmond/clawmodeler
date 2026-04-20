@@ -313,7 +313,7 @@ def compute_accessibility(
     for row in scenario_rows:
         rows_by_scenario.setdefault(row["scenario_id"], []).append(row)
 
-    graph, graph_engine, zone_node_map = load_travel_time_graph(workspace, receipt)
+    graph, graph_engine, zone_node_map = load_travel_time_graph(workspace, receipt, question)
     output: list[dict[str, Any]] = []
     for scenario_id, socio_rows in rows_by_scenario.items():
         for origin in zones:
@@ -353,15 +353,109 @@ def compute_accessibility(
 def load_travel_time_graph(
     workspace: Path,
     receipt: dict[str, Any],
+    question: dict[str, Any] | None = None,
 ) -> tuple[dict[str, list[tuple[str, float]]], str, dict[str, str]]:
+    routing = routing_spec(question or {})
     zone_node_map = load_zone_node_map(workspace, receipt)
+    if routing["impedance"] != "minutes":
+        raise InputValidationError(
+            f"Unsupported routing impedance {routing['impedance']!r}; only 'minutes' is supported."
+        )
+
     paths = artifact_paths(workspace, receipt, "network_edges_csv")
+    if routing["source"] == "network_edges_csv":
+        if not paths:
+            raise InputValidationError(
+                "question.routing.source is 'network_edges_csv', but no network_edges.csv "
+                "input is staged."
+            )
+        return load_network_edges_csv(paths[0]), "network_edges_dijkstra", zone_node_map
+
+    graphml_paths = sorted((workspace / "cache" / "graphs").glob("*.graphml"))
+    selected_graph = select_graphml_path(workspace, graphml_paths, routing["graph_id"])
+    if routing["source"] == "graphml":
+        if selected_graph is None:
+            raise InputValidationError(
+                "question.routing.source is 'graphml', but no matching GraphML cache was found."
+            )
+        if not zone_node_map:
+            raise InputValidationError(
+                "question.routing.source is 'graphml', but no zone_node_map.csv is staged. "
+                "Run graph map-zones first."
+            )
+        return (
+            load_graphml_zone_graph(selected_graph),
+            f"graphml_dijkstra:{selected_graph.stem}",
+            zone_node_map,
+        )
+
+    if routing["source"] == "euclidean_proxy":
+        return {}, "", zone_node_map
+
+    if routing["source"] != "auto":
+        raise InputValidationError(
+            f"Unsupported question.routing.source {routing['source']!r}; "
+            "expected auto, network_edges_csv, graphml, or euclidean_proxy."
+        )
+
+    if routing["graph_id"]:
+        if selected_graph is None:
+            raise InputValidationError(
+                f"question.routing.graph_id {routing['graph_id']!r} did not match a "
+                "GraphML cache in cache/graphs."
+            )
+        if not zone_node_map:
+            raise InputValidationError(
+                "question.routing.graph_id was set, but no zone_node_map.csv is staged. "
+                "Run graph map-zones first."
+            )
+        return (
+            load_graphml_zone_graph(selected_graph),
+            f"graphml_dijkstra:{selected_graph.stem}",
+            zone_node_map,
+        )
+
     if paths:
         return load_network_edges_csv(paths[0]), "network_edges_dijkstra", zone_node_map
-    graphml_paths = sorted((workspace / "cache" / "graphs").glob("*.graphml"))
-    if graphml_paths and zone_node_map:
-        return load_graphml_zone_graph(graphml_paths[0]), "graphml_dijkstra", zone_node_map
+    if selected_graph and zone_node_map:
+        return (
+            load_graphml_zone_graph(selected_graph),
+            f"graphml_dijkstra:{selected_graph.stem}",
+            zone_node_map,
+        )
     return {}, "", zone_node_map
+
+
+def routing_spec(question: dict[str, Any]) -> dict[str, str]:
+    raw = question.get("routing", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise InputValidationError("question.routing must be an object when provided.")
+    return {
+        "source": str(raw.get("source") or "auto").strip() or "auto",
+        "graph_id": str(raw.get("graph_id") or "").strip(),
+        "impedance": str(raw.get("impedance") or "minutes").strip() or "minutes",
+    }
+
+
+def select_graphml_path(
+    workspace: Path, graphml_paths: list[Path], graph_id: str
+) -> Path | None:
+    if not graph_id:
+        return graphml_paths[0] if graphml_paths else None
+
+    candidate = Path(graph_id)
+    if candidate.suffix == ".graphml":
+        if candidate.is_absolute() and candidate.exists():
+            return candidate
+        relative = workspace / "cache" / "graphs" / candidate.name
+        return relative if relative.exists() else None
+
+    for path in graphml_paths:
+        if path.stem == graph_id or path.name == graph_id:
+            return path
+    return None
 
 
 def load_zone_node_map(workspace: Path, receipt: dict[str, Any]) -> dict[str, str]:
@@ -789,8 +883,7 @@ def collect_assumptions(
     transit_rows: list[dict[str, Any]],
 ) -> list[str]:
     assumptions = [
-        "Accessibility uses network edge shortest paths when a network_edges CSV is staged; "
-        "otherwise it uses a Euclidean proxy until OSMnx/NetworkX graph routing is wired.",
+        routing_assumption(workspace, receipt, question),
         "Proxy accessibility speed is "
         f"{parse_float(question.get('proxy_speed_kph'), DEFAULT_SPEED_KPH)} kph.",
         "VMT screening uses "
@@ -803,6 +896,31 @@ def collect_assumptions(
     if artifact_paths(workspace, receipt, "gtfs_zip") and not transit_rows:
         assumptions.append("GTFS was present but no route time metrics were produced.")
     return assumptions
+
+
+def routing_assumption(workspace: Path, receipt: dict[str, Any], question: dict[str, Any]) -> str:
+    routing = routing_spec(question)
+    if routing["source"] == "network_edges_csv":
+        return "Accessibility routing is explicitly configured to use staged network_edges.csv."
+    if routing["source"] == "graphml":
+        return "Accessibility routing is explicitly configured to use a mapped GraphML cache."
+    if routing["source"] == "euclidean_proxy":
+        return "Accessibility routing is explicitly configured to use Euclidean proxy travel times."
+    if routing["graph_id"]:
+        return (
+            "Accessibility routing auto-selection is pinned to GraphML cache "
+            f"{routing['graph_id']}."
+        )
+    if artifact_paths(workspace, receipt, "network_edges_csv"):
+        return "Accessibility uses staged network_edges.csv shortest paths."
+    if list((workspace / "cache" / "graphs").glob("*.graphml")) and load_zone_node_map(
+        workspace, receipt
+    ):
+        return (
+            "Accessibility uses a mapped GraphML cache when no network_edges.csv is staged; "
+            "otherwise it falls back to Euclidean proxy travel times."
+        )
+    return "Accessibility uses Euclidean proxy travel times when no routable network is staged."
 
 
 def accessibility_fact_blocks(path: Path, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

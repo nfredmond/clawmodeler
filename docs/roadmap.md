@@ -22,6 +22,7 @@ The current post-0.9.5 checkpoint is a releasable sidecar plus a guided Tauri v2
 
 - `clawmodeler-engine doctor`, `tools`, `workflow full`, `workflow demo-full`, `workflow report-only`, and `workflow diagnose` cover the core workflow.
 - Bridge packages are generated and validated for SUMO, MATSim, UrbanSim, DTALite, and TBEST where inputs support them.
+- Bridge execution reports are available for SUMO, MATSim, UrbanSim, DTALite, and TBEST commands, including dry-run readiness checks.
 - Run manifests, bridge manifests, workflow summaries, reports, and desktop summaries now distinguish handoff-only bridge readiness from calibrated forecast readiness.
 - Detailed-engine readiness records method notes, required calibration inputs, required validation targets, and missing readiness blockers.
 - QA blocks unsupported report export and validates manifest and fact-block evidence.
@@ -38,9 +39,9 @@ The current post-0.9.5 checkpoint is a releasable sidecar plus a guided Tauri v2
 
    Expand the tiny public fixture only when it improves acceptance coverage, then improve bridge validation messages before adding deeper external-engine execution.
 
-2. **Upgrade the data/routing engine.**
+2. **Deepen the data/routing engine.**
 
-   Make DuckDB spatial ingestion and deeper OSMnx/NetworkX routing controls the next core data-path upgrade.
+   Build on starter DuckDB table sync and routing-source selection with spatial geometry operations and deeper OSMnx/NetworkX routing controls.
 
 3. **Add optional ML workflows last.**
 

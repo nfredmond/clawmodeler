@@ -47,6 +47,16 @@ REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
         "bridges",
         "blockers",
     ),
+    "bridge_execution_report": (
+        "schema_version",
+        "artifact_type",
+        "bridge",
+        "run_id",
+        "scenario_id",
+        "status",
+        "execution_ready",
+        "blockers",
+    ),
     "workflow_report": (
         "schema_version",
         "artifact_type",
@@ -155,6 +165,16 @@ def validate_artifact_shape(data: dict[str, Any], artifact_type: str, label: str
         forecast_readiness = data.get("forecast_readiness")
         if forecast_readiness is not None and not isinstance(forecast_readiness, dict):
             raise InputValidationError(f"{label} forecast_readiness must be an object")
+        return
+
+    if artifact_type == "bridge_execution_report":
+        require_non_empty_string(data, "bridge", label)
+        require_non_empty_string(data, "run_id", label)
+        require_non_empty_string(data, "scenario_id", label)
+        require_non_empty_string(data, "status", label)
+        if not isinstance(data.get("execution_ready"), bool):
+            raise InputValidationError(f"{label} execution_ready must be boolean")
+        require_list(data, "blockers", label)
         return
 
 

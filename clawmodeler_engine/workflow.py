@@ -7,7 +7,14 @@ from .bridge_prepare import prepare_all_bridges
 from .bridge_validation import validate_all_bridges
 from .contracts import stamp_contract, validate_contract
 from .demo import write_demo_inputs
-from .orchestration import write_export, write_intake, write_plan, write_run
+from .model import artifact_paths, routing_spec, select_graphml_path
+from .orchestration import (
+    normalize_scenario_ids,
+    write_export,
+    write_intake,
+    write_plan,
+    write_run,
+)
 from .project import init_workspace
 from .readiness import build_detailed_engine_readiness
 from .toolbox import assess_toolbox
@@ -29,16 +36,17 @@ def run_full_workflow(
     export_format: str = "md",
     prepare_bridges: bool = True,
 ) -> Path:
+    scenario_ids = normalize_scenario_ids(scenarios)
     init_workspace(workspace)
     intake_path = write_intake(workspace, input_paths)
     analysis_plan_path, engine_selection_path = write_plan(workspace, question_path)
-    manifest_path, qa_report_path = write_run(workspace, run_id, scenarios)
+    manifest_path, qa_report_path = write_run(workspace, run_id, scenario_ids)
     report_path = write_export(workspace, run_id, export_format)
 
     bridge_prepare_path: Path | None = None
     bridge_validation_path: Path | None = None
     if prepare_bridges:
-        bridge_scenario = scenarios[0] if scenarios else "baseline"
+        bridge_scenario = scenario_ids[0]
         bridge_prepare_path = prepare_all_bridges(workspace, run_id, scenario_id=bridge_scenario)
         bridge_validation_path = validate_all_bridges(
             workspace, run_id, scenario_id=bridge_scenario
@@ -51,7 +59,7 @@ def run_full_workflow(
             "workflow": "full",
             "workspace": str(workspace),
             "run_id": run_id,
-            "scenarios": scenarios,
+            "scenarios": scenario_ids,
             "artifacts": {
                 "intake_receipt": str(intake_path),
                 "analysis_plan": str(analysis_plan_path),
@@ -190,6 +198,7 @@ def diagnose_workflow(workspace: Path, run_id: str | None = None) -> Path:
                 "kinds": input_kinds,
                 **discover_workspace_inputs(workspace),
             },
+            "routing": routing_diagnosis(workspace, receipt),
             "profiles": toolbox["profiles"],
             "model_inventory": toolbox["model_inventory"],
             "qa": qa_report,
@@ -239,6 +248,10 @@ def workflow_recommendations(
         recommendations.append(
             "Stage network_edges.csv or build a GraphML cache for network-based accessibility."
         )
+    if "zone_node_map_csv" not in input_kinds:
+        recommendations.append(
+            "Run graph map-zones after adding GraphML when graph-based accessibility is desired."
+        )
     if "gtfs_zip" not in input_kinds:
         recommendations.append("Stage a GTFS zip to enable transit metrics and TBEST handoffs.")
     if not selected_run_id:
@@ -274,3 +287,58 @@ def workflow_recommendations(
             + "."
         )
     return recommendations
+
+
+def routing_diagnosis(workspace: Path, receipt: dict[str, Any] | None) -> dict[str, Any]:
+    question = (read_optional_json(workspace / "analysis_plan.json") or {}).get("question", {})
+    routing = routing_spec(question)
+    graphml_paths = sorted((workspace / "cache" / "graphs").glob("*.graphml"))
+    selected_graph = select_graphml_path(workspace, graphml_paths, routing["graph_id"])
+    network_paths = artifact_paths(workspace, receipt, "network_edges_csv") if receipt else []
+    zone_map_paths = artifact_paths(workspace, receipt, "zone_node_map_csv") if receipt else []
+
+    selected_source = "euclidean_proxy"
+    detail = "No network_edges.csv or mapped GraphML cache is available."
+    if routing["source"] == "network_edges_csv":
+        selected_source = "network_edges_csv" if network_paths else "blocked"
+        detail = (
+            "Routing explicitly requests network_edges.csv."
+            if network_paths
+            else "Routing explicitly requests network_edges.csv, but it is not staged."
+        )
+    elif routing["source"] == "graphml":
+        selected_source = "graphml" if selected_graph and zone_map_paths else "blocked"
+        detail = (
+            f"Routing explicitly requests GraphML cache {selected_graph.name}."
+            if selected_graph and zone_map_paths
+            else "Routing explicitly requests GraphML, but the cache or zone map is missing."
+        )
+    elif routing["source"] == "auto" and routing["graph_id"]:
+        selected_source = "graphml" if selected_graph and zone_map_paths else "blocked"
+        detail = (
+            f"Routing auto-selection is pinned to GraphML cache {selected_graph.name}."
+            if selected_graph and zone_map_paths
+            else "Routing auto-selection is pinned to GraphML, but the cache or zone map is missing."
+        )
+    elif routing["source"] == "euclidean_proxy":
+        selected_source = "euclidean_proxy"
+        detail = "Routing explicitly requests Euclidean proxy travel times."
+    elif network_paths:
+        selected_source = "network_edges_csv"
+        detail = "Auto-selection uses staged network_edges.csv."
+    elif selected_graph and zone_map_paths:
+        selected_source = "graphml"
+        detail = f"Auto-selection uses mapped GraphML cache {selected_graph.name}."
+
+    return {
+        "requested_source": routing["source"],
+        "graph_id": routing["graph_id"] or None,
+        "impedance": routing["impedance"],
+        "selected_source": selected_source,
+        "available_sources": {
+            "network_edges_csv": bool(network_paths),
+            "graphml": bool(graphml_paths),
+            "zone_node_map_csv": bool(zone_map_paths),
+        },
+        "detail": detail,
+    }

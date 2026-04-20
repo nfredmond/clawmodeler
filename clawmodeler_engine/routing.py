@@ -11,6 +11,7 @@ from .workspace import (
     InsufficientDataError,
     describe_input,
     load_receipt,
+    sync_project_database,
     write_json,
 )
 
@@ -68,6 +69,7 @@ def build_zone_node_map(
     write_csv(target, rows)
     register_zone_node_map(receipt, target)
     write_json(workspace / "intake_receipt.json", receipt)
+    sync_project_database(workspace, receipt=receipt)
     return target
 
 

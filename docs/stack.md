@@ -63,10 +63,11 @@ Core JSON artifacts are versioned with `schema_version` and `artifact_type`. The
 - `bridge_manifest`
 - `bridge_prepare_report`
 - `bridge_validation_report`
+- `bridge_execution_report`
 - `workflow_report`
 - `workflow_diagnosis`
 
-When the Python `duckdb` module is installed, the sidecar creates `project.duckdb` with the planned starter tables. If DuckDB is absent, it writes an explicit missing-dependency note beside the database path and continues with file-backed artifacts.
+When the Python `duckdb` module is installed, the sidecar creates `project.duckdb` and syncs staged zones, socioeconomic rows, projects, network edges, zone-node maps, run scenarios, and fact blocks into starter relational tables. If DuckDB is absent, it writes an explicit missing-dependency note beside the database path and continues with file-backed artifacts.
 
 ## Implemented Analysis Modules
 
@@ -77,6 +78,7 @@ The current stack implements these plan modules:
 - Scenario Lab: applies scenario-level population and jobs multipliers plus per-zone deltas.
 - Accessibility Engine: writes 15, 30, and 45 minute cumulative jobs-accessible outputs using a Euclidean proxy travel-time method.
 - Accessibility Engine: uses staged `network_edges.csv` shortest paths when available, then `cache/graphs/*.graphml`, otherwise falls back to Euclidean proxy travel times.
+- Accessibility Engine: supports optional `question.routing` controls for `auto`, `network_edges_csv`, `graphml`, or `euclidean_proxy` routing source selection.
 - VMT & Climate: writes screening VMT and CO2e estimates using explicit per-capita and emissions-factor assumptions.
 - Transit Analyzer: validates GTFS core files and writes route span, trip count, and frequency metrics.
 - Project Scoring: writes weighted safety, equity, climate, and feasibility scores.
@@ -90,6 +92,7 @@ The current stack implements these plan modules:
 - TBEST Bridge: generates stop, route, service, and config tables from staged GTFS inputs.
 - Bridge Prepare All: prepares every applicable bridge package and records skipped packages with reasons.
 - Bridge Validation: writes a combined bridge validation report across prepared external-engine packages and separates structural package readiness from detailed forecast readiness.
+- Bridge Execution: writes execution reports for SUMO, MATSim, UrbanSim, DTALite, and TBEST bridge commands, with dry-run support and forecast-readiness limitations preserved.
 - Planner Pack: writes CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP artifacts from finished runs.
 - What-if: derives a new run from a baseline with deterministic overrides.
 - Diff: compares two runs across engine and Planner Pack tables.
@@ -128,7 +131,7 @@ Release asset names and Latest-release policy are checked by `scripts/check-rele
 
 The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract. Until project-specific calibration inputs, validation targets, model year, geography, and method notes are recorded, detailed-engine bridge packages remain handoff artifacts rather than authoritative forecasts.
 
-When OSMnx is installed, `openclaw clawmodeler graph osmnx` can build a GraphML cache in `cache/graphs/`. The accessibility engine can consume GraphML cache files with edge `minutes`, `travel_time_min`, `travel_time_minutes`, OSMnx-style `travel_time` seconds, or `length` plus `speed_kph` values. Run `openclaw clawmodeler graph map-zones` after intake to generate and register `inputs/zone_node_map.csv` from staged zones and GraphML node coordinates, or stage a CSV with `zone_id,node_id` columns when a custom mapping is required.
+When OSMnx is installed, `openclaw clawmodeler graph osmnx` can build a GraphML cache in `cache/graphs/`. The accessibility engine can consume GraphML cache files with edge `minutes`, `travel_time_min`, `travel_time_minutes`, OSMnx-style `travel_time` seconds, or `length` plus `speed_kph` values. Run `openclaw clawmodeler graph map-zones` after intake to generate and register `inputs/zone_node_map.csv` from staged zones and GraphML node coordinates, or stage a CSV with `zone_id,node_id` columns when a custom mapping is required. Use `question.routing.graph_id` to pin a named GraphML cache; `question.routing.impedance` currently supports `minutes` only.
 
 ## Max Toolbox
 

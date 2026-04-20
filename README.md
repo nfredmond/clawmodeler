@@ -341,8 +341,10 @@ Implemented now:
 - GraphML zone-to-node mapping command,
 - workspace folder creation,
 - input staging and validation,
+- starter DuckDB sync for staged inputs, run scenarios, and fact blocks when DuckDB is installed,
 - scenario transforms,
 - proxy accessibility metrics,
+- optional routing source controls for network-edge, GraphML, and proxy accessibility,
 - VMT and CO2e screening,
 - GTFS route metrics,
 - project scoring,
@@ -350,6 +352,7 @@ Implemented now:
 - QA-gated Markdown export,
 - QA-gated PDF export when the `pdf` optional dependency set is installed,
 - bridge manifests for SUMO, MATSim, UrbanSim, DTALite, and TBEST,
+- bridge execution reports for SUMO, MATSim, UrbanSim, DTALite, and TBEST,
 - Planner Pack artifacts for CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP,
 - run-to-run diff, what-if runs, grounded chat, and portfolio summaries,
 - Tauri v2 desktop workbench with a vanilla TypeScript front end,
@@ -360,7 +363,7 @@ Implemented now:
 
 Still to build:
 
-- real DuckDB spatial ingestion path as the default,
+- deeper DuckDB spatial geometry operations as the default,
 - deeper OSMnx/NetworkX routing controls,
 - R5 transit accessibility execution,
 - SUMO network/demand conversion and execution,

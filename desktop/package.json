@@ -9,6 +9,7 @@
     "sidecar:build": "bash ../scripts/build-sidecar-binary.sh",
     "tauri:build": "tauri build",
     "tauri:dev": "tauri dev",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

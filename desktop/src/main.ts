@@ -241,6 +241,18 @@ function escapeHtml(value: unknown): string {
     .replace(/"/gu, "&quot;");
 }
 
+function readinessLabel(value: boolean | null | undefined): string {
+  if (value === true) return "ready";
+  if (value === false) return "blocked";
+  return "unknown";
+}
+
+function readinessTone(value: boolean | null | undefined): "ok" | "bad" | "unknown" {
+  if (value === true) return "ok";
+  if (value === false) return "bad";
+  return "unknown";
+}
+
 function stringField(payload: Record<string, unknown>, key: string, fallback = ""): string {
   const value = payload[key];
   return typeof value === "string" ? value : fallback;
@@ -1572,12 +1584,10 @@ function renderArtifacts() {
     runSummary?.bridgeGeneratedFileCount === null || runSummary?.bridgeGeneratedFileCount === undefined
       ? "No bridge file links recorded"
       : `${runSummary.bridgeGeneratedFileCount} generated bridge file link(s)`;
-  const detailedForecastStatus =
-    runSummary?.detailedForecastReady === null
-      ? "unknown"
-      : runSummary.detailedForecastReady
-        ? "ready"
-        : "blocked";
+  const qaExportReady = runSummary?.qaExportReady;
+  const bridgePackageReady = runSummary?.bridgeExportReady;
+  const detailedForecastReady = runSummary?.detailedForecastReady;
+  const detailedForecastStatus = readinessLabel(detailedForecastReady);
   const detailedForecastBreakdown =
     runSummary && runSummary.detailedForecastStatuses.length > 0
       ? `<ul>${runSummary.detailedForecastStatuses
@@ -1634,15 +1644,15 @@ function renderArtifacts() {
         </div>
         <div>
           <strong>QA export</strong>
-          <span class="pf-ready ${runSummary?.qaExportReady ? "ok" : "bad"}">${runSummary?.qaExportReady === null ? "unknown" : runSummary.qaExportReady ? "ready" : "blocked"}</span>
+          <span class="pf-ready ${readinessTone(qaExportReady)}">${readinessLabel(qaExportReady)}</span>
         </div>
         <div>
           <strong>Bridge package validation</strong>
-          <span class="pf-ready ${runSummary?.bridgeExportReady ? "ok" : "bad"}">${runSummary?.bridgeExportReady === null ? "unknown" : runSummary.bridgeExportReady ? "ready" : "blocked"}</span>
+          <span class="pf-ready ${readinessTone(bridgePackageReady)}">${readinessLabel(bridgePackageReady)}</span>
         </div>
         <div>
           <strong>Detailed forecast readiness</strong>
-          <span class="pf-ready ${runSummary?.detailedForecastReady ? "ok" : "bad"}">${escapeHtml(detailedForecastStatus)}</span>
+          <span class="pf-ready ${readinessTone(detailedForecastReady)}">${escapeHtml(detailedForecastStatus)}</span>
         </div>
         <div>
           <strong>Bridge files</strong>

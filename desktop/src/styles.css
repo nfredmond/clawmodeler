@@ -1112,6 +1112,11 @@ th.active .pf-sort-btn {
   color: #a4302a;
 }
 
+.pf-ready.unknown {
+  background: #e7edf0;
+  color: #4b5d57;
+}
+
 .pf-last-diff {
   font-size: 13px;
   color: #4b5d57;
