@@ -8,7 +8,9 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
+from clawmodeler_engine.bridge_execution import execute_bridge
 from clawmodeler_engine.contracts import validate_artifact_file, validate_contract
 from clawmodeler_engine.demo import write_demo_inputs
 from clawmodeler_engine.model import graphml_edge_minutes, load_graphml_zone_graph
@@ -1275,6 +1277,61 @@ class ClawModelerEngineTest(unittest.TestCase):
             self.assertTrue(report["execution_ready"])
             self.assertEqual(report["blockers"], [])
             self.assertEqual(report["bridge"], "matsim")
+            feedback = report["operator_feedback"]
+            self.assertEqual(feedback["operator_status"], "dry_run_ready")
+            self.assertEqual(feedback["evidence_level"], "handoff_package_ready")
+            self.assertIn("dry run is ready", feedback["operator_summary"])
+            self.assertIn("bash", feedback["command_display"])
+            self.assertGreater(feedback["output_summary"]["expected_count"], 0)
+            self.assertEqual(
+                feedback["output_summary"]["missing_count"],
+                len(feedback["missing_outputs"]),
+            )
+            bash_tool = next(
+                tool for tool in feedback["required_tools"] if tool["id"] == "bash"
+            )
+            self.assertTrue(bash_tool["available"])
+
+    def test_bridge_execute_reports_missing_external_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "demo"
+            self.run_engine("demo", "--workspace", str(workspace), "--run-id", "sample")
+            self.run_engine(
+                "bridge",
+                "prepare-all",
+                "--workspace",
+                str(workspace),
+                "--run-id",
+                "sample",
+            )
+
+            def fake_which(command: str) -> str | None:
+                if command == "sumo":
+                    return None
+                return f"/usr/bin/{command}"
+
+            with patch("clawmodeler_engine.bridge_execution.shutil.which", fake_which):
+                report_path = execute_bridge(
+                    workspace,
+                    "sample",
+                    "sumo",
+                    dry_run=True,
+                )
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["status"], "blocked")
+            self.assertFalse(report["execution_ready"])
+            self.assertIn("sumo_binary_missing", report["blockers"])
+            feedback = report["operator_feedback"]
+            self.assertEqual(feedback["evidence_level"], "execution_blocked")
+            sumo_tool = next(
+                tool for tool in feedback["required_tools"] if tool["id"] == "sumo"
+            )
+            self.assertFalse(sumo_tool["available"])
+            self.assertIn(
+                "Install SUMO and make the sumo command available on PATH.",
+                feedback["next_steps"],
+            )
 
     def test_graphml_cache_drives_accessibility_when_edge_csv_absent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

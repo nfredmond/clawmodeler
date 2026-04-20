@@ -39,6 +39,8 @@ def execute_bridge(
     if not manifest_path.exists():
         return write_execution_report(
             report_path,
+            manifest_path=manifest_path,
+            manifest=None,
             bridge=bridge,
             run_id=run_id,
             scenario_id=scenario_id,
@@ -61,11 +63,13 @@ def execute_bridge(
     )
     command = bridge_command(manifest)
     blockers = list(structural_blockers)
-    blockers.extend(execution_preflight_blockers(bridge, manifest, command))
+    blockers.extend(execution_preflight_blockers(bridge, manifest, command, bridge_dir))
 
     if blockers:
         path = write_execution_report(
             report_path,
+            manifest_path=manifest_path,
+            manifest=manifest,
             bridge=bridge,
             run_id=run_id,
             scenario_id=scenario_id,
@@ -87,6 +91,8 @@ def execute_bridge(
     if dry_run:
         path = write_execution_report(
             report_path,
+            manifest_path=manifest_path,
+            manifest=manifest,
             bridge=bridge,
             run_id=run_id,
             scenario_id=scenario_id,
@@ -122,6 +128,8 @@ def execute_bridge(
     status = "execution_succeeded" if result.returncode == 0 else "execution_failed"
     path = write_execution_report(
         report_path,
+        manifest_path=manifest_path,
+        manifest=manifest,
         bridge=bridge,
         run_id=run_id,
         scenario_id=scenario_id,
@@ -178,18 +186,280 @@ def bridge_command(manifest: dict[str, Any]) -> list[str] | None:
 
 
 def execution_preflight_blockers(
-    bridge: str, manifest: dict[str, Any], command: list[str] | None
+    bridge: str, manifest: dict[str, Any], command: list[str] | None, bridge_dir: Path
 ) -> list[str]:
     blockers: list[str] = []
     if command is None:
         blockers.append("run_command_missing")
-    if bridge == "sumo":
-        if not shutil.which("sumo"):
+    for tool in required_execution_tools(bridge, command, bridge_dir):
+        if tool["available"]:
+            continue
+        if tool["id"] == "sumo":
             blockers.append("sumo_binary_missing")
+        else:
+            blockers.append(f"command_tool_missing:{tool['id']}")
+    if bridge == "sumo":
         net_path = (manifest.get("inputs") or {}).get("net")
-        if not net_path or not Path(str(net_path)).exists():
+        if not net_path or not path_exists(str(net_path), bridge_dir):
             blockers.append("sumo_network_missing")
-    return blockers
+    return sorted(set(blockers))
+
+
+def required_execution_tools(
+    bridge: str, command: list[str] | None, bridge_dir: Path
+) -> list[dict[str, Any]]:
+    tools: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_tool(tool_id: str, command_name: str, note: str) -> None:
+        if tool_id in seen:
+            return
+        seen.add(tool_id)
+        resolved = resolve_command_path(command_name, bridge_dir)
+        tools.append(
+            {
+                "id": tool_id,
+                "command": command_name,
+                "available": resolved is not None,
+                "path": resolved,
+                "note": note,
+            }
+        )
+
+    if command:
+        command_name = command[0]
+        add_tool(
+            Path(command_name).name or command_name,
+            command_name,
+            "Command runner from the generated bridge manifest.",
+        )
+    if bridge == "sumo":
+        add_tool("sumo", "sumo", "Required by the generated SUMO runner.")
+    return tools
+
+
+def resolve_command_path(command_name: str, bridge_dir: Path) -> str | None:
+    command_path = Path(command_name)
+    if command_path.is_absolute():
+        return str(command_path) if command_path.exists() else None
+    if "/" in command_name or "\\" in command_name:
+        local_path = bridge_dir / command_name
+        return str(local_path) if local_path.exists() else None
+    return shutil.which(command_name)
+
+
+def path_exists(value: str, bridge_dir: Path) -> bool:
+    path = Path(value)
+    if path.exists():
+        return True
+    if not path.is_absolute() and (bridge_dir / path).exists():
+        return True
+    return False
+
+
+def manifest_output_links(
+    manifest: dict[str, Any] | None, manifest_path: Path | None
+) -> list[str]:
+    if manifest_path and manifest_path.exists():
+        return manifest_file_links(manifest_path)
+    if manifest is None:
+        return []
+    outputs = manifest.get("outputs") or {}
+    inputs = manifest.get("inputs") or {}
+    return sorted(set(collect_string_paths(outputs) or collect_string_paths(inputs)))
+
+
+def collect_string_paths(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, dict):
+        paths: list[str] = []
+        for item in value.values():
+            paths.extend(collect_string_paths(item))
+        return paths
+    if isinstance(value, list):
+        paths = []
+        for item in value:
+            paths.extend(collect_string_paths(item))
+        return paths
+    return []
+
+
+def build_operator_feedback(
+    *,
+    report_path: Path,
+    manifest_path: Path | None,
+    manifest: dict[str, Any] | None,
+    bridge: str,
+    status: str,
+    dry_run: bool,
+    command: list[str] | None,
+    return_code: int | None,
+    stdout_log: str | None,
+    stderr_log: str | None,
+    blockers: list[str],
+    forecast_readiness: dict[str, Any] | None,
+) -> dict[str, Any]:
+    bridge_dir = report_path.parent
+    expected_outputs = manifest_output_links(manifest, manifest_path)
+    existing_outputs = [path for path in expected_outputs if path_exists(path, bridge_dir)]
+    existing_output_set = set(existing_outputs)
+    missing_outputs = [path for path in expected_outputs if path not in existing_output_set]
+    tools = required_execution_tools(bridge, command, bridge_dir)
+    readiness_status = (
+        forecast_readiness.get("status") if isinstance(forecast_readiness, dict) else None
+    )
+    evidence_level = operator_evidence_level(status, blockers, readiness_status)
+    summary = operator_summary(
+        bridge=bridge,
+        status=status,
+        dry_run=dry_run,
+        blockers=blockers,
+        return_code=return_code,
+        readiness_status=readiness_status,
+        expected_count=len(expected_outputs),
+        existing_count=len(existing_outputs),
+    )
+    return {
+        "operator_status": status,
+        "operator_summary": summary,
+        "evidence_level": evidence_level,
+        "forecast_readiness_status": readiness_status,
+        "command_display": shlex.join(command) if command else None,
+        "command_cwd": str(bridge_dir),
+        "required_tools": tools,
+        "expected_outputs": expected_outputs,
+        "existing_outputs": existing_outputs,
+        "missing_outputs": missing_outputs,
+        "output_summary": {
+            "expected_count": len(expected_outputs),
+            "existing_count": len(existing_outputs),
+            "missing_count": len(missing_outputs),
+        },
+        "report_paths": {
+            "execution_report": str(report_path),
+            "manifest": str(manifest_path) if manifest_path else None,
+            "stdout_log": stdout_log,
+            "stderr_log": stderr_log,
+        },
+        "next_steps": operator_next_steps(
+            status=status,
+            dry_run=dry_run,
+            blockers=blockers,
+            readiness_status=readiness_status,
+            missing_outputs=missing_outputs,
+        ),
+    }
+
+
+def operator_evidence_level(
+    status: str, blockers: list[str], readiness_status: str | None
+) -> str:
+    if "bridge_package_missing" in blockers:
+        return "handoff_package_missing"
+    if status == "blocked":
+        return "execution_blocked"
+    if status == "dry_run_ready":
+        if readiness_status == "validation_ready":
+            return "handoff_package_ready_with_validation_evidence"
+        return "handoff_package_ready"
+    if status == "execution_succeeded":
+        if readiness_status == "validation_ready":
+            return "external_engine_ran_with_validation_evidence"
+        return "external_engine_ran_without_validation_evidence"
+    if status == "execution_failed":
+        return "external_engine_failed"
+    return "unknown"
+
+
+def operator_summary(
+    *,
+    bridge: str,
+    status: str,
+    dry_run: bool,
+    blockers: list[str],
+    return_code: int | None,
+    readiness_status: str | None,
+    expected_count: int,
+    existing_count: int,
+) -> str:
+    if "bridge_package_missing" in blockers:
+        return f"{bridge} package is missing; prepare and validate the bridge before execution."
+    if status == "blocked":
+        return f"{bridge} execution is blocked: {', '.join(blockers)}."
+    if status == "dry_run_ready" or dry_run:
+        return (
+            f"{bridge} dry run is ready. The command can be reviewed before execution; "
+            f"{existing_count} of {expected_count} expected package files already exist."
+        )
+    if status == "execution_succeeded":
+        if readiness_status == "validation_ready":
+            return (
+                f"{bridge} command finished with return code 0 and validation-ready "
+                "forecast evidence is recorded."
+            )
+        return (
+            f"{bridge} command finished with return code 0, but calibrated forecast claims "
+            "still require validation-ready evidence."
+        )
+    if status == "execution_failed":
+        return f"{bridge} command failed with return code {return_code}; review the logs."
+    return f"{bridge} execution status is {status}."
+
+
+def operator_next_steps(
+    *,
+    status: str,
+    dry_run: bool,
+    blockers: list[str],
+    readiness_status: str | None,
+    missing_outputs: list[str],
+) -> list[str]:
+    steps: list[str] = []
+    if "bridge_package_missing" in blockers:
+        steps.extend(
+            [
+                "Run bridge prepare-all or prepare the selected bridge package.",
+                "Run bridge validate before checking execution readiness again.",
+            ]
+        )
+    if "run_command_missing" in blockers:
+        steps.append("Regenerate the bridge package so it includes a run command.")
+    if "sumo_binary_missing" in blockers:
+        steps.append("Install SUMO and make the sumo command available on PATH.")
+    if "sumo_network_missing" in blockers:
+        steps.append("Regenerate the SUMO package so its network file is present.")
+    command_tool_blockers = [
+        blocker.split(":", 1)[1]
+        for blocker in blockers
+        if blocker.startswith("command_tool_missing:")
+    ]
+    for tool in command_tool_blockers:
+        steps.append(f"Install or expose the {tool} command before execution.")
+    if status == "blocked" and not steps:
+        steps.append("Fix the listed bridge validation blockers, then rerun the dry-run check.")
+    if status == "dry_run_ready" or (dry_run and not blockers):
+        steps.append("Review the generated command and handoff files before executing.")
+        if missing_outputs:
+            steps.append(
+                "Run without --dry-run to let the external engine create missing package files."
+            )
+    if status == "execution_succeeded":
+        if missing_outputs:
+            steps.append("Check external-engine logs for expected package files that were not written.")
+        if readiness_status != "validation_ready":
+            steps.append(
+                "Keep outputs labeled as screening or handoff evidence until detailed-model "
+                "validation evidence is recorded."
+            )
+    if status == "execution_failed":
+        steps.extend(
+            [
+                "Review stdout and stderr logs.",
+                "Fix external-engine inputs or tooling, then rerun the bridge command.",
+            ]
+        )
+    return steps
 
 
 def execution_limitations(manifest: dict[str, Any]) -> list[str]:
@@ -205,6 +475,8 @@ def execution_limitations(manifest: dict[str, Any]) -> list[str]:
 def write_execution_report(
     path: Path,
     *,
+    manifest_path: Path | None,
+    manifest: dict[str, Any] | None,
     bridge: str,
     run_id: str,
     scenario_id: str,
@@ -220,6 +492,20 @@ def write_execution_report(
     forecast_readiness: dict[str, Any] | None,
     limitations: list[str],
 ) -> Path:
+    operator_feedback = build_operator_feedback(
+        report_path=path,
+        manifest_path=manifest_path,
+        manifest=manifest,
+        bridge=bridge,
+        status=status,
+        dry_run=dry_run,
+        command=command,
+        return_code=return_code,
+        stdout_log=stdout_log,
+        stderr_log=stderr_log,
+        blockers=blockers,
+        forecast_readiness=forecast_readiness,
+    )
     report = stamp_contract(
         {
             "bridge": bridge,
@@ -237,6 +523,7 @@ def write_execution_report(
             "forecast_readiness": forecast_readiness,
             "limitations": limitations,
             "blockers": blockers,
+            "operator_feedback": operator_feedback,
         },
         "bridge_execution_report",
     )

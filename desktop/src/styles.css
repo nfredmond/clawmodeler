@@ -766,6 +766,77 @@ small {
   margin-top: 4px;
 }
 
+.bridge-feedback {
+  display: grid;
+  gap: 12px;
+}
+
+.bridge-feedback p,
+.bridge-feedback ul,
+.bridge-feedback details {
+  margin: 0;
+}
+
+.bridge-feedback-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.bridge-feedback-meta div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dce5e0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.bridge-feedback-meta dt {
+  color: #52615a;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.bridge-feedback-meta dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.bridge-feedback-section {
+  display: grid;
+  gap: 8px;
+}
+
+.bridge-feedback-section h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.bridge-tool-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+
+.bridge-tool-list li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.bridge-tool-list li div {
+  display: grid;
+  gap: 3px;
+}
+
+.bridge-tool-list small {
+  color: #52615a;
+}
+
 .planner-pack-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.5fr) minmax(160px, 0.5fr);
@@ -986,6 +1057,7 @@ small {
   }
   .run-summary-grid,
   .planner-pack-grid,
+  .bridge-feedback-meta,
   .routing-grid,
   .bridge-exec-grid {
     grid-template-columns: 1fr;

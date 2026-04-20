@@ -102,7 +102,7 @@ clawmodeler-engine bridge urbansim prepare --workspace ./demo --run-id demo
 
 `workflow full`, `workflow demo-full`, `workflow report-only`, `workflow diagnose`, `bridge prepare-all`, and `bridge validate` now emit stable readiness summaries for detailed engines. Structural bridge-package readiness can pass while `detailed_forecast_ready` remains false if calibration inputs, validation targets, model year, geography, or method notes are missing.
 
-`bridge <engine> execute` writes `bridge_execution_report.json` for SUMO, MATSim, UrbanSim, DTALite, and TBEST. Use `--dry-run` to validate execution readiness without running the command. Execution status only confirms that the external command ran; calibrated forecast claims still require validation-ready detailed-engine evidence.
+`bridge <engine> execute` writes `bridge_execution_report.json` for SUMO, MATSim, UrbanSim, DTALite, and TBEST. Use `--dry-run` to validate execution readiness without running the command. The report includes operator feedback for generated commands, command working folders, required tools, expected outputs, and next steps. Execution status only confirms that the external command ran; calibrated forecast claims still require validation-ready detailed-engine evidence.
 
 ## Graph Commands
 

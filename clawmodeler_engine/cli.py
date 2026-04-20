@@ -1108,6 +1108,7 @@ def command_bridge_execute(args: argparse.Namespace) -> None:
         dry_run=args.dry_run,
     )
     report = read_json(path)
+    operator_feedback = report.get("operator_feedback") or {}
     print(
         json.dumps(
             {
@@ -1116,6 +1117,10 @@ def command_bridge_execute(args: argparse.Namespace) -> None:
                 "status": report["status"],
                 "execution_ready": report["execution_ready"],
                 "blockers": report["blockers"],
+                "operator_summary": operator_feedback.get("operator_summary"),
+                "evidence_level": operator_feedback.get("evidence_level"),
+                "command_display": operator_feedback.get("command_display"),
+                "operator_feedback": operator_feedback,
             }
         )
     )

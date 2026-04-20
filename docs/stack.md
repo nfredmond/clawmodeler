@@ -94,7 +94,7 @@ The current stack implements these plan modules:
 - TBEST Bridge: generates stop, route, service, and config tables from staged GTFS inputs.
 - Bridge Prepare All: prepares every applicable bridge package and records skipped packages with reasons.
 - Bridge Validation: writes a combined bridge validation report across prepared external-engine packages and separates structural package readiness from detailed forecast readiness.
-- Bridge Execution: writes execution reports for SUMO, MATSim, UrbanSim, DTALite, and TBEST bridge commands, with dry-run support and forecast-readiness limitations preserved.
+- Bridge Execution: writes execution reports for SUMO, MATSim, UrbanSim, DTALite, and TBEST bridge commands, with dry-run support, tool checks, generated-command previews, expected-output summaries, operator next steps, and forecast-readiness limitations preserved.
 - Planner Pack: writes CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP artifacts from finished runs.
 - What-if: derives a new run from a baseline with deterministic overrides.
 - Diff: compares two runs across engine and Planner Pack tables.

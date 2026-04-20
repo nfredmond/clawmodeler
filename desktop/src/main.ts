@@ -139,6 +139,33 @@ type BridgeExecutionState = {
   lastResult: Record<string, unknown> | null;
 };
 
+type BridgeToolFeedback = {
+  id: string;
+  command: string;
+  available: boolean;
+  path: string | null;
+  note: string | null;
+};
+
+type BridgeOperatorFeedback = {
+  operatorSummary: string;
+  operatorStatus: string;
+  evidenceLevel: string;
+  forecastReadinessStatus: string | null;
+  commandDisplay: string | null;
+  commandCwd: string | null;
+  requiredTools: BridgeToolFeedback[];
+  expectedOutputs: string[];
+  existingOutputs: string[];
+  missingOutputs: string[];
+  outputSummary: {
+    expectedCount: number | null;
+    existingCount: number | null;
+    missingCount: number | null;
+  };
+  nextSteps: string[];
+};
+
 type AppState = {
   workspace: string;
   runId: string;
@@ -289,6 +316,75 @@ function selected(value: string, current: string): string {
 function stringField(payload: Record<string, unknown>, key: string, fallback = ""): string {
   const value = payload[key];
   return typeof value === "string" ? value : fallback;
+}
+
+function recordField(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseBridgeToolFeedback(value: unknown): BridgeToolFeedback[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      const tool = recordField(item);
+      if (!tool) return null;
+      const id = stringOrNull(tool.id) ?? "tool";
+      const command = stringOrNull(tool.command) ?? id;
+      return {
+        id,
+        command,
+        available: tool.available === true,
+        path: stringOrNull(tool.path),
+        note: stringOrNull(tool.note),
+      };
+    })
+    .filter((item): item is BridgeToolFeedback => item !== null);
+}
+
+function parseBridgeOperatorFeedback(
+  payload: Record<string, unknown> | null,
+): BridgeOperatorFeedback | null {
+  if (!payload) return null;
+  const feedback = recordField(payload.operator_feedback);
+  const source = feedback ?? payload;
+  const summary = stringOrNull(source.operator_summary);
+  const status = stringOrNull(source.operator_status) ?? stringOrNull(payload.status);
+  if (!summary && !status && !source.command_display) return null;
+  const outputSummary = recordField(source.output_summary);
+  return {
+    operatorSummary: summary ?? "Bridge execution status was recorded.",
+    operatorStatus: status ?? "unknown",
+    evidenceLevel: stringOrNull(source.evidence_level) ?? "unknown",
+    forecastReadinessStatus: stringOrNull(source.forecast_readiness_status),
+    commandDisplay: stringOrNull(source.command_display),
+    commandCwd: stringOrNull(source.command_cwd),
+    requiredTools: parseBridgeToolFeedback(source.required_tools),
+    expectedOutputs: stringList(source.expected_outputs),
+    existingOutputs: stringList(source.existing_outputs),
+    missingOutputs: stringList(source.missing_outputs),
+    outputSummary: {
+      expectedCount: numberOrNull(outputSummary?.expected_count),
+      existingCount: numberOrNull(outputSummary?.existing_count),
+      missingCount: numberOrNull(outputSummary?.missing_count),
+    },
+    nextSteps: stringList(source.next_steps),
+  };
 }
 
 function saveForm() {
@@ -1938,12 +2034,111 @@ function renderArtifacts() {
   `;
 }
 
+function renderBridgeExecutionResult(payload: Record<string, unknown> | null): string {
+  if (!payload) {
+    return `<p class="muted">Run a dry-run check first. It writes the same execution report shape without starting the external engine.</p>`;
+  }
+  const feedback = parseBridgeOperatorFeedback(payload);
+  if (!feedback) {
+    return `<pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
+  }
+  const expectedCount =
+    feedback.outputSummary.expectedCount ?? feedback.expectedOutputs.length;
+  const existingCount =
+    feedback.outputSummary.existingCount ?? feedback.existingOutputs.length;
+  const missingCount = feedback.outputSummary.missingCount ?? feedback.missingOutputs.length;
+  const tools =
+    feedback.requiredTools.length > 0
+      ? `<ul class="bridge-tool-list">${feedback.requiredTools
+          .map((tool) => {
+            const tone = tool.available ? "ok" : "missing";
+            const detail = tool.available
+              ? tool.path
+                ? `Found at ${tool.path}`
+                : "Available"
+              : "Missing";
+            return `
+              <li>
+                <span class="status-dot ${tone}"></span>
+                <div>
+                  <strong>${escapeHtml(tool.id)}</strong>
+                  <span><code>${escapeHtml(tool.command)}</code> ${escapeHtml(detail)}</span>
+                  ${tool.note ? `<small>${escapeHtml(tool.note)}</small>` : ""}
+                </div>
+              </li>
+            `;
+          })
+          .join("")}</ul>`
+      : `<p class="muted">No external command checks were recorded.</p>`;
+  const nextSteps =
+    feedback.nextSteps.length > 0
+      ? `<ul>${feedback.nextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>`
+      : `<p class="muted">No follow-up actions were recorded.</p>`;
+  const missingOutputs =
+    feedback.missingOutputs.length > 0
+      ? `<details>
+          <summary>Missing expected outputs (${feedback.missingOutputs.length})</summary>
+          <ul>${feedback.missingOutputs
+            .slice(0, 20)
+            .map((path) => `<li><code>${escapeHtml(path)}</code></li>`)
+            .join("")}</ul>
+        </details>`
+      : `<p class="muted">All expected outputs that can be checked locally are present.</p>`;
+  return `
+    <div class="bridge-feedback">
+      <strong>${escapeHtml(feedback.operatorSummary)}</strong>
+      <dl class="bridge-feedback-meta">
+        <div>
+          <dt>Status</dt>
+          <dd><code>${escapeHtml(feedback.operatorStatus)}</code></dd>
+        </div>
+        <div>
+          <dt>Evidence</dt>
+          <dd><code>${escapeHtml(feedback.evidenceLevel)}</code></dd>
+        </div>
+        <div>
+          <dt>Readiness</dt>
+          <dd><code>${escapeHtml(feedback.forecastReadinessStatus ?? "unknown")}</code></dd>
+        </div>
+        <div>
+          <dt>Package Files</dt>
+          <dd>${escapeHtml(existingCount)} / ${escapeHtml(expectedCount)} present, ${escapeHtml(missingCount)} missing</dd>
+        </div>
+      </dl>
+      ${
+        feedback.commandDisplay
+          ? `<p><strong>Command:</strong> <code>${escapeHtml(feedback.commandDisplay)}</code></p>`
+          : `<p class="muted">No generated command was recorded.</p>`
+      }
+      ${
+        feedback.commandCwd
+          ? `<p><strong>Run folder:</strong> <code>${escapeHtml(feedback.commandCwd)}</code></p>`
+          : ""
+      }
+      <div class="bridge-feedback-section">
+        <h3>Tool Checks</h3>
+        ${tools}
+      </div>
+      <div class="bridge-feedback-section">
+        <h3>Package Files</h3>
+        ${missingOutputs}
+      </div>
+      <div class="bridge-feedback-section">
+        <h3>Next Steps</h3>
+        ${nextSteps}
+      </div>
+      <details>
+        <summary>Raw command response</summary>
+        <pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre>
+      </details>
+    </div>
+  `;
+}
+
 function renderBridgeExecution() {
   const execution = state.bridgeExecution;
   const scenario = execution.scenarioId || normalizeScenarios(state.scenarios)[0] || "baseline";
-  const last = execution.lastResult
-    ? `<pre>${escapeHtml(JSON.stringify(execution.lastResult, null, 2))}</pre>`
-    : `<p class="muted">Run a dry-run check first. It writes the same execution report shape without starting the external engine.</p>`;
+  const last = renderBridgeExecutionResult(execution.lastResult);
   return `
     <section class="panel bridge-execution-panel" id="bridge-execution">
       <div class="section-head">
