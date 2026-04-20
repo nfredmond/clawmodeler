@@ -4,6 +4,18 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] — 2026-04-20
+
+### Added
+
+- **Desktop Workflow Guide.** The Tauri/Vite workbench now has a top-level guided checklist for workspace setup, run execution, QA/artifact review, Planner Pack generation, grounded chat, what-if runs, portfolio refresh, and diff selection. The guide derives every state from existing manifests, QA reports, workflow reports, artifact lists, and portfolio state; it does not duplicate engine orchestration.
+- **Workflow guide regression tests.** Vitest coverage now checks fresh-workspace guidance, full-workflow readiness, post-run readiness, blocked QA, Planner Pack coverage, portfolio selection, and completed diff states.
+
+### Changed
+
+- **Run summaries surface bridge readiness details.** The desktop run summary now reports generated bridge file-link counts and skipped bridge packages with their missing required inputs when the workflow report provides them.
+- **Version advanced to 0.9.4** across the Python engine, root package metadata, and Tauri desktop metadata.
+
 ## [0.9.3] — 2026-04-20
 
 ### Added

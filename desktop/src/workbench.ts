@@ -22,6 +22,13 @@ export type GeneratedArtifactSummary = {
   count: number;
 };
 
+export type BridgeSkippedSummary = {
+  bridge: string;
+  requiredInputs: string[];
+  missingInputs: string[];
+  reason: string | null;
+};
+
 export type RunSummary = {
   runId: string;
   workspacePath: string;
@@ -30,10 +37,40 @@ export type RunSummary = {
   scenarioIds: string[];
   qaExportReady: boolean | null;
   bridgeExportReady: boolean | null;
+  bridgeGeneratedFileCount: number | null;
+  bridgeSkippedInputs: BridgeSkippedSummary[];
   plannerPackArtifacts: string[];
   generatedArtifacts: GeneratedArtifactSummary[];
   missingSidecars: string[];
   warnings: string[];
+};
+
+export type WorkflowStepId =
+  | "workspace"
+  | "run"
+  | "qa-artifacts"
+  | "planner-pack"
+  | "chat"
+  | "what-if"
+  | "portfolio-diff";
+
+export type WorkflowStepState = "ready" | "running" | "done" | "blocked" | "optional";
+
+export type WorkflowGuideStep = {
+  id: WorkflowStepId;
+  label: string;
+  state: WorkflowStepState;
+  status: string;
+  actionLabel: string;
+  anchor: string;
+  blocker: string | null;
+};
+
+export type WorkflowGuide = {
+  steps: WorkflowGuideStep[];
+  currentStepId: WorkflowStepId | null;
+  nextActionLabel: string | null;
+  nextActionAnchor: string | null;
 };
 
 type PlannerPackSpec = {
@@ -260,6 +297,59 @@ function bridgeExportReady(workflowReport: Record<string, unknown> | null): bool
   return typeof value === "boolean" ? value : null;
 }
 
+function bridgeGeneratedFileCount(workflowReport: Record<string, unknown> | null): number | null {
+  const seen = new Set<string>();
+  const bridgePrepare = workflowReport?.bridges;
+  if (bridgePrepare && typeof bridgePrepare === "object" && !Array.isArray(bridgePrepare)) {
+    const prepared = (bridgePrepare as Record<string, unknown>).prepared;
+    if (Array.isArray(prepared)) {
+      for (const item of prepared) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        for (const path of asStringArray((item as Record<string, unknown>).generated_files)) {
+          seen.add(path);
+        }
+      }
+    }
+  }
+
+  const bridgeValidation = workflowReport?.bridge_validation;
+  if (bridgeValidation && typeof bridgeValidation === "object" && !Array.isArray(bridgeValidation)) {
+    const bridges = (bridgeValidation as Record<string, unknown>).bridges;
+    if (Array.isArray(bridges)) {
+      for (const item of bridges) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        for (const path of asStringArray((item as Record<string, unknown>).generated_files)) {
+          seen.add(path);
+        }
+      }
+    }
+  }
+
+  return seen.size > 0 ? seen.size : null;
+}
+
+function bridgeSkippedInputs(workflowReport: Record<string, unknown> | null): BridgeSkippedSummary[] {
+  const bridgePrepare = workflowReport?.bridges;
+  if (!bridgePrepare || typeof bridgePrepare !== "object" || Array.isArray(bridgePrepare)) {
+    return [];
+  }
+  const skipped = (bridgePrepare as Record<string, unknown>).skipped;
+  if (!Array.isArray(skipped)) {
+    return [];
+  }
+  return skipped
+    .map((item) => {
+      const row = (item || {}) as Record<string, unknown>;
+      return {
+        bridge: typeof row.bridge === "string" ? row.bridge : "",
+        requiredInputs: asStringArray(row.required_inputs),
+        missingInputs: asStringArray(row.missing_inputs),
+        reason: asString(row.reason),
+      };
+    })
+    .filter((item) => item.bridge);
+}
+
 function collectWarnings(artifacts: WorkspaceArtifacts): string[] {
   const warnings = asStringArray(artifacts.manifest?.warnings);
   const qaBlockers = asStringArray(artifacts.qaReport?.blockers).map(
@@ -313,10 +403,212 @@ export function summarizeRunArtifacts(artifacts: WorkspaceArtifacts | null): Run
     qaExportReady:
       typeof artifacts.qaReport?.export_ready === "boolean" ? artifacts.qaReport.export_ready : null,
     bridgeExportReady: bridgeExportReady(artifacts.workflowReport),
+    bridgeGeneratedFileCount: bridgeGeneratedFileCount(artifacts.workflowReport),
+    bridgeSkippedInputs: bridgeSkippedInputs(artifacts.workflowReport),
     plannerPackArtifacts: detectPlannerPackArtifacts(artifacts.files, artifacts.manifest),
     generatedArtifacts: generatedArtifactSummary(artifacts.manifest),
     missingSidecars: missingManifestSidecars(artifacts),
     warnings: collectWarnings(artifacts),
+  };
+}
+
+function workflowStep(params: WorkflowGuideStep): WorkflowGuideStep {
+  return params;
+}
+
+export function deriveWorkflowGuide(params: {
+  workspace: string;
+  runId: string;
+  inputPaths: string;
+  questionPath: string;
+  busy: boolean;
+  artifacts: WorkspaceArtifacts | null;
+  plannerPackBusy: boolean;
+  chatBusy: boolean;
+  chatTurnCount: number;
+  whatIfBusy: boolean;
+  hasWhatIfResult: boolean;
+  portfolioBusy: boolean;
+  portfolioResult: PortfolioResult | null;
+  selectedPortfolioRunIds: ReadonlyArray<string>;
+  hasDiffReport: boolean;
+}): WorkflowGuide {
+  const workspace = params.workspace.trim();
+  const runId = params.runId.trim();
+  const inputCount = normalizePathList(params.inputPaths).length;
+  const questionReady = Boolean(params.questionPath.trim());
+  const runSummary = summarizeRunArtifacts(params.artifacts);
+  const hasRun = Boolean(params.artifacts?.manifest);
+  const qa = summarizeQa(params.artifacts?.qaReport ?? null);
+  const plannerPackCount = runSummary?.plannerPackArtifacts.length ?? 0;
+  const diffSelection = validateDiffSelection(params.selectedPortfolioRunIds);
+  const portfolioRunCount = params.portfolioResult?.runCount ?? 0;
+
+  const steps: WorkflowGuideStep[] = [
+    workflowStep({
+      id: "workspace",
+      label: "Workspace",
+      state: workspace ? "done" : "blocked",
+      status: workspace ? "Workspace path is set." : "Pick a workspace folder.",
+      actionLabel: workspace ? "Review setup" : "Set workspace",
+      anchor: "#workspace",
+      blocker: workspace ? null : "Workspace path is required.",
+    }),
+    workflowStep({
+      id: "run",
+      label: "Run",
+      state: params.busy ? "running" : hasRun ? "done" : workspace ? "ready" : "blocked",
+      status: params.busy
+        ? "Workflow command is running."
+        : hasRun
+          ? `Run ${runId || params.artifacts?.runId || "current"} is loaded.`
+          : inputCount > 0 && questionReady
+            ? "Inputs and question file are ready for a full workflow."
+            : "Run the demo first, or add inputs and a question file.",
+      actionLabel: hasRun ? "Review outputs" : inputCount > 0 && questionReady ? "Run full workflow" : "Run demo",
+      anchor: hasRun ? "#qa" : "#run",
+      blocker: workspace ? null : "Workspace path is required before running.",
+    }),
+    workflowStep({
+      id: "qa-artifacts",
+      label: "QA + Artifacts",
+      state: !hasRun
+        ? "blocked"
+        : qa.tone === "ready"
+          ? "done"
+          : qa.tone === "blocked"
+            ? "blocked"
+            : "ready",
+      status: !hasRun
+        ? "Run a workflow to create QA and artifacts."
+        : qa.tone === "ready"
+          ? `Export-ready with ${runSummary?.generatedArtifacts.length ?? 0} output categories.`
+          : qa.tone === "blocked"
+            ? `Blocked: ${qa.blockers.join(", ") || "QA did not pass."}`
+            : "QA report has not been loaded yet.",
+      actionLabel: qa.tone === "blocked" ? "Review blockers" : "Review artifacts",
+      anchor: "#qa",
+      blocker: !hasRun
+        ? "Run a workflow first."
+        : qa.tone === "blocked"
+          ? qa.blockers.join(", ") || "QA did not pass."
+          : null,
+    }),
+    workflowStep({
+      id: "planner-pack",
+      label: "Planner Pack",
+      state: !hasRun
+        ? "blocked"
+        : params.plannerPackBusy
+          ? "running"
+          : plannerPackCount > 0
+            ? "done"
+            : "ready",
+      status: !hasRun
+        ? "Run a workflow before generating packets."
+        : params.plannerPackBusy
+          ? "Planner Pack artifact is being generated."
+          : plannerPackCount > 0
+            ? `${plannerPackCount} Planner Pack artifact(s) detected.`
+            : "Generate a planning packet from this run.",
+      actionLabel: plannerPackCount > 0 ? "Generate another" : "Generate packet",
+      anchor: "#planner-pack",
+      blocker: hasRun ? null : "Run a workflow first.",
+    }),
+    workflowStep({
+      id: "chat",
+      label: "Chat",
+      state: !hasRun
+        ? "blocked"
+        : params.chatBusy
+          ? "running"
+          : params.chatTurnCount > 0
+            ? "done"
+            : "ready",
+      status: !hasRun
+        ? "Chat needs finished run fact blocks."
+        : params.chatBusy
+          ? "Grounded chat is answering."
+          : params.chatTurnCount > 0
+            ? `${params.chatTurnCount} grounded chat turn(s) in this session.`
+            : "Ask a grounded question about the run.",
+      actionLabel: params.chatTurnCount > 0 ? "Ask another" : "Ask question",
+      anchor: "#chat",
+      blocker: hasRun ? null : "Run a workflow first.",
+    }),
+    workflowStep({
+      id: "what-if",
+      label: "What-if",
+      state: !hasRun
+        ? "blocked"
+        : params.whatIfBusy
+          ? "running"
+          : params.hasWhatIfResult
+            ? "done"
+            : "ready",
+      status: !hasRun
+        ? "What-if needs a finished baseline run."
+        : params.whatIfBusy
+          ? "What-if run is being created."
+          : params.hasWhatIfResult
+            ? "What-if run was created in this session."
+            : "Derive an alternative run from this baseline.",
+      actionLabel: params.hasWhatIfResult ? "Create another" : "Create what-if",
+      anchor: "#what-if",
+      blocker: hasRun ? null : "Run a workflow first.",
+    }),
+    workflowStep({
+      id: "portfolio-diff",
+      label: "Portfolio + Diff",
+      state: !workspace
+        ? "blocked"
+        : params.portfolioBusy
+          ? "running"
+          : params.hasDiffReport
+            ? "done"
+            : diffSelection.ok
+              ? "ready"
+              : params.portfolioResult
+                ? portfolioRunCount >= 2
+                  ? "optional"
+                  : "done"
+                : "ready",
+      status: !workspace
+        ? "Pick a workspace before loading portfolio."
+        : params.portfolioBusy
+          ? "Portfolio command is running."
+          : params.hasDiffReport
+            ? "Diff report was written in this session."
+            : diffSelection.ok
+              ? `Ready to diff ${diffSelection.runA} and ${diffSelection.runB}.`
+              : params.portfolioResult
+                ? portfolioRunCount >= 2
+                  ? "Pick exactly two runs to diff."
+                  : "Portfolio is loaded; create another run to diff."
+                : "Refresh the workspace portfolio.",
+      actionLabel: params.hasDiffReport
+        ? "Review portfolio"
+        : diffSelection.ok
+          ? "Diff selected"
+          : params.portfolioResult
+            ? "Review portfolio"
+            : "Refresh portfolio",
+      anchor: "#portfolio",
+      blocker: workspace ? null : "Workspace path is required.",
+    }),
+  ];
+
+  const current =
+    steps.find((step) => step.state === "running") ??
+    steps.find((step) => step.state === "blocked" || step.state === "ready") ??
+    steps.find((step) => step.state === "optional") ??
+    null;
+
+  return {
+    steps,
+    currentStepId: current?.id ?? null,
+    nextActionLabel: current?.actionLabel ?? null,
+    nextActionAnchor: current?.anchor ?? null,
   };
 }
 

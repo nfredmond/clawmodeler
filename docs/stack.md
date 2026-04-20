@@ -98,11 +98,11 @@ The current stack implements these plan modules:
 
 The desktop app is a Tauri v2 shell around the sidecar. In packaged builds it invokes the bundled `clawmodeler-engine` binary; in development it falls back to `python3 -m clawmodeler_engine` from the repo root. The Vite dev middleware mirrors the Tauri command routes so browser development and desktop development exercise the same workflow surfaces.
 
-The current planner-facing flow is:
+The current planner-facing flow is guided by a top-level Workflow Guide. It links to the existing panels and derives readiness from the active workspace, run artifacts, QA report, workflow report, Planner Pack coverage, chat state, what-if state, and portfolio/diff selections:
 
 1. Pick or create a workspace.
 2. Run the built-in demo or a full workflow.
-3. Review QA readiness, bridge readiness, manifest path, generated artifacts, warnings, and sidecars.
+3. Review QA readiness, bridge readiness, bridge generated-file counts, manifest path, generated artifacts, warnings, and sidecars.
 4. Preview the report.
 5. Generate Planner Pack artifacts.
 6. Preview generated text artifacts.

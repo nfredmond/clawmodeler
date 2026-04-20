@@ -1,6 +1,6 @@
 {
   "name": "clawmodeler",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Local-first transportation sketch-planning for small and rural agencies.",
   "private": true,
   "license": "Apache-2.0",

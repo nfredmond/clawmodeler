@@ -238,6 +238,114 @@ small {
   align-items: stretch;
 }
 
+.workflow-guide {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #c8d4cd;
+  border-radius: 8px;
+  background: #fbfdfc;
+  padding: 18px;
+}
+
+.workflow-guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.workflow-guide-head h2 {
+  margin: 0;
+  line-height: 1.15;
+}
+
+.workflow-next-action,
+.workflow-step a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #1c6b5a;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.workflow-next-action:hover,
+.workflow-step a:hover {
+  background: #155344;
+}
+
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.workflow-step {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 164px;
+  border: 1px solid #dde6e1;
+  border-top-width: 5px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.workflow-step.current {
+  box-shadow: 0 0 0 2px rgba(50, 114, 160, 0.24);
+}
+
+.workflow-step.ready {
+  border-top-color: #3272a0;
+}
+
+.workflow-step.running,
+.workflow-step.optional {
+  border-top-color: #d6a51d;
+}
+
+.workflow-step.done {
+  border-top-color: #3b8f68;
+}
+
+.workflow-step.blocked {
+  border-top-color: #bf4b43;
+}
+
+.workflow-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workflow-step-head span {
+  border-radius: 999px;
+  background: #eef4f1;
+  color: #31413a;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.workflow-step p {
+  margin: 0;
+  color: #31413a;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workflow-step small {
+  color: #8d2f29;
+  line-height: 1.35;
+}
+
 .primary-cta {
   min-height: 48px;
   padding: 0 22px;
@@ -687,7 +795,7 @@ small {
   gap: 10px;
   padding: 14px;
   border: 1px solid #d7e0db;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fbfdfc;
 }
 
@@ -776,6 +884,10 @@ small {
     grid-template-columns: 1fr;
   }
 
+  .workflow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .rail {
     position: static;
   }
@@ -806,7 +918,7 @@ small {
   gap: 8px;
   padding: 12px;
   border: 1px dashed #c8d4cd;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fbfdfc;
 }
 
@@ -842,12 +954,18 @@ small {
 
 .what-if-summary {
   padding: 12px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #eef5f1;
   border: 1px solid #c8d4cd;
 }
 
 @media (max-width: 900px) {
+  .workflow-guide-head {
+    display: grid;
+  }
+  .workflow-steps {
+    grid-template-columns: 1fr;
+  }
   .run-summary-grid,
   .planner-pack-grid {
     grid-template-columns: 1fr;
@@ -884,7 +1002,7 @@ small {
   gap: 14px 22px;
   padding: 12px 14px;
   border: 1px solid #d5dedb;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #f6faf8;
   font-size: 13px;
 }
@@ -896,7 +1014,7 @@ small {
 .pf-scroll {
   overflow-x: auto;
   border: 1px solid #d5dedb;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .pf-table {

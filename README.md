@@ -5,7 +5,7 @@
 
 ClawModeler is a standalone, local-first transportation sketch-planning workbench. It helps a planner go from raw transportation data to reproducible scenario outputs, QA-gated evidence, and report-ready narratives without uploading project files to a cloud service.
 
-The long-term goal is an installable desktop app plus `clawmodeler-engine` sidecar where planners can inspect local tools, select defensible methods, run workflows, validate outputs, compare alternatives, and generate Planner Pack artifacts with every limitation visible.
+The long-term goal is an installable desktop app plus `clawmodeler-engine` sidecar where planners can inspect local tools, select defensible methods, follow a guided workflow, validate outputs, compare alternatives, and generate Planner Pack artifacts with every limitation visible.
 
 For the big-picture roadmap and scope guardrails, see `docs/roadmap.md`.
 
@@ -344,6 +344,7 @@ Implemented now:
 - Planner Pack artifacts for CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP,
 - run-to-run diff, what-if runs, grounded chat, and portfolio summaries,
 - Tauri v2 desktop workbench with a vanilla TypeScript front end,
+- a desktop Workflow Guide that links setup, run, QA, Planner Pack, chat, what-if, portfolio, and diff readiness,
 - read-only desktop artifact previews and a fixture-backed desktop workflow acceptance script,
 - toolbox inventory and install profiles.
 

@@ -8,6 +8,7 @@ import {
   countJsonLines,
   DEFAULT_WHAT_IF_WEIGHTS,
   detectPlannerPackArtifacts,
+  deriveWorkflowGuide,
   deriveQuestionSavePath,
   formatDacShare,
   formatMeanScore,
@@ -34,6 +35,26 @@ import {
 } from "./workbench.js";
 
 describe("clawmodeler workbench helpers", () => {
+  const makeGuide = (overrides: Partial<Parameters<typeof deriveWorkflowGuide>[0]> = {}) =>
+    deriveWorkflowGuide({
+      workspace: "/tmp/ws",
+      runId: "demo",
+      inputPaths: "",
+      questionPath: "",
+      busy: false,
+      artifacts: null,
+      plannerPackBusy: false,
+      chatBusy: false,
+      chatTurnCount: 0,
+      whatIfBusy: false,
+      hasWhatIfResult: false,
+      portfolioBusy: false,
+      portfolioResult: null,
+      selectedPortfolioRunIds: [],
+      hasDiffReport: false,
+      ...overrides,
+    });
+
   it("normalizes paths from newlines and commas", () => {
     expect(normalizePathList("zones.geojson, socio.csv\nprojects.csv\n")).toEqual([
       "zones.geojson",
@@ -113,6 +134,25 @@ describe("clawmodeler workbench helpers", () => {
           manifest: "/tmp/ws/runs/demo/manifest.json",
           report: "/tmp/ws/reports/demo_report.md",
         },
+        bridges: {
+          prepared: [
+            {
+              bridge: "sumo",
+              generated_files: [
+                "/tmp/ws/runs/demo/outputs/bridges/sumo/sumo_run_manifest.json",
+                "/tmp/ws/runs/demo/outputs/bridges/sumo/network.edg.xml",
+              ],
+            },
+          ],
+          skipped: [
+            {
+              bridge: "tbest",
+              required_inputs: ["gtfs_zip"],
+              missing_inputs: ["gtfs_zip"],
+              reason: "Missing required inputs: gtfs_zip",
+            },
+          ],
+        },
         bridge_validation: { export_ready: false, blockers: ["sumo_not_ready"] },
       },
       reportMarkdown: null,
@@ -125,6 +165,15 @@ describe("clawmodeler workbench helpers", () => {
     expect(summary?.scenarioIds).toEqual(["baseline", "build"]);
     expect(summary?.qaExportReady).toBe(true);
     expect(summary?.bridgeExportReady).toBe(false);
+    expect(summary?.bridgeGeneratedFileCount).toBe(2);
+    expect(summary?.bridgeSkippedInputs).toEqual([
+      {
+        bridge: "tbest",
+        requiredInputs: ["gtfs_zip"],
+        missingInputs: ["gtfs_zip"],
+        reason: "Missing required inputs: gtfs_zip",
+      },
+    ]);
     expect(summary?.plannerPackArtifacts).toEqual(["ceqa-vmt"]);
     expect(summary?.generatedArtifacts).toEqual([
       { category: "maps", count: 1 },
@@ -147,6 +196,103 @@ describe("clawmodeler workbench helpers", () => {
       "/tmp/ws/runs/demo/outputs/tables/hsip.csv",
     );
     expect(detectPlannerPackArtifacts([], manifest)).toEqual(["hsip"]);
+  });
+
+  it("derives a guided workflow for a fresh workspace", () => {
+    const guide = makeGuide();
+    expect(guide.currentStepId).toBe("run");
+    expect(guide.nextActionLabel).toBe("Run demo");
+    expect(guide.steps.find((step) => step.id === "workspace")?.state).toBe("done");
+    expect(guide.steps.find((step) => step.id === "run")?.state).toBe("ready");
+    expect(guide.steps.find((step) => step.id === "qa-artifacts")?.state).toBe("blocked");
+  });
+
+  it("prefers full workflow when inputs and question are present", () => {
+    const guide = makeGuide({
+      inputPaths: "zones.geojson\nsocio.csv",
+      questionPath: "/tmp/ws/question.json",
+    });
+    const runStep = guide.steps.find((step) => step.id === "run");
+    expect(runStep?.status).toMatch(/full workflow/u);
+    expect(runStep?.actionLabel).toBe("Run full workflow");
+  });
+
+  it("marks QA, Planner Pack, chat, and what-if readiness after a run", () => {
+    const artifacts = {
+      workspace: "/tmp/ws",
+      runId: "demo",
+      manifest: {
+        outputs: {
+          tables: ["/tmp/ws/runs/demo/outputs/tables/project_scores.csv"],
+        },
+      },
+      qaReport: { export_ready: true, blockers: [] },
+      workflowReport: null,
+      reportMarkdown: "Report",
+      files: ["/tmp/ws/runs/demo/outputs/tables/project_scores.csv"],
+      filesTruncated: false,
+    };
+    const guide = makeGuide({ artifacts });
+    expect(guide.currentStepId).toBe("planner-pack");
+    expect(guide.steps.find((step) => step.id === "run")?.state).toBe("done");
+    expect(guide.steps.find((step) => step.id === "qa-artifacts")?.state).toBe("done");
+    expect(guide.steps.find((step) => step.id === "planner-pack")?.state).toBe("ready");
+    expect(guide.steps.find((step) => step.id === "chat")?.state).toBe("ready");
+    expect(guide.steps.find((step) => step.id === "what-if")?.state).toBe("ready");
+  });
+
+  it("surfaces blocked QA and completed Planner Pack coverage in the guide", () => {
+    const artifacts = {
+      workspace: "/tmp/ws",
+      runId: "demo",
+      manifest: {
+        outputs: {
+          tables: ["/tmp/ws/runs/demo/outputs/tables/ceqa_vmt.csv"],
+        },
+      },
+      qaReport: { export_ready: false, blockers: ["fact_blocks_invalid"] },
+      workflowReport: null,
+      reportMarkdown: null,
+      files: ["/tmp/ws/runs/demo/outputs/tables/ceqa_vmt.csv"],
+      filesTruncated: false,
+    };
+    const guide = makeGuide({ artifacts });
+    const qaStep = guide.steps.find((step) => step.id === "qa-artifacts");
+    const plannerStep = guide.steps.find((step) => step.id === "planner-pack");
+    expect(guide.currentStepId).toBe("qa-artifacts");
+    expect(qaStep?.state).toBe("blocked");
+    expect(qaStep?.blocker).toContain("fact_blocks_invalid");
+    expect(plannerStep?.state).toBe("done");
+    expect(plannerStep?.status).toMatch(/1 Planner Pack/u);
+  });
+
+  it("guides portfolio refresh, run selection, and completed diff states", () => {
+    const portfolioResult = {
+      workspacePath: "/tmp/ws",
+      runCount: 2,
+      runs: [],
+      summary: null,
+      generatedAt: "",
+      csvPath: null,
+      jsonPath: null,
+      reportPath: null,
+      factBlocksPath: null,
+      factBlockCount: 0,
+    };
+    const ready = makeGuide({
+      portfolioResult,
+      selectedPortfolioRunIds: ["demo", "alt"],
+    });
+    expect(ready.steps.find((step) => step.id === "portfolio-diff")?.state).toBe("ready");
+    expect(ready.steps.find((step) => step.id === "portfolio-diff")?.status).toMatch(
+      /Ready to diff demo and alt/u,
+    );
+
+    const optional = makeGuide({ portfolioResult, selectedPortfolioRunIds: ["demo"] });
+    expect(optional.steps.find((step) => step.id === "portfolio-diff")?.state).toBe("optional");
+
+    const done = makeGuide({ portfolioResult, hasDiffReport: true });
+    expect(done.steps.find((step) => step.id === "portfolio-diff")?.state).toBe("done");
   });
 
   it("translates engine errors into planner-friendly language", () => {

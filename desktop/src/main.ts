@@ -9,6 +9,7 @@ import {
   type ChatTurn,
   chatTurnBadge,
   DEFAULT_WHAT_IF_WEIGHTS,
+  deriveWorkflowGuide,
   deriveQuestionSavePath,
   formatDacShare,
   formatMeanScore,
@@ -36,6 +37,7 @@ import {
   validateWhatIfForm,
   whatIfWeightSum,
   type WhatIfWeights,
+  type WorkflowGuideStep,
 } from "./workbench.js";
 
 type ApiResult<T = unknown> = {
@@ -437,6 +439,10 @@ async function refreshArtifacts(showBusy = true) {
         busy: false,
         status: "Pick an artifact to preview.",
       };
+    }
+    if (state.artifacts?.manifest && !state.whatIf.baseRunId.trim()) {
+      state.whatIf.baseRunId = state.artifacts.runId;
+      saveWhatIfForm();
     }
     state.status = "Workspace loaded";
   } catch (error) {
@@ -1122,6 +1128,61 @@ function renderDoctor() {
   `;
 }
 
+function renderWorkflowGuideStep(step: WorkflowGuideStep, currentStepId: string | null): string {
+  const isCurrent = step.id === currentStepId;
+  return `
+    <article class="workflow-step ${escapeHtml(step.state)} ${isCurrent ? "current" : ""}">
+      <div class="workflow-step-head">
+        <strong>${escapeHtml(step.label)}</strong>
+        <span>${escapeHtml(step.state)}</span>
+      </div>
+      <p>${escapeHtml(step.status)}</p>
+      ${step.blocker ? `<small>${escapeHtml(step.blocker)}</small>` : ""}
+      <a href="${escapeHtml(step.anchor)}">${escapeHtml(step.actionLabel)}</a>
+    </article>
+  `;
+}
+
+function renderWorkflowGuide(): string {
+  const guide = deriveWorkflowGuide({
+    workspace: state.workspace,
+    runId: state.runId,
+    inputPaths: state.inputPaths,
+    questionPath: state.questionPath,
+    busy: state.busy,
+    artifacts: state.artifacts,
+    plannerPackBusy: state.plannerPack.busy,
+    chatBusy: state.chatBusy,
+    chatTurnCount: state.chatTurns.length,
+    whatIfBusy: state.whatIf.busy,
+    hasWhatIfResult: Boolean(state.whatIf.lastResult),
+    portfolioBusy: state.portfolio.busy,
+    portfolioResult: state.portfolio.result,
+    selectedPortfolioRunIds: state.portfolio.selectedRunIds,
+    hasDiffReport: Boolean(state.portfolio.lastDiffPath),
+  });
+  const nextAction =
+    guide.nextActionLabel && guide.nextActionAnchor
+      ? `<a class="workflow-next-action" href="${escapeHtml(guide.nextActionAnchor)}">${escapeHtml(
+          guide.nextActionLabel,
+        )}</a>`
+      : "";
+  return `
+    <section class="workflow-guide" id="guide">
+      <div class="workflow-guide-head">
+        <div>
+          <p class="eyebrow">Workflow Guide</p>
+          <h2>Move this analysis from setup to review.</h2>
+        </div>
+        ${nextAction}
+      </div>
+      <div class="workflow-steps">
+        ${guide.steps.map((step) => renderWorkflowGuideStep(step, guide.currentStepId)).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderChatTurn(turn: ChatTurn): string {
   const badge = chatTurnBadge(turn);
   const segments = segmentChatText(turn.text)
@@ -1507,6 +1568,21 @@ function renderArtifacts() {
   const plannerPack = runSummary?.plannerPackArtifacts.length
     ? runSummary.plannerPackArtifacts.map((artifact) => `<code>${escapeHtml(artifact)}</code>`).join(" ")
     : "No Planner Pack artifacts yet";
+  const bridgeGenerated =
+    runSummary?.bridgeGeneratedFileCount === null || runSummary?.bridgeGeneratedFileCount === undefined
+      ? "No bridge file links recorded"
+      : `${runSummary.bridgeGeneratedFileCount} generated bridge file link(s)`;
+  const skippedBridges =
+    runSummary && runSummary.bridgeSkippedInputs.length > 0
+      ? `<ul>${runSummary.bridgeSkippedInputs
+          .map((item) => {
+            const missing = item.missingInputs.length
+              ? item.missingInputs.join(", ")
+              : item.reason || "not recorded";
+            return `<li><strong>${escapeHtml(item.bridge)}</strong>: missing ${escapeHtml(missing)}</li>`;
+          })
+          .join("")}</ul>`
+      : "<p>No skipped bridges recorded.</p>";
   const warnings =
     runSummary && runSummary.warnings.length > 0
       ? `<ul>${runSummary.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
@@ -1549,6 +1625,10 @@ function renderArtifacts() {
           <span class="pf-ready ${runSummary?.bridgeExportReady ? "ok" : "bad"}">${runSummary?.bridgeExportReady === null ? "unknown" : runSummary.bridgeExportReady ? "ready" : "blocked"}</span>
         </div>
         <div>
+          <strong>Bridge files</strong>
+          <span>${escapeHtml(bridgeGenerated)}</span>
+        </div>
+        <div>
           <strong>Generated artifacts</strong>
           <span>${escapeHtml(generated)}</span>
         </div>
@@ -1568,6 +1648,10 @@ function renderArtifacts() {
       <details>
         <summary>Manifest sidecars</summary>
         ${missingSidecars}
+      </details>
+      <details>
+        <summary>Bridge package inputs</summary>
+        ${skippedBridges}
       </details>
     </section>
 
@@ -1646,6 +1730,7 @@ function render() {
           </div>
         </div>
         <nav>
+          <a href="#guide">Guide</a>
           <a href="#workspace">Workspace</a>
           <a href="#run">Run</a>
           <a href="#qa">QA</a>
@@ -1671,6 +1756,8 @@ function render() {
         </header>
 
         ${renderWelcome()}
+
+        ${renderWorkflowGuide()}
 
         <section class="map-strip" aria-label="Planning map">
           <div class="route r1"></div>

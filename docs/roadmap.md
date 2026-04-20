@@ -18,7 +18,7 @@ ClawModeler should let a planner install the desktop app or run `clawmodeler-eng
 
 ## Current Checkpoint
 
-The 0.9.3 checkpoint is a releasable sidecar plus a usable Tauri v2 desktop workbench:
+The 0.9.4 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop workbench:
 
 - `clawmodeler-engine doctor`, `tools`, `workflow full`, `workflow demo-full`, `workflow report-only`, and `workflow diagnose` cover the core workflow.
 - Bridge packages are generated and validated for SUMO, MATSim, UrbanSim, DTALite, and TBEST where inputs support them.
@@ -26,21 +26,22 @@ The 0.9.3 checkpoint is a releasable sidecar plus a usable Tauri v2 desktop work
 - Planner Pack emitters cover CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP.
 - Diff, what-if, portfolio, and grounded chat are deterministic downstream tools over finished runs.
 - The desktop app is vanilla TypeScript on Tauri v2 and invokes only the `clawmodeler-engine` sidecar or local Python fallback.
+- The desktop workbench has a top-level Workflow Guide that links workspace setup, run execution, QA/artifact review, Planner Pack generation, grounded chat, what-if, portfolio, and diff readiness.
 - The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate.
 
 ## Next Engineering Milestones
 
-1. **Release 0.9.3 cleanly.**
+1. **Release 0.9.4 cleanly.**
 
-   Keep this release to workflow hardening: preserve 0.9.2 Planner Pack behavior, keep artifact preview read-only, keep `pnpm desktop:acceptance` green, and verify engine/UI/Tauri checks before tagging.
+   Keep this release to desktop workflow coherence: preserve 0.9.3 engine behavior, keep the Workflow Guide derived from existing artifacts, keep artifact preview read-only, keep `pnpm desktop:acceptance` green, and verify engine/UI/Tauri checks before tagging.
 
-2. **Make the planner workflow coherent in the desktop app.**
+2. **Tighten packaged desktop release confidence.**
 
-   Keep the first screen as the working app. Surface workspace setup, scenario run, QA readiness, bridge readiness, generated artifacts, Planner Pack generation, grounded chat, what-if, diff, and portfolio in one guided sequence.
+   Validate sidecar lookup, bundled engine templates, installer metadata, and first-run behavior outside editable installs on each supported platform.
 
 3. **Harden fixture and bridge confidence.**
 
-   Add a tiny public integration fixture small enough for CI, then improve bridge validation messages and generated-file links before adding deeper external-engine execution.
+   Expand the tiny public fixture only when it improves acceptance coverage, then improve bridge validation messages before adding deeper external-engine execution.
 
 4. **Add calibrated-model execution gates.**
 
@@ -72,4 +73,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when the desktop guided workflow can run both the demo and tiny public fixture, generate Planner Pack artifacts, compare two runs, preview artifacts, and show QA/bridge/artifact readiness, and the full engine/UI/Tauri verification suite passes.
+The next pass is done when the packaged desktop release can run outside an editable checkout, locate the bundled sidecar and templates, complete the guided workflow on demo and fixture workspaces, and pass the full engine/UI/Tauri verification suite.
