@@ -15,6 +15,9 @@ export type WorkspaceArtifacts = {
   reportMarkdown: string | null;
   files: string[];
   filesTruncated: boolean;
+  workspaceIndex?: Record<string, unknown> | null;
+  indexStatus?: string | null;
+  indexUpdatedAt?: string | null;
 };
 
 export type GeneratedArtifactSummary = {
@@ -687,6 +690,89 @@ function bridgeExecutionReports(files: string[]): string[] {
     .toSorted();
 }
 
+function workspaceIndexRun(artifacts: WorkspaceArtifacts): Record<string, unknown> | null {
+  const runs = artifacts.workspaceIndex?.runs;
+  if (!Array.isArray(runs)) {
+    return null;
+  }
+  return (
+    runs.find(
+      (run): run is Record<string, unknown> =>
+        Boolean(run) &&
+        typeof run === "object" &&
+        !Array.isArray(run) &&
+        (run as Record<string, unknown>).run_id === artifacts.runId,
+    ) ?? null
+  );
+}
+
+function workspaceIndexQa(artifacts: WorkspaceArtifacts): Record<string, unknown> | null {
+  const rows = artifacts.workspaceIndex?.qa;
+  if (!Array.isArray(rows)) {
+    return null;
+  }
+  return (
+    rows.find(
+      (row): row is Record<string, unknown> =>
+        Boolean(row) &&
+        typeof row === "object" &&
+        !Array.isArray(row) &&
+        (row as Record<string, unknown>).run_id === artifacts.runId,
+    ) ?? null
+  );
+}
+
+function workspaceIndexBridgeRows(artifacts: WorkspaceArtifacts): Record<string, unknown>[] {
+  const rows = artifacts.workspaceIndex?.bridge_readiness;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  return rows.filter(
+    (row): row is Record<string, unknown> =>
+      Boolean(row) &&
+      typeof row === "object" &&
+      !Array.isArray(row) &&
+      (row as Record<string, unknown>).run_id === artifacts.runId,
+  );
+}
+
+function indexedDetailedForecastStatuses(
+  artifacts: WorkspaceArtifacts,
+): DetailedForecastStatusSummary[] {
+  const statuses: DetailedForecastStatusSummary[] = [];
+  for (const row of workspaceIndexBridgeRows(artifacts)) {
+    const bridge = asString(row.bridge);
+    if (!bridge) {
+      continue;
+    }
+    statuses.push({
+      bridge,
+      status: asString(row.forecast_status) ?? "unknown",
+      statusLabel: asString(row.forecast_status_label) ?? bridge,
+      blockers: asStringArray(row.blockers),
+      summary: null,
+    });
+  }
+  return statuses.sort((a, b) => a.bridge.localeCompare(b.bridge));
+}
+
+function indexedDetailedForecastReady(artifacts: WorkspaceArtifacts): boolean | null {
+  const rows = workspaceIndexBridgeRows(artifacts);
+  if (rows.length === 0) {
+    return null;
+  }
+  return rows.every(
+    (row) => row.validation_ready === true || row.forecast_status === "validation_ready",
+  );
+}
+
+function indexedBridgeGeneratedFileCount(artifacts: WorkspaceArtifacts): number | null {
+  const count = artifacts.files.filter((path) =>
+    normalizedSuffix(path).includes("/outputs/bridges/"),
+  ).length;
+  return count > 0 ? count : null;
+}
+
 function routingSummary(workflowReport: Record<string, unknown> | null): RoutingSummary | null {
   const routing = workflowReport?.routing;
   if (!routing || typeof routing !== "object" || Array.isArray(routing)) {
@@ -769,6 +855,11 @@ function collectWarnings(artifacts: WorkspaceArtifacts): string[] {
   if (artifacts.filesTruncated) {
     warnings.push("File list truncated; only the first 500 artifacts are shown.");
   }
+  if (!artifacts.workspaceIndex) {
+    warnings.push("Workspace index unavailable; summary used direct artifact fallback.");
+  } else if (artifacts.indexStatus === "duckdb_python_module_missing") {
+    warnings.push("DuckDB database unavailable; summary used the JSON workspace index.");
+  }
   return [...warnings, ...qaBlockers, ...bridgeBlockers, ...detailedForecastBlockers];
 }
 
@@ -793,27 +884,47 @@ export function summarizeRunArtifacts(artifacts: WorkspaceArtifacts | null): Run
   if (!artifacts) {
     return null;
   }
+  const indexRun = workspaceIndexRun(artifacts);
+  const indexQa = workspaceIndexQa(artifacts);
+  const indexedForecastStatuses = indexedDetailedForecastStatuses(artifacts);
+  const forecastStatuses = detailedForecastStatuses(artifacts.workflowReport, artifacts.manifest);
   return {
     runId: artifacts.runId,
     workspacePath: artifacts.workspace,
-    manifestPath: workflowReportPath(artifacts.workflowReport, "manifest") ?? workspacePathJoin(
-      artifacts.workspace,
-      "runs",
-      artifacts.runId,
-      "manifest.json",
-    ),
-    reportPath: workflowReportPath(artifacts.workflowReport, "report"),
+    manifestPath: asString(indexRun?.manifest_path) ??
+      workflowReportPath(artifacts.workflowReport, "manifest") ??
+      workspacePathJoin(
+        artifacts.workspace,
+        "runs",
+        artifacts.runId,
+        "manifest.json",
+      ),
+    reportPath: asString(indexRun?.report_path) ??
+      workflowReportPath(artifacts.workflowReport, "report"),
     scenarioIds: scenarioIds(artifacts.manifest),
     qaExportReady:
-      typeof artifacts.qaReport?.export_ready === "boolean" ? artifacts.qaReport.export_ready : null,
+      typeof artifacts.qaReport?.export_ready === "boolean"
+        ? artifacts.qaReport.export_ready
+        : typeof indexQa?.export_ready === "boolean"
+          ? indexQa.export_ready
+          : null,
     bridgeExportReady: bridgeExportReady(artifacts.workflowReport),
-    detailedForecastReady: detailedForecastReady(artifacts.workflowReport, artifacts.manifest),
-    detailedForecastStatuses: detailedForecastStatuses(artifacts.workflowReport, artifacts.manifest),
-    bridgeGeneratedFileCount: bridgeGeneratedFileCount(artifacts.workflowReport),
+    detailedForecastReady:
+      detailedForecastReady(artifacts.workflowReport, artifacts.manifest) ??
+      indexedDetailedForecastReady(artifacts),
+    detailedForecastStatuses: forecastStatuses.length
+      ? forecastStatuses
+      : indexedForecastStatuses,
+    bridgeGeneratedFileCount:
+      bridgeGeneratedFileCount(artifacts.workflowReport) ??
+      indexedBridgeGeneratedFileCount(artifacts),
     bridgeExecutionReports: bridgeExecutionReports(artifacts.files),
     bridgeSkippedInputs: bridgeSkippedInputs(artifacts.workflowReport),
     routing: routingSummary(artifacts.workflowReport),
-    plannerPackArtifacts: detectPlannerPackArtifacts(artifacts.files, artifacts.manifest),
+    plannerPackArtifacts:
+      asStringArray(indexRun?.planner_pack_artifacts).length > 0
+        ? asStringArray(indexRun?.planner_pack_artifacts)
+        : detectPlannerPackArtifacts(artifacts.files, artifacts.manifest),
     generatedArtifacts: generatedArtifactSummary(artifacts.manifest),
     missingSidecars: missingManifestSidecars(artifacts),
     warnings: collectWarnings(artifacts),

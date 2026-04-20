@@ -99,6 +99,12 @@ async function readTextIfExists(filePath: string): Promise<string | null> {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 const FILE_LIST_LIMIT = 500;
 const ARTIFACT_PREVIEW_LIMIT = 128 * 1024;
 
@@ -152,6 +158,56 @@ async function listReportFiles(workspace: string, runId: string): Promise<string
     .filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
     .map((name) => path.join(reportsDir, name))
     .toSorted();
+}
+
+function indexArtifactFiles(
+  workspaceIndex: Record<string, unknown> | null,
+  runId: string,
+): string[] {
+  const artifacts = workspaceIndex?.artifacts;
+  if (!Array.isArray(artifacts)) {
+    return [];
+  }
+  return artifacts
+    .map((artifact) => asRecord(artifact))
+    .filter((artifact) => artifact?.run_id === runId)
+    .map((artifact) => artifact?.path)
+    .filter((value): value is string => typeof value === "string" && Boolean(value))
+    .toSorted();
+}
+
+function indexRunString(
+  workspaceIndex: Record<string, unknown> | null,
+  runId: string,
+  key: string,
+): string | null {
+  const runs = workspaceIndex?.runs;
+  if (!Array.isArray(runs)) {
+    return null;
+  }
+  const row = runs
+    .map((run) => asRecord(run))
+    .find((run) => run?.run_id === runId);
+  const value = row?.[key];
+  return typeof value === "string" && value ? value : null;
+}
+
+async function refreshWorkspaceIndex(
+  workspace: string,
+  runId: string,
+): Promise<Record<string, unknown> | null> {
+  const result = await runEngine([
+    "data",
+    "index",
+    "--workspace",
+    workspace,
+    "--run-id",
+    runId,
+    "--json",
+  ]);
+  return result.ok
+    ? asRecord(result.json)
+    : await readJsonIfExists(path.join(workspace, "logs", "workspace_index.json"));
 }
 
 function optionalNumber(body: Record<string, unknown>, key: string): number | null {
@@ -210,20 +266,37 @@ function clawModelerApiPlugin(): Plugin {
             if (!workspace) {
               throw new Error("workspace is required");
             }
+            const workspaceIndex = await refreshWorkspaceIndex(workspace, runId);
             const runRoot = path.join(workspace, "runs", runId);
-            const { files: runFiles, truncated } = await listFiles(runRoot);
-            const reportFiles = await listReportFiles(workspace, runId);
+            let files = indexArtifactFiles(workspaceIndex, runId);
+            let truncated = false;
+            if (!workspaceIndex) {
+              const fallback = await listFiles(runRoot);
+              const reportFiles = await listReportFiles(workspace, runId);
+              files = [...fallback.files, ...reportFiles].toSorted();
+              truncated = fallback.truncated;
+            }
+            const reportPath =
+              indexRunString(workspaceIndex, runId, "report_path") ??
+              path.join(workspace, "reports", `${runId}_report.md`);
             const payload = {
               workspace,
               runId,
               manifest: await readJsonIfExists(path.join(runRoot, "manifest.json")),
               qaReport: await readJsonIfExists(path.join(runRoot, "qa_report.json")),
               workflowReport: await readJsonIfExists(path.join(runRoot, "workflow_report.json")),
-              reportMarkdown: await readTextIfExists(
-                path.join(workspace, "reports", `${runId}_report.md`),
-              ),
-              files: [...runFiles, ...reportFiles].toSorted(),
+              reportMarkdown: await readTextIfExists(reportPath),
+              files,
               filesTruncated: truncated,
+              workspaceIndex,
+              indexStatus:
+                typeof workspaceIndex?.database_status === "string"
+                  ? workspaceIndex.database_status
+                  : null,
+              indexUpdatedAt:
+                typeof workspaceIndex?.created_at === "string"
+                  ? workspaceIndex.created_at
+                  : null,
             };
             sendJson(response, 200, { ok: true, json: payload });
             return;

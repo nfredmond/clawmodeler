@@ -88,6 +88,9 @@ type WorkspaceArtifacts = {
   reportMarkdown: string | null;
   files: string[];
   filesTruncated: boolean;
+  workspaceIndex?: Record<string, unknown> | null;
+  indexStatus?: string | null;
+  indexUpdatedAt?: string | null;
 };
 
 type ArtifactPreview = {
@@ -695,7 +698,9 @@ async function refreshArtifacts(showBusy = true) {
       state.whatIf.baseRunId = state.artifacts.runId;
       saveWhatIfForm();
     }
-    state.status = "Workspace loaded";
+    state.status = state.artifacts?.workspaceIndex
+      ? "Workspace loaded from index"
+      : "Workspace loaded with direct artifact fallback";
   } catch (error) {
     rememberCurrentProject(null, "Not loaded");
     if (showBusy) {
@@ -2029,6 +2034,9 @@ function renderArtifacts() {
       ? "No bridge file links recorded"
       : `${runSummary.bridgeGeneratedFileCount} generated bridge file link(s)`;
   const bridgeExecutionReportCount = runSummary?.bridgeExecutionReports.length ?? 0;
+  const indexStatus = artifacts?.indexStatus ?? "not indexed";
+  const indexUpdatedAt = artifacts?.indexUpdatedAt ?? "not recorded";
+  const indexArtifactCount = artifacts?.files.length ?? 0;
   const routing = runSummary?.routing;
   const routingText = routing
     ? `${routing.selectedSource} (${routing.impedance})`
@@ -2147,7 +2155,12 @@ function renderArtifacts() {
           <strong>Report</strong>
           <code>${escapeHtml(runSummary?.reportPath ?? "No report path recorded")}</code>
         </div>
+        <div>
+          <strong>Workspace index</strong>
+          <span>${escapeHtml(`${indexStatus}; ${indexArtifactCount} artifact(s)`)}</span>
+        </div>
       </div>
+      <p class="muted">Index refreshed: ${escapeHtml(indexUpdatedAt)}</p>
       <details>
         <summary>Warnings</summary>
         ${warnings}

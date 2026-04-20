@@ -300,6 +300,69 @@ describe("clawmodeler workbench helpers", () => {
     );
   });
 
+  it("uses workspace index rows when workflow sidecars are unavailable", () => {
+    const summary = summarizeRunArtifacts({
+      workspace: "/tmp/ws",
+      runId: "demo",
+      manifest: {
+        scenarios: [{ scenario_id: "baseline" }],
+      },
+      qaReport: null,
+      workflowReport: null,
+      reportMarkdown: null,
+      files: [
+        "/tmp/ws/reports/demo_report.md",
+        "/tmp/ws/runs/demo/outputs/tables/hsip.csv",
+        "/tmp/ws/runs/demo/outputs/bridges/sumo/bridge_execution_report.json",
+      ],
+      filesTruncated: false,
+      workspaceIndex: {
+        database_status: "duckdb_python_module_missing",
+        runs: [
+          {
+            run_id: "demo",
+            manifest_path: "/tmp/ws/runs/demo/manifest.json",
+            report_path: "/tmp/ws/reports/demo_report.md",
+            planner_pack_artifacts: ["hsip"],
+          },
+        ],
+        qa: [{ run_id: "demo", export_ready: true, blockers: [] }],
+        bridge_readiness: [
+          {
+            run_id: "demo",
+            bridge: "sumo",
+            forecast_status: "validation_ready",
+            forecast_status_label: "Validation ready",
+            validation_ready: true,
+            blockers: [],
+          },
+        ],
+      },
+      indexStatus: "duckdb_python_module_missing",
+      indexUpdatedAt: "2026-04-20T00:00:00Z",
+    });
+
+    expect(summary?.reportPath).toBe("/tmp/ws/reports/demo_report.md");
+    expect(summary?.qaExportReady).toBe(true);
+    expect(summary?.detailedForecastReady).toBe(true);
+    expect(summary?.detailedForecastStatuses).toEqual([
+      {
+        bridge: "sumo",
+        status: "validation_ready",
+        statusLabel: "Validation ready",
+        blockers: [],
+        summary: null,
+      },
+    ]);
+    expect(summary?.plannerPackArtifacts).toEqual(["hsip"]);
+    expect(summary?.bridgeExecutionReports).toEqual([
+      "/tmp/ws/runs/demo/outputs/bridges/sumo/bridge_execution_report.json",
+    ]);
+    expect(summary?.warnings).toContain(
+      "DuckDB database unavailable; summary used the JSON workspace index.",
+    );
+  });
+
   it("flattens manifest outputs and detects planner-pack tables", () => {
     const manifest = {
       outputs: {

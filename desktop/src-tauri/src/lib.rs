@@ -27,6 +27,9 @@ struct WorkspaceArtifacts {
     report_markdown: Option<String>,
     files: Vec<String>,
     files_truncated: bool,
+    workspace_index: Option<Value>,
+    index_status: Option<String>,
+    index_updated_at: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -298,7 +301,11 @@ fn clawmodeler_portfolio(app: tauri::AppHandle, workspace: String) -> Result<Eng
 }
 
 #[tauri::command]
-fn clawmodeler_workspace(workspace: String, run_id: String) -> Result<ArtifactResult, String> {
+fn clawmodeler_workspace(
+    app: tauri::AppHandle,
+    workspace: String,
+    run_id: String,
+) -> Result<ArtifactResult, String> {
     let workspace_path = PathBuf::from(workspace.trim());
     if workspace_path.as_os_str().is_empty() {
         return Err("workspace is required".to_string());
@@ -311,18 +318,46 @@ fn clawmodeler_workspace(workspace: String, run_id: String) -> Result<ArtifactRe
     };
     let run_root = workspace_path.join("runs").join(&run_id);
     let reports_dir = workspace_path.join("reports");
-    let (mut files, files_truncated) = list_files(&run_root);
-    files.extend(list_report_files(&reports_dir, &run_id));
+    let workspace_string = workspace_path.to_string_lossy().to_string();
+    let workspace_index = refresh_workspace_index(&app, &workspace_string, &run_id)
+        .or_else(|| read_json(workspace_path.join("logs").join("workspace_index.json")));
+    let indexed_files = workspace_index
+        .as_ref()
+        .map(|index| index_artifact_files(index, &run_id))
+        .unwrap_or_default();
+    let (mut files, files_truncated) = if workspace_index.is_some() {
+        (indexed_files, false)
+    } else {
+        let (mut run_files, truncated) = list_files(&run_root);
+        run_files.extend(list_report_files(&reports_dir, &run_id));
+        (run_files, truncated)
+    };
     files.sort();
+    let report_path = workspace_index
+        .as_ref()
+        .and_then(|index| index_run_string(index, &run_id, "report_path"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| reports_dir.join(format!("{run_id}_report.md")));
     let artifacts = WorkspaceArtifacts {
-        workspace: workspace_path.to_string_lossy().to_string(),
+        workspace: workspace_string,
         run_id: run_id.clone(),
         manifest: read_json(run_root.join("manifest.json")),
         qa_report: read_json(run_root.join("qa_report.json")),
         workflow_report: read_json(run_root.join("workflow_report.json")),
-        report_markdown: fs::read_to_string(reports_dir.join(format!("{run_id}_report.md"))).ok(),
+        report_markdown: fs::read_to_string(report_path).ok(),
         files,
         files_truncated,
+        index_status: workspace_index
+            .as_ref()
+            .and_then(|index| index.get("database_status"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        index_updated_at: workspace_index
+            .as_ref()
+            .and_then(|index| index.get("created_at"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        workspace_index,
     };
 
     Ok(ArtifactResult {
@@ -343,12 +378,15 @@ fn clawmodeler_read_artifact(path: String) -> Result<ArtifactPreviewResult, Stri
         return Err("artifact path is required".to_string());
     }
     if !artifact_path.is_file() {
-        return Err(format!("artifact file not found: {}", artifact_path.display()));
+        return Err(format!(
+            "artifact file not found: {}",
+            artifact_path.display()
+        ));
     }
     let metadata = fs::metadata(&artifact_path)
         .map_err(|error| format!("failed to inspect artifact: {error}"))?;
-    let bytes = fs::read(&artifact_path)
-        .map_err(|error| format!("failed to read artifact: {error}"))?;
+    let bytes =
+        fs::read(&artifact_path).map_err(|error| format!("failed to read artifact: {error}"))?;
     let truncated = bytes.len() > ARTIFACT_PREVIEW_LIMIT;
     let content_bytes = if truncated {
         &bytes[..ARTIFACT_PREVIEW_LIMIT]
@@ -370,6 +408,50 @@ fn clawmodeler_read_artifact(path: String) -> Result<ArtifactPreviewResult, Stri
 fn read_json(path: PathBuf) -> Option<Value> {
     let text = fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
+}
+
+fn refresh_workspace_index(app: &tauri::AppHandle, workspace: &str, run_id: &str) -> Option<Value> {
+    let result = run_engine_args(
+        app,
+        vec![
+            "data".into(),
+            "index".into(),
+            "--workspace".into(),
+            workspace.to_string(),
+            "--run-id".into(),
+            run_id.to_string(),
+            "--json".into(),
+        ],
+    )
+    .ok()?;
+    if result.ok {
+        result.json
+    } else {
+        None
+    }
+}
+
+fn index_artifact_files(index: &Value, run_id: &str) -> Vec<String> {
+    let Some(artifacts) = index.get("artifacts").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    artifacts
+        .iter()
+        .filter(|artifact| artifact.get("run_id").and_then(Value::as_str) == Some(run_id))
+        .filter_map(|artifact| artifact.get("path").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect()
+}
+
+fn index_run_string(index: &Value, run_id: &str, key: &str) -> Option<String> {
+    index
+        .get("runs")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|run| run.get("run_id").and_then(Value::as_str) == Some(run_id))?
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 const FILE_LIST_LIMIT: usize = 500;
