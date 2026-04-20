@@ -1,6 +1,6 @@
 {
   "name": "clawmodeler",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "Local-first transportation sketch-planning for small and rural agencies.",
   "private": true,
   "license": "Apache-2.0",
@@ -9,6 +9,10 @@
     "engine:test": "python3 -m unittest discover -s tests -p '*test*.py'",
     "engine:check": "bash scripts/check-packaging.sh",
     "desktop:acceptance": "bash scripts/check-desktop-acceptance.sh",
+    "release:assets": "node scripts/check-release-assets.mjs",
+    "release:assets:test": "node scripts/check-release-assets.mjs --self-test",
+    "release:latest-policy:test": "node scripts/release-latest-policy.mjs --self-test",
+    "release:sidecar-smoke": "node scripts/check-release-sidecar.mjs",
     "ui:dev": "pnpm --dir desktop dev",
     "ui:build": "pnpm --dir desktop build",
     "ui:test": "pnpm --dir desktop test",

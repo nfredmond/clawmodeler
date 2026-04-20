@@ -7,7 +7,7 @@ ClawModeler is a standalone, local-first transportation sketch-planning workbenc
 
 The long-term goal is an installable desktop app plus `clawmodeler-engine` sidecar where planners can inspect local tools, select defensible methods, follow a guided workflow, validate outputs, compare alternatives, and generate Planner Pack artifacts with every limitation visible.
 
-For the big-picture roadmap and scope guardrails, see `docs/roadmap.md`.
+For the big-picture roadmap and scope guardrails, see `docs/roadmap.md`. For release checks, see `docs/release.md`.
 
 ## Download
 
@@ -346,6 +346,7 @@ Implemented now:
 - Tauri v2 desktop workbench with a vanilla TypeScript front end,
 - a desktop Workflow Guide that links setup, run, QA, Planner Pack, chat, what-if, portfolio, and diff readiness,
 - read-only desktop artifact previews and a fixture-backed desktop workflow acceptance script,
+- release workflow gates for sidecar smoke tests, installer asset validation, and Latest-release policy,
 - toolbox inventory and install profiles.
 
 Still to build:
@@ -369,6 +370,8 @@ Useful checks:
 pnpm engine:test
 bash scripts/check-packaging.sh
 pnpm desktop:acceptance
+pnpm release:assets:test
+pnpm release:latest-policy:test
 clawmodeler-engine doctor --json
 clawmodeler-engine tools
 ```

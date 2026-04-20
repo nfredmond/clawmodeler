@@ -18,7 +18,7 @@ ClawModeler should let a planner install the desktop app or run `clawmodeler-eng
 
 ## Current Checkpoint
 
-The 0.9.4 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop workbench:
+The 0.9.5 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop workbench with hardened release gates:
 
 - `clawmodeler-engine doctor`, `tools`, `workflow full`, `workflow demo-full`, `workflow report-only`, and `workflow diagnose` cover the core workflow.
 - Bridge packages are generated and validated for SUMO, MATSim, UrbanSim, DTALite, and TBEST where inputs support them.
@@ -28,24 +28,25 @@ The 0.9.4 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop work
 - The desktop app is vanilla TypeScript on Tauri v2 and invokes only the `clawmodeler-engine` sidecar or local Python fallback.
 - The desktop workbench has a top-level Workflow Guide that links workspace setup, run execution, QA/artifact review, Planner Pack generation, grounded chat, what-if, portfolio, and diff readiness.
 - The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate.
+- The release workflow smoke-tests the packaged sidecar, validates installer asset names, serializes tag publishing, and only marks the highest SemVer tag as Latest.
 
 ## Next Engineering Milestones
 
-1. **Release 0.9.4 cleanly.**
+1. **Release 0.9.5 cleanly.**
 
-   Keep this release to desktop workflow coherence: preserve 0.9.3 engine behavior, keep the Workflow Guide derived from existing artifacts, keep artifact preview read-only, keep `pnpm desktop:acceptance` green, and verify engine/UI/Tauri checks before tagging.
+   Keep this release to packaged release confidence: preserve 0.9.4 desktop behavior, keep the sidecar smoke and asset gates green, and verify GitHub marks only the highest SemVer release as Latest.
 
-2. **Tighten packaged desktop release confidence.**
+2. **Add calibrated-model execution gates.**
 
-   Validate sidecar lookup, bundled engine templates, installer metadata, and first-run behavior outside editable installs on each supported platform.
+   Before detailed engines are presented as authoritative forecasts, require project-specific calibration inputs, validation targets, and method notes in the manifest.
 
 3. **Harden fixture and bridge confidence.**
 
    Expand the tiny public fixture only when it improves acceptance coverage, then improve bridge validation messages before adding deeper external-engine execution.
 
-4. **Add calibrated-model execution gates.**
+4. **Upgrade the data/routing engine.**
 
-   Before detailed engines are presented as authoritative forecasts, require project-specific calibration inputs, validation targets, and method notes in the manifest.
+   Make DuckDB spatial ingestion and deeper OSMnx/NetworkX routing controls the next core data-path upgrade.
 
 5. **Add optional ML workflows last.**
 
@@ -73,4 +74,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when the packaged desktop release can run outside an editable checkout, locate the bundled sidecar and templates, complete the guided workflow on demo and fixture workspaces, and pass the full engine/UI/Tauri verification suite.
+The next pass is done when detailed-engine commands expose calibration/validation readiness in manifests and desktop summaries without presenting uncalibrated bridge packages as detailed forecasts.

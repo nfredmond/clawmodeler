@@ -5,6 +5,10 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   build:
     strategy:
@@ -62,6 +66,9 @@ jobs:
         run: pnpm tauri:build
         working-directory: desktop
 
+      - name: Smoke test packaged sidecar
+        run: pnpm release:sidecar-smoke
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -83,17 +90,38 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
+      - name: Determine latest release policy
+        id: latest-policy
+        run: node scripts/release-latest-policy.mjs --current "$GITHUB_REF_NAME" --github-output "$GITHUB_OUTPUT"
+
+      - name: Validate release assets
+        run: pnpm release:assets -- --tag "$GITHUB_REF_NAME" --dir artifacts
+
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.6.2
         with:
           files: artifacts/**/*
           draft: false
           prerelease: false
           generate_release_notes: true
           fail_on_unmatched_files: true
+          make_latest: ${{ steps.latest-policy.outputs.make_latest }}

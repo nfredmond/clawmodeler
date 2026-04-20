@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-ENGINE_VERSION = "0.9.4"
+ENGINE_VERSION = "0.9.5"
 
 WORKSPACE_DIRS = (
     "inputs",

@@ -9,6 +9,8 @@ bash scripts/install-profile.sh standard
 bash scripts/install-profile.sh full
 bash scripts/install-profile.sh gpu
 bash scripts/check-packaging.sh
+pnpm release:assets:test
+pnpm release:latest-policy:test
 ```
 
 Profiles:
@@ -38,3 +40,13 @@ bash scripts/check-packaging.sh
 ```
 
 The check runs the sidecar unit tests, builds the wheel, verifies packaged sidecar files, installs the wheel into a temporary virtual environment, and checks the installed `clawmodeler-engine` console script.
+
+Release checks:
+
+```bash
+pnpm sidecar:build
+pnpm release:sidecar-smoke
+pnpm release:assets -- --tag vX.Y.Z --dir artifacts
+```
+
+The release sidecar smoke check runs the built desktop sidecar through version, doctor, demo workflow, tiny-fixture workflow, and CEQA Planner Pack generation. The asset check verifies release bundle names before GitHub release publication.

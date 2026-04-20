@@ -116,6 +116,14 @@ The fixture-backed acceptance gate for this flow is:
 pnpm desktop:acceptance
 ```
 
+The release-specific sidecar gate is:
+
+```bash
+pnpm release:sidecar-smoke
+```
+
+Release asset names and Latest-release policy are checked by `scripts/check-release-assets.mjs` and `scripts/release-latest-policy.mjs`.
+
 The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract.
 
 When OSMnx is installed, `openclaw clawmodeler graph osmnx` can build a GraphML cache in `cache/graphs/`. The accessibility engine can consume GraphML cache files with edge `minutes`, `travel_time_min`, `travel_time_minutes`, OSMnx-style `travel_time` seconds, or `length` plus `speed_kph` values. Run `openclaw clawmodeler graph map-zones` after intake to generate and register `inputs/zone_node_map.csv` from staged zones and GraphML node coordinates, or stage a CSV with `zone_id,node_id` columns when a custom mapping is required.

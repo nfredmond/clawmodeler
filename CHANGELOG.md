@@ -4,6 +4,25 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] — 2026-04-20
+
+### Added
+
+- **Release sidecar smoke gate.** The release workflow now runs the built `clawmodeler-engine` sidecar through `--version`, `doctor --json`, `workflow demo-full`, a tiny-fixture `workflow full`, and CEQA Planner Pack generation before uploading installer artifacts.
+- **Release asset validator.** New release asset check verifies the expected Linux AppImage/deb/rpm, macOS ARM64 dmg, and Windows MSI/NSIS asset names all match the release tag version before publication.
+- **SemVer latest-release policy.** New release policy helper marks a GitHub release as Latest only when the current tag is the highest `vX.Y.Z` tag, preventing out-of-order tag workflows from moving Latest backward.
+- **Release checklist docs.** New release documentation records the sidecar smoke gate, asset validation, and Latest-release verification steps.
+
+### Changed
+
+- **Sidecar binaries now bundle templates explicitly.** PyInstaller builds include `clawmodeler_engine/templates/**` alongside the toolbox JSON so installed desktop sidecars can render reports and Planner Pack artifacts outside editable checkouts.
+- **GitHub release publishing is serialized and pinned.** Release runs now use workflow concurrency and a concrete `softprops/action-gh-release@v2.6.2` pin.
+- **Version advanced to 0.9.5** across the Python engine, root package metadata, and Tauri desktop metadata.
+
+### Fixed
+
+- **Latest release metadata corrected for v0.9.4.** The existing `v0.9.4` GitHub release was explicitly marked Latest after the `v0.9.2`–`v0.9.4` tag workflows completed out of order.
+
 ## [0.9.4] — 2026-04-20
 
 ### Added
