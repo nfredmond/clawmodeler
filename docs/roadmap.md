@@ -18,32 +18,38 @@ ClawModeler should let a planner install the desktop app or run `clawmodeler-eng
 
 ## Current Checkpoint
 
-The current post-0.9.5 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop workbench with hardened release gates and calibrated-model execution readiness:
+The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2 desktop workbench with hardened release gates and calibrated-model execution readiness:
 
 - `clawmodeler-engine doctor`, `tools`, `workflow full`, `workflow demo-full`, `workflow report-only`, and `workflow diagnose` cover the core workflow.
 - Bridge packages are generated and validated for SUMO, MATSim, UrbanSim, DTALite, and TBEST where inputs support them.
 - Bridge execution reports are available for SUMO, MATSim, UrbanSim, DTALite, and TBEST commands, including dry-run readiness checks.
 - Run manifests, bridge manifests, workflow summaries, reports, and desktop summaries now distinguish handoff-only bridge readiness from calibrated forecast readiness.
 - Detailed-engine readiness records method notes, required calibration inputs, required validation targets, and missing readiness blockers.
+- Routing choices are controlled through both CLI and desktop workflow surfaces, with diagnostics recorded in workflow reports.
+- Bridge execution dry runs and command reports are available from both CLI and desktop surfaces, with generated bridge outputs included in audit reports.
 - QA blocks unsupported report export and validates manifest and fact-block evidence.
 - Planner Pack emitters cover CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP.
 - Diff, what-if, portfolio, and grounded chat are deterministic downstream tools over finished runs.
 - The desktop app is vanilla TypeScript on Tauri v2 and invokes only the `clawmodeler-engine` sidecar or local Python fallback.
 - The desktop workbench has a top-level Workflow Guide that links workspace setup, run execution, QA/artifact review, Planner Pack generation, grounded chat, what-if, portfolio, and diff readiness.
 - The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate.
-- The release workflow smoke-tests the packaged sidecar, validates installer asset names, serializes tag publishing, and only marks the highest SemVer tag as Latest.
+- Release gates smoke-test the packaged sidecar, validate installer asset names, check version consistency, serialize tag publishing, and only mark the highest SemVer tag as Latest.
 
 ## Next Engineering Milestones
 
-1. **Harden fixture and bridge confidence.**
+1. **Make routing data real.**
 
-   Expand the tiny public fixture only when it improves acceptance coverage, then improve bridge validation messages before adding deeper external-engine execution.
+   Add a small real-network fixture path that exercises network edge CSV or GraphML routing end to end, then make the routing diagnostics compare proxy and network-backed methods without overstating calibrated forecast quality.
 
-2. **Deepen the data/routing engine.**
+2. **Turn bridge execution from dry-run confidence into useful operator feedback.**
 
-   Build on starter DuckDB table sync and routing-source selection with spatial geometry operations and deeper OSMnx/NetworkX routing controls.
+   Keep execution optional, but improve per-bridge command checks, missing-tool messages, generated-script previews, and report links before attempting deeper external-engine automation.
 
-3. **Add optional ML workflows last.**
+3. **Persist desktop project state.**
+
+   Add saved recent workspaces, active run history, and explicit run labels so the desktop workbench feels like a durable local app rather than a stateless launcher over files.
+
+4. **Add optional ML workflows last.**
 
    Expose ML libraries through the toolbox only when there is a defined training target, validation set, and model-governance story.
 
@@ -69,4 +75,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when the fixture and acceptance coverage prove the calibrated-readiness language stays intact across CLI, bridge validation, reports, and desktop surfaces while bridge-package messaging remains concise and planner-readable.
+The next pass is done when one fixture-backed workflow proves network-backed routing, routing diagnostics, bridge execution reporting, and desktop summaries stay aligned across CLI, reports, and UI without claiming calibrated forecasts from screening-level inputs.

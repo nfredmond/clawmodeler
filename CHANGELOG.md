@@ -4,6 +4,29 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] — 2026-04-20
+
+### Added
+
+- **Desktop routing controls.** The Tauri workbench now exposes routing source, graph ID, and impedance controls for full workflow runs, matching the CLI workflow override surface.
+- **Bridge execution panel.** Desktop users can run SUMO, MATSim, UrbanSim, DTALite, and TBEST bridge execution dry runs or commands from the workbench and inspect generated execution reports.
+- **CLI workflow routing overrides.** `workflow full` now accepts `--routing-source`, `--routing-graph-id`, and `--routing-impedance` so scripted runs can choose between automatic routing, network edge CSV, GraphML, and Euclidean proxy routing paths.
+- **Release version consistency gate.** `pnpm release:version-check` verifies that Python, root package, engine, Tauri, Cargo, and lockfile versions agree before tagging.
+
+### Changed
+
+- **Workflow summaries include routing diagnostics.** Full workflow reports now surface the routing choice and readiness context alongside QA, bridge, and forecast-readiness summaries.
+- **Bridge execution reports list generated bridge outputs.** Execution reports now include files already present in the bridge directory plus stdout and stderr logs, making dry-run and handoff checks easier to audit.
+- **CI opts into the Node 24 GitHub Actions runtime.** CI and release workflows set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` while upstream third-party actions finish moving off Node 20.
+- **Version advanced to 0.9.6** across the Python engine, root package metadata, and Tauri desktop metadata.
+
+### Fixed
+
+- **Desktop fresh-start summaries no longer dereference missing run data.** The initial UI render handles empty workspaces before run artifacts exist.
+- **Unknown readiness badges render neutrally.** QA, bridge, and forecast readiness states now distinguish unknown from pass/fail styling.
+- **Socioeconomic coverage validation is bidirectional.** Intake rejects both GeoJSON zones without socio rows and socio CSV zone IDs that do not join to GeoJSON zones.
+- **Empty scenario lists normalize to baseline.** Passing `--scenarios` with no values no longer produces a manifest with no scenarios while baseline outputs are generated.
+
 ## [0.9.5] — 2026-04-20
 
 ### Added
