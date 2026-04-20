@@ -136,6 +136,12 @@ The release-specific sidecar gate is:
 pnpm release:sidecar-smoke
 ```
 
+The first-user release-candidate gate is:
+
+```bash
+pnpm release:first-user-smoke
+```
+
 Release asset names and Latest-release policy are checked by `scripts/check-release-assets.mjs` and `scripts/release-latest-policy.mjs`.
 
 The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract. Until project-specific calibration inputs, validation targets, model year, geography, and method notes are recorded, detailed-engine bridge packages remain handoff artifacts rather than authoritative forecasts.

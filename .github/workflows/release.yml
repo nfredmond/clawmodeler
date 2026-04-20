@@ -72,6 +72,11 @@ jobs:
       - name: Smoke test packaged sidecar
         run: pnpm release:sidecar-smoke
 
+      - name: First-user packaged smoke
+        run: >
+          pnpm release:first-user-smoke -- --binary
+          "desktop/src-tauri/binaries/clawmodeler-engine${{ matrix.os == 'windows-latest' && '.exe' || '' }}"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

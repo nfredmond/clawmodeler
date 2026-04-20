@@ -14,6 +14,7 @@
     "release:latest-policy:test": "node scripts/release-latest-policy.mjs --self-test",
     "release:version-check": "node scripts/check-version-consistency.mjs",
     "release:sidecar-smoke": "node scripts/check-release-sidecar.mjs",
+    "release:first-user-smoke": "node scripts/check-first-user-smoke.mjs",
     "ui:dev": "pnpm --dir desktop dev",
     "ui:build": "pnpm --dir desktop build",
     "ui:typecheck": "pnpm --dir desktop typecheck",

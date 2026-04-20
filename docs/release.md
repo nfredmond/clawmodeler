@@ -5,7 +5,7 @@ ClawModeler releases are tag-driven. Pushing a `vX.Y.Z` tag builds Linux, macOS 
 Before tagging:
 
 - Confirm all version fields match the intended tag with `pnpm release:version-check`: root `package.json`, Python package metadata, `ENGINE_VERSION`, Tauri `Cargo.toml`, `Cargo.lock`, and `tauri.conf.json`.
-- Run the core checks: `python3 -m ruff check .`, `pnpm engine:test`, `pnpm engine:check`, `pnpm ui:typecheck`, `pnpm ui:test`, `pnpm ui:build`, `pnpm desktop:acceptance`, and `cargo test` in `desktop/src-tauri`.
+- Run the core checks: `python3 -m ruff check .`, `pnpm engine:test`, `pnpm engine:check`, `pnpm ui:typecheck`, `pnpm ui:test`, `pnpm ui:build`, `pnpm desktop:acceptance`, `pnpm release:first-user-smoke`, and `cargo test` in `desktop/src-tauri`.
 - Build the sidecar with `pnpm sidecar:build`, then run `pnpm release:sidecar-smoke`.
 - Commit the version and changelog changes, push `main`, then push the matching `vX.Y.Z` tag.
 
@@ -13,8 +13,25 @@ Release workflow gates:
 
 - Release workflows are serialized with GitHub Actions concurrency so multiple pushed tags cannot publish out of order.
 - Each matrix build smoke-tests the generated sidecar before uploading installer artifacts.
+- Each matrix build runs `pnpm release:first-user-smoke` against the packaged sidecar, proving clean workspace creation, baseline execution, workspace-index refresh, QA review, CEQA Planner Pack output, portfolio refresh, and baseline-vs-alternative diff review.
 - The release job validates asset names with `pnpm release:assets -- --tag "$GITHUB_REF_NAME" --dir artifacts`.
 - The release job marks the GitHub release as Latest only when the tag is the highest SemVer `vX.Y.Z` tag.
+
+Expected installer assets:
+
+- Linux AppImage: `ClawModeler_<version>_amd64.AppImage`
+- Debian / Ubuntu package: `ClawModeler_<version>_amd64.deb`
+- Fedora / RHEL package: `ClawModeler-<version>-1.x86_64.rpm`
+- macOS Apple Silicon dmg: `ClawModeler_<version>_aarch64.dmg`
+- Windows MSI: `ClawModeler_<version>_x64_en-US.msi`
+- Windows setup exe: `ClawModeler_<version>_x64-setup.exe`
+- Intel Mac x86_64: no pre-built installer until a reliable Intel builder is available.
+
+Unsigned first-run caveats:
+
+- macOS builds are unsigned. Document the one-time Gatekeeper path: right-click `ClawModeler.app`, choose **Open**, then choose **Open** again.
+- Windows builds are unsigned. Document the one-time SmartScreen path: **More info**, then **Run anyway**.
+- Linux AppImage users may need to mark the file executable before first launch.
 
 After publication:
 

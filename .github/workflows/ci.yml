@@ -48,6 +48,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: desktop/pnpm-lock.yaml
 
+      - name: First-user release smoke
+        run: pnpm release:first-user-smoke
+
       - name: Install desktop deps
         run: pnpm install --frozen-lockfile
         working-directory: desktop

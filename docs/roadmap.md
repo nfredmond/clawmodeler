@@ -40,17 +40,16 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 - The desktop workbench refreshes and reads the workspace index for run artifact lists, report paths, QA status, bridge readiness, Planner Pack coverage, and index freshness, flags stale index state when artifacts are newer than the index, and keeps direct artifact fallback for older workspaces.
 - The desktop workbench preserves recent workspaces, active run history, and planner-facing run labels locally so existing runs can be reopened without retyping paths.
 - The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate that verifies workspace-index JSON coverage for run artifacts, bridge readiness, portfolio rows, and run diffs.
-- Release gates smoke-test the packaged sidecar, validate installer asset names, check version consistency, serialize tag publishing, and only mark the highest SemVer tag as Latest.
+- Release gates smoke-test the packaged sidecar, prove the first-user clean-workspace path against index-backed summaries, validate installer asset names, check version consistency, serialize tag publishing, and only mark the highest SemVer tag as Latest.
 
 ## Next Engineering Milestones
 
-1. **Prepare a first-user release candidate.**
+1. **Harden installer confidence and release dry runs.**
 
-   Turn the now-indexed workflow into a first-run path that a planner can trust without
-   reading the internals first: package-facing docs, release checklist coverage, and a
-   desktop smoke path that proves workspace creation, baseline execution, index refresh,
-   QA review, Planner Pack generation, portfolio refresh, and diff review from a clean
-   workspace.
+   Remove remaining release-workflow annotations, dry-run the tag workflow path where
+   possible, and make installer verification concrete enough that unsigned first-run
+   support notes, artifact naming, and packaged sidecar behavior can be checked before
+   a public tag is pushed.
 
 2. **Add optional ML workflows last.**
 
@@ -78,7 +77,7 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when the first-user release candidate flow can be checked from a clean
-workspace with one command, the release checklist names every supported installer and unsigned
-first-run caveat, and the desktop smoke path proves the generated index-backed summaries a
-planner sees after baseline, Planner Pack, portfolio, and diff actions.
+The next pass is done when the release workflow runs without avoidable GitHub Actions
+annotations, the packaged sidecar and first-user smoke gates are documented as release
+blockers, and a maintainer can verify every generated installer artifact and unsigned
+first-run note before publishing a tag.

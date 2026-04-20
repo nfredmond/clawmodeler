@@ -11,6 +11,7 @@ bash scripts/install-profile.sh gpu
 bash scripts/check-packaging.sh
 pnpm release:assets:test
 pnpm release:latest-policy:test
+pnpm release:first-user-smoke
 ```
 
 Profiles:
@@ -46,7 +47,8 @@ Release checks:
 ```bash
 pnpm sidecar:build
 pnpm release:sidecar-smoke
+pnpm release:first-user-smoke -- --binary desktop/src-tauri/binaries/clawmodeler-engine
 pnpm release:assets -- --tag vX.Y.Z --dir artifacts
 ```
 
-The release sidecar smoke check runs the built desktop sidecar through version, doctor, demo workflow, tiny-fixture workflow, and CEQA Planner Pack generation. The asset check verifies release bundle names before GitHub release publication.
+The release sidecar smoke check runs the built desktop sidecar through version, doctor, demo workflow, tiny-fixture workflow, and CEQA Planner Pack generation. The first-user smoke check starts from a clean workspace and verifies the planner-facing baseline, workspace index, QA, CEQA Planner Pack, portfolio, and diff path. The asset check verifies release bundle names before GitHub release publication.
