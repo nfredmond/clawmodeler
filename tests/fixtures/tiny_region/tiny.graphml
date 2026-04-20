@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <key id="x" for="node" attr.name="x" attr.type="double"/>
+  <key id="y" for="node" attr.name="y" attr.type="double"/>
+  <key id="m" for="edge" attr.name="minutes" attr.type="double"/>
+  <graph id="tiny-region" edgedefault="undirected">
+    <node id="n_civic">
+      <data key="x">-121.005</data>
+      <data key="y">38.005</data>
+    </node>
+    <node id="n_school">
+      <data key="x">-121.020</data>
+      <data key="y">38.017</data>
+    </node>
+    <node id="n_station">
+      <data key="x">-120.990</data>
+      <data key="y">37.990</data>
+    </node>
+    <edge source="n_civic" target="n_school">
+      <data key="m">9</data>
+    </edge>
+    <edge source="n_civic" target="n_station">
+      <data key="m">16</data>
+    </edge>
+    <edge source="n_school" target="n_station">
+      <data key="m">24</data>
+    </edge>
+  </graph>
+</graphml>

@@ -79,7 +79,8 @@ The current stack implements these plan modules:
 - Accessibility Engine: writes 15, 30, and 45 minute cumulative jobs-accessible outputs using a Euclidean proxy travel-time method.
 - Accessibility Engine: uses staged `network_edges.csv` shortest paths when available, then `cache/graphs/*.graphml`, otherwise falls back to Euclidean proxy travel times.
 - Accessibility Engine: supports optional `question.routing` controls for `auto`, `network_edges_csv`, `graphml`, or `euclidean_proxy` routing source selection.
-- Workflow reports include a routing QA diagnostic that compares selected network shortest paths with straight-line proxy travel times between staged zone centroids. This is a screening comparison, not calibration.
+- Intake validates `network_edges.csv` endpoint IDs and positive travel-time minutes against staged GeoJSON zones.
+- Workflow reports include a routing QA diagnostic that compares selected network shortest paths with straight-line proxy travel times between staged zone centroids, including reachable-pair coverage. This is a screening comparison, not calibration.
 - VMT & Climate: writes screening VMT and CO2e estimates using explicit per-capita and emissions-factor assumptions.
 - Transit Analyzer: validates GTFS core files and writes route span, trip count, and frequency metrics.
 - Project Scoring: writes weighted safety, equity, climate, and feasibility scores.
@@ -132,7 +133,7 @@ Release asset names and Latest-release policy are checked by `scripts/check-rele
 
 The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract. Until project-specific calibration inputs, validation targets, model year, geography, and method notes are recorded, detailed-engine bridge packages remain handoff artifacts rather than authoritative forecasts.
 
-When OSMnx is installed, `openclaw clawmodeler graph osmnx` can build a GraphML cache in `cache/graphs/`. The accessibility engine can consume GraphML cache files with edge `minutes`, `travel_time_min`, `travel_time_minutes`, OSMnx-style `travel_time` seconds, or `length` plus `speed_kph` values. Run `openclaw clawmodeler graph map-zones` after intake to generate and register `inputs/zone_node_map.csv` from staged zones and GraphML node coordinates, or stage a CSV with `zone_id,node_id` columns when a custom mapping is required. Use `question.routing.graph_id` to pin a named GraphML cache; `question.routing.impedance` currently supports `minutes` only.
+When OSMnx is installed, `openclaw clawmodeler graph osmnx` can build a GraphML cache in `cache/graphs/`. The accessibility engine can consume GraphML cache files with edge `minutes`, `travel_time_min`, `travel_time_minutes`, OSMnx-style `travel_time` seconds, or `length` plus `speed_kph` values. Run `openclaw clawmodeler graph map-zones` after intake to generate and register `inputs/zone_node_map.csv` from staged zones and GraphML node coordinates, or stage a CSV with `zone_id,node_id` columns when a custom mapping is required. Intake requires staged zone-node maps to cover the staged GeoJSON zones. Use `question.routing.graph_id` to pin a named GraphML cache; `question.routing.impedance` currently supports `minutes` only.
 
 ## Max Toolbox
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -471,8 +472,11 @@ def describe_csv(source_path: Path, staged_path: Path) -> InputArtifact:
     warnings: list[str] = []
     if {"zone_id", "node_id"}.issubset(set(reader.fieldnames)):
         kind = "zone_node_map_csv"
+        zone_ids = validate_zone_node_map_csv(rows, source_path)
     elif {"from_zone_id", "to_zone_id", "minutes"}.issubset(set(reader.fieldnames)):
         kind = "network_edges_csv"
+        zone_ids, network_warnings = validate_network_edges_csv(rows, source_path)
+        warnings.extend(network_warnings)
     elif "project_id" in reader.fieldnames:
         kind = "candidate_projects_csv"
     elif "zone_id" in reader.fieldnames:
@@ -494,6 +498,70 @@ def describe_csv(source_path: Path, staged_path: Path) -> InputArtifact:
         zone_ids=zone_ids,
         warnings=tuple(warnings),
     )
+
+
+def validate_zone_node_map_csv(rows: list[dict[str, str]], source_path: Path) -> tuple[str, ...]:
+    if not rows:
+        raise InputValidationError(f"zone_node_map.csv has no rows: {source_path}")
+
+    zone_ids: list[str] = []
+    missing_rows: list[int] = []
+    for index, row in enumerate(rows, start=2):
+        zone_id = str(row.get("zone_id", "")).strip()
+        node_id = str(row.get("node_id", "")).strip()
+        if not zone_id or not node_id:
+            missing_rows.append(index)
+            continue
+        zone_ids.append(zone_id)
+
+    if missing_rows:
+        raise InputValidationError(
+            f"zone_node_map.csv has missing zone_id or node_id values on rows: {missing_rows}"
+        )
+    if len(zone_ids) != len(set(zone_ids)):
+        raise InputValidationError("zone_node_map.csv zone_id values must be unique.")
+    return tuple(sorted(zone_ids))
+
+
+def validate_network_edges_csv(
+    rows: list[dict[str, str]], source_path: Path
+) -> tuple[tuple[str, ...], list[str]]:
+    if not rows:
+        raise InputValidationError(f"network_edges.csv has no rows: {source_path}")
+
+    endpoint_ids: list[str] = []
+    missing_endpoint_rows: list[int] = []
+    invalid_minute_rows: list[int] = []
+    self_loop_rows: list[int] = []
+    for index, row in enumerate(rows, start=2):
+        from_zone_id = str(row.get("from_zone_id", "")).strip()
+        to_zone_id = str(row.get("to_zone_id", "")).strip()
+        if not from_zone_id or not to_zone_id:
+            missing_endpoint_rows.append(index)
+        else:
+            endpoint_ids.extend([from_zone_id, to_zone_id])
+            if from_zone_id == to_zone_id:
+                self_loop_rows.append(index)
+
+        minutes = parse_number(row.get("minutes"), math.inf)
+        if not math.isfinite(minutes) or minutes <= 0:
+            invalid_minute_rows.append(index)
+
+    if missing_endpoint_rows:
+        raise InputValidationError(
+            "network_edges.csv has missing from_zone_id or to_zone_id values on rows: "
+            f"{missing_endpoint_rows}"
+        )
+    if invalid_minute_rows:
+        raise InputValidationError(
+            "network_edges.csv has invalid minutes values on rows: "
+            f"{invalid_minute_rows}; minutes must be positive numbers."
+        )
+
+    warnings: list[str] = []
+    if self_loop_rows:
+        warnings.append(f"network_edges.csv includes self-loop edges on rows: {self_loop_rows}")
+    return tuple(sorted(set(endpoint_ids))), warnings
 
 
 def describe_geojson(source_path: Path, staged_path: Path) -> InputArtifact:
@@ -536,11 +604,11 @@ def describe_geojson(source_path: Path, staged_path: Path) -> InputArtifact:
 
 def validate_join_coverage(artifacts: list[InputArtifact]) -> None:
     zones = next((artifact for artifact in artifacts if artifact.kind == "zones_geojson"), None)
-    socios = [artifact for artifact in artifacts if artifact.kind == "socio_csv"]
-    if zones is None or not socios:
+    if zones is None:
         return
 
     zone_ids = set(zones.zone_ids)
+    socios = [artifact for artifact in artifacts if artifact.kind == "socio_csv"]
     for socio in socios:
         socio_zone_ids = set(socio.zone_ids)
         matched_zone_ids = zone_ids & socio_zone_ids
@@ -551,6 +619,31 @@ def validate_join_coverage(artifacts: list[InputArtifact]) -> None:
             raise InputValidationError(
                 "Socio join coverage is "
                 f"{coverage:.1%}; expected at least 95% of both socio and zone IDs to match."
+            )
+
+    for network in (artifact for artifact in artifacts if artifact.kind == "network_edges_csv"):
+        unknown_zone_ids = sorted(set(network.zone_ids) - zone_ids)
+        if unknown_zone_ids:
+            raise InputValidationError(
+                "Network edge zone IDs do not join to GeoJSON zones: "
+                f"{', '.join(unknown_zone_ids[:10])}"
+            )
+
+    for zone_node_map in (
+        artifact for artifact in artifacts if artifact.kind == "zone_node_map_csv"
+    ):
+        mapped_zone_ids = set(zone_node_map.zone_ids)
+        unknown_zone_ids = sorted(mapped_zone_ids - zone_ids)
+        missing_zone_ids = sorted(zone_ids - mapped_zone_ids)
+        if unknown_zone_ids:
+            raise InputValidationError(
+                "Zone-node map zone IDs do not join to GeoJSON zones: "
+                f"{', '.join(unknown_zone_ids[:10])}"
+            )
+        if missing_zone_ids:
+            raise InputValidationError(
+                "Zone-node map is missing GeoJSON zones: "
+                f"{', '.join(missing_zone_ids[:10])}"
             )
 
 

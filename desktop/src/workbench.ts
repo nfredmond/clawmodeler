@@ -48,10 +48,13 @@ export type RoutingSummary = {
 
 export type RoutingProxyComparison = {
   networkEngine: string | null;
+  coverageStatus: string | null;
+  coverageDetail: string | null;
   zoneCount: number | null;
   comparedPairs: number | null;
   reachablePairs: number | null;
   unreachablePairs: number | null;
+  reachablePairShare: number | null;
   meanNetworkMinutes: number | null;
   meanProxyMinutes: number | null;
   meanAbsDeltaMinutes: number | null;
@@ -484,10 +487,13 @@ function routingSummary(workflowReport: Record<string, unknown> | null): Routing
     proxyComparison: comparison
       ? {
           networkEngine: asString(comparison.network_engine),
+          coverageStatus: asString(comparison.coverage_status),
+          coverageDetail: asString(comparison.coverage_detail),
           zoneCount: asNumber(comparison.zone_count),
           comparedPairs: asNumber(comparison.compared_pairs),
           reachablePairs: asNumber(comparison.reachable_pairs),
           unreachablePairs: asNumber(comparison.unreachable_pairs),
+          reachablePairShare: asNumber(comparison.reachable_pair_share),
           meanNetworkMinutes: asNumber(comparison.mean_network_minutes),
           meanProxyMinutes: asNumber(comparison.mean_proxy_minutes),
           meanAbsDeltaMinutes: asNumber(comparison.mean_abs_delta_minutes),

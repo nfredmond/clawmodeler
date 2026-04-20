@@ -482,6 +482,159 @@ class ClawModelerEngineTest(unittest.TestCase):
             )
             self.assertIn("Socio join coverage", result.stderr)
 
+    def test_intake_rejects_malformed_network_edges(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            workspace = temp / "workspace"
+            zones = temp / "zones.geojson"
+            socio = temp / "socio.csv"
+            network = temp / "network_edges.csv"
+            zones.write_text(
+                json.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z1"},
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                            },
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z2"},
+                                "geometry": {"type": "Point", "coordinates": [1, 1]},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            socio.write_text("zone_id,population,jobs\nz1,10,5\nz2,20,8\n", encoding="utf-8")
+            network.write_text("from_zone_id,to_zone_id,minutes\nz1,z2,-4\n", encoding="utf-8")
+
+            result = self.run_engine(
+                "intake",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(zones),
+                str(socio),
+                str(network),
+                expected_code=10,
+            )
+            self.assertIn("network_edges.csv has invalid minutes", result.stderr)
+
+    def test_intake_rejects_network_edges_with_unknown_zones(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            workspace = temp / "workspace"
+            zones = temp / "zones.geojson"
+            socio = temp / "socio.csv"
+            network = temp / "network_edges.csv"
+            zones.write_text(
+                json.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z1"},
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                            },
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z2"},
+                                "geometry": {"type": "Point", "coordinates": [1, 1]},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            socio.write_text("zone_id,population,jobs\nz1,10,5\nz2,20,8\n", encoding="utf-8")
+            network.write_text(
+                "from_zone_id,to_zone_id,minutes\nz1,missing,4\n", encoding="utf-8"
+            )
+
+            result = self.run_engine(
+                "intake",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(zones),
+                str(socio),
+                str(network),
+                expected_code=10,
+            )
+            self.assertIn("Network edge zone IDs do not join", result.stderr)
+
+    def test_workflow_routing_diagnosis_flags_disconnected_network(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            workspace = temp / "workspace"
+            zones = temp / "zones.geojson"
+            socio = temp / "socio.csv"
+            network = temp / "network_edges.csv"
+            question = temp / "question.json"
+            zones.write_text(
+                json.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z1"},
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                            },
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z2"},
+                                "geometry": {"type": "Point", "coordinates": [1, 1]},
+                            },
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "z3"},
+                                "geometry": {"type": "Point", "coordinates": [2, 2]},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            socio.write_text(
+                "zone_id,population,jobs\nz1,10,5\nz2,20,8\nz3,30,13\n",
+                encoding="utf-8",
+            )
+            network.write_text("from_zone_id,to_zone_id,minutes\nz1,z2,6\n", encoding="utf-8")
+            question.write_text(json.dumps({"question_type": "accessibility"}), encoding="utf-8")
+
+            self.run_engine(
+                "workflow",
+                "full",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(zones),
+                str(socio),
+                str(network),
+                "--question",
+                str(question),
+                "--run-id",
+                "disconnected",
+                "--skip-bridges",
+                "--scenarios",
+                "baseline",
+            )
+
+            workflow = json.loads(
+                (workspace / "runs" / "disconnected" / "workflow_report.json").read_text()
+            )
+            comparison = workflow["routing"]["proxy_comparison"]
+            self.assertEqual(comparison["coverage_status"], "partial")
+            self.assertEqual(comparison["reachable_pairs"], 2)
+            self.assertEqual(comparison["unreachable_pairs"], 4)
+            self.assertIn("unreachable", comparison["coverage_detail"])
+
     def test_demo_creates_report(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir) / "demo"

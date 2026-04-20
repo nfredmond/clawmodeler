@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,6 +43,7 @@ class PublicFixtureWorkflowTest(unittest.TestCase):
             self.assertEqual(proxy_comparison["compared_pairs"], 6)
             self.assertEqual(proxy_comparison["reachable_pairs"], 6)
             self.assertEqual(proxy_comparison["unreachable_pairs"], 0)
+            self.assertEqual(proxy_comparison["coverage_status"], "complete")
             self.assertGreater(proxy_comparison["max_abs_delta_minutes"], 0)
             self.assertIn("screening QA diagnostic", proxy_comparison["note"])
 
@@ -82,6 +84,48 @@ class PublicFixtureWorkflowTest(unittest.TestCase):
             portfolio = write_portfolio(workspace)
             self.assertEqual(portfolio["run_count"], 2)
             self.assertTrue(Path(portfolio["report_path"]).exists())
+
+    def test_tiny_region_graphml_fixture_routes_full_workflow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "tiny-region-graphml"
+            graph_dir = workspace / "cache" / "graphs"
+            graph_dir.mkdir(parents=True)
+            shutil.copy2(FIXTURE / "tiny.graphml", graph_dir / "tiny.graphml")
+
+            workflow_path = run_full_workflow(
+                workspace,
+                input_paths=[
+                    FIXTURE / "zones.geojson",
+                    FIXTURE / "socio.csv",
+                    FIXTURE / "projects.csv",
+                    FIXTURE / "zone_node_map.csv",
+                ],
+                question_path=FIXTURE / "question.json",
+                run_id="graphml",
+                scenarios=["baseline"],
+                prepare_bridges=False,
+                routing_overrides={
+                    "source": "graphml",
+                    "graph_id": "tiny",
+                    "impedance": "minutes",
+                },
+            )
+
+            workflow = read_json(workflow_path)
+            self.assertEqual(workflow["routing"]["selected_source"], "graphml")
+            proxy_comparison = workflow["routing"]["proxy_comparison"]
+            self.assertEqual(proxy_comparison["network_engine"], "graphml_dijkstra:tiny")
+            self.assertEqual(proxy_comparison["coverage_status"], "complete")
+            self.assertEqual(proxy_comparison["reachable_pairs"], 6)
+            accessibility = (
+                workspace
+                / "runs"
+                / "graphml"
+                / "outputs"
+                / "tables"
+                / "accessibility_by_zone.csv"
+            ).read_text(encoding="utf-8")
+            self.assertIn("graphml_dijkstra:tiny", accessibility)
 
 
 if __name__ == "__main__":

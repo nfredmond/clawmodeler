@@ -1722,7 +1722,7 @@ function renderArtifacts() {
   const routingDetail = routing?.detail ?? "";
   const routingComparison = routing?.proxyComparison;
   const routingComparisonText = routingComparison
-    ? `${routingComparison.reachablePairs ?? 0}/${routingComparison.comparedPairs ?? 0} zone pairs compared; mean absolute delta ${formatOptionalNumber(
+    ? `${routingComparison.coverageStatus ?? "coverage unknown"}: ${routingComparison.reachablePairs ?? 0}/${routingComparison.comparedPairs ?? 0} zone pairs compared; mean absolute delta ${formatOptionalNumber(
         routingComparison.meanAbsDeltaMinutes,
         1,
       )} min.`
@@ -1858,6 +1858,8 @@ function renderArtifacts() {
         ${
           routingComparison
             ? `<p>${escapeHtml(routingComparisonDetail)}</p><p>${escapeHtml(
+                routingComparison.coverageDetail ?? "No routing coverage detail recorded.",
+              )}</p><p>${escapeHtml(
                 routingComparison.note ?? "Comparison is a screening diagnostic, not calibration.",
               )}</p>`
             : ""

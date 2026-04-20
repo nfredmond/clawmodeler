@@ -432,6 +432,7 @@ def routing_proxy_comparison(
         "compared_pairs": compared_pairs,
         "reachable_pairs": reachable_pairs,
         "unreachable_pairs": unreachable_pairs,
+        "reachable_pair_share": round(reachable_pairs / compared_pairs, 6),
         "proxy_speed_kph": round(speed_kph, 3),
         "note": (
             "Compares selected network shortest paths with straight-line proxy travel times "
@@ -439,6 +440,24 @@ def routing_proxy_comparison(
             "calibrated validation target."
         ),
     }
+    if reachable_pairs == compared_pairs:
+        comparison["coverage_status"] = "complete"
+        comparison["coverage_detail"] = (
+            "Selected network routing reaches every ordered zone pair in the staged zones."
+        )
+    elif reachable_pairs == 0:
+        comparison["coverage_status"] = "disconnected"
+        comparison["coverage_detail"] = (
+            "Selected network routing does not connect any ordered zone pairs in the staged "
+            "zones. Accessibility outputs may only count same-zone opportunities."
+        )
+    else:
+        comparison["coverage_status"] = "partial"
+        comparison["coverage_detail"] = (
+            f"Selected network routing reaches {reachable_pairs} of {compared_pairs} ordered "
+            f"zone pairs; {unreachable_pairs} pair(s) are unreachable. Accessibility outputs "
+            "may undercount opportunities across disconnected zones."
+        )
     if reachable_pairs:
         comparison.update(
             {

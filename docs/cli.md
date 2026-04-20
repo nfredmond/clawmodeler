@@ -126,7 +126,7 @@ Runs may optionally set `question.routing`:
 }
 ```
 
-Supported `source` values are `auto`, `network_edges_csv`, `graphml`, and `euclidean_proxy`. `minutes` is the only supported impedance in this pass. `workflow full`, `workflow report-only`, and `workflow diagnose` write routing diagnostics; when a network source is selected, the report includes a zone-pair comparison against straight-line proxy travel times as a screening QA check.
+Supported `source` values are `auto`, `network_edges_csv`, `graphml`, and `euclidean_proxy`. `minutes` is the only supported impedance in this pass. `intake` rejects `network_edges.csv` rows with blank endpoint IDs, nonpositive minutes, or endpoint IDs that do not join to staged GeoJSON zones. `workflow full`, `workflow report-only`, and `workflow diagnose` write routing diagnostics; when a network source is selected, the report includes reachable-pair coverage and a zone-pair comparison against straight-line proxy travel times as a screening QA check.
 
 ## Notes
 

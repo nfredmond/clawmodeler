@@ -27,6 +27,7 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 - Detailed-engine readiness records method notes, required calibration inputs, required validation targets, and missing readiness blockers.
 - Routing choices are controlled through both CLI and desktop workflow surfaces, with diagnostics recorded in workflow reports.
 - The tiny public fixture and desktop acceptance gate now prove network-edge routing end to end and record a network-vs-proxy zone-pair comparison without treating it as calibration.
+- Intake rejects malformed `network_edges.csv` files, rejects network endpoints that do not join to staged GeoJSON zones, validates `zone_node_map.csv` coverage, and tests a public GraphML routing fixture.
 - Bridge execution dry runs and command reports are available from both CLI and desktop surfaces, with generated bridge outputs included in audit reports.
 - QA blocks unsupported report export and validates manifest and fact-block evidence.
 - Planner Pack emitters cover CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP.
@@ -38,17 +39,17 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 
 ## Next Engineering Milestones
 
-1. **Deepen routing import quality.**
-
-   Add stronger validation for `network_edges.csv`, add a GraphML fixture path with `zone_node_map.csv`, and make routing diagnostics expose unreachable pairs and weak graph coverage in planner-readable terms.
-
-2. **Turn bridge execution from dry-run confidence into useful operator feedback.**
+1. **Turn bridge execution from dry-run confidence into useful operator feedback.**
 
    Keep execution optional, but improve per-bridge command checks, missing-tool messages, generated-script previews, and report links before attempting deeper external-engine automation.
 
-3. **Persist desktop project state.**
+2. **Persist desktop project state.**
 
    Add saved recent workspaces, active run history, and explicit run labels so the desktop workbench feels like a durable local app rather than a stateless launcher over files.
+
+3. **Deepen the local data layer.**
+
+   Build on the DuckDB starter sync with stable table schemas, import validation summaries, and queryable run/artifact indexes for portfolio, diff, and desktop summaries.
 
 4. **Add optional ML workflows last.**
 
@@ -76,4 +77,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when routing import validation catches malformed or disconnected networks, the GraphML path is covered by a public fixture, and desktop summaries explain routing coverage problems without claiming calibrated forecasts from screening-level inputs.
+The next pass is done when bridge execution reports explain missing tools, generated commands, dry-run readiness, and output files clearly enough that a planner can tell whether they have a handoff package, an executable local engine, or validated detailed-model evidence.
