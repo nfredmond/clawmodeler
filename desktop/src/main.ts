@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   artifactBasename,
+  buildBridgeExecuteArgs,
   buildDiffArgs,
   buildFullWorkflowArgs,
   buildPlannerPackArgs,
@@ -129,6 +130,15 @@ type PlannerPackState = {
   lastResult: Record<string, unknown> | null;
 };
 
+type BridgeExecutionState = {
+  bridge: string;
+  scenarioId: string;
+  dryRun: boolean;
+  busy: boolean;
+  status: string;
+  lastResult: Record<string, unknown> | null;
+};
+
 type AppState = {
   workspace: string;
   runId: string;
@@ -136,6 +146,9 @@ type AppState = {
   questionPath: string;
   scenarios: string;
   skipBridges: boolean;
+  routingSource: string;
+  routingGraphId: string;
+  routingImpedance: string;
   busy: boolean;
   status: string;
   doctor: DoctorResult | null;
@@ -149,6 +162,7 @@ type AppState = {
   chatNoHistory: boolean;
   chatStatus: string;
   plannerPack: PlannerPackState;
+  bridgeExecution: BridgeExecutionState;
   whatIf: WhatIfState;
   portfolio: PortfolioState;
 };
@@ -160,6 +174,9 @@ const state: AppState = {
   questionPath: localStorage.getItem("clawmodeler.questionPath") || "",
   scenarios: localStorage.getItem("clawmodeler.scenarios") || "baseline",
   skipBridges: localStorage.getItem("clawmodeler.skipBridges") === "true",
+  routingSource: localStorage.getItem("clawmodeler.routingSource") || "question",
+  routingGraphId: localStorage.getItem("clawmodeler.routingGraphId") || "",
+  routingImpedance: localStorage.getItem("clawmodeler.routingImpedance") || "minutes",
   busy: false,
   status: "Ready",
   doctor: null,
@@ -181,6 +198,14 @@ const state: AppState = {
     kind: (localStorage.getItem("clawmodeler.plannerPack.kind") as PlannerPackKind) || "ceqa-vmt",
     cycleYear: localStorage.getItem("clawmodeler.plannerPack.cycleYear") || "2027",
     analysisYear: localStorage.getItem("clawmodeler.plannerPack.analysisYear") || "2027",
+    busy: false,
+    status: "",
+    lastResult: null,
+  },
+  bridgeExecution: {
+    bridge: localStorage.getItem("clawmodeler.bridgeExecution.bridge") || "sumo",
+    scenarioId: localStorage.getItem("clawmodeler.bridgeExecution.scenarioId") || "baseline",
+    dryRun: localStorage.getItem("clawmodeler.bridgeExecution.dryRun") !== "false",
     busy: false,
     status: "",
     lastResult: null,
@@ -253,6 +278,10 @@ function readinessTone(value: boolean | null | undefined): "ok" | "bad" | "unkno
   return "unknown";
 }
 
+function selected(value: string, current: string): string {
+  return value === current ? "selected" : "";
+}
+
 function stringField(payload: Record<string, unknown>, key: string, fallback = ""): string {
   const value = payload[key];
   return typeof value === "string" ? value : fallback;
@@ -265,6 +294,9 @@ function saveForm() {
   localStorage.setItem("clawmodeler.questionPath", state.questionPath);
   localStorage.setItem("clawmodeler.scenarios", state.scenarios);
   localStorage.setItem("clawmodeler.skipBridges", String(state.skipBridges));
+  localStorage.setItem("clawmodeler.routingSource", state.routingSource);
+  localStorage.setItem("clawmodeler.routingGraphId", state.routingGraphId);
+  localStorage.setItem("clawmodeler.routingImpedance", state.routingImpedance);
 }
 
 function isTauriRuntime(): boolean {
@@ -551,6 +583,18 @@ function savePlannerPackForm() {
   localStorage.setItem("clawmodeler.plannerPack.analysisYear", state.plannerPack.analysisYear);
 }
 
+function saveBridgeExecutionForm() {
+  localStorage.setItem("clawmodeler.bridgeExecution.bridge", state.bridgeExecution.bridge);
+  localStorage.setItem(
+    "clawmodeler.bridgeExecution.scenarioId",
+    state.bridgeExecution.scenarioId,
+  );
+  localStorage.setItem(
+    "clawmodeler.bridgeExecution.dryRun",
+    String(state.bridgeExecution.dryRun),
+  );
+}
+
 async function submitPlannerPack() {
   const validation = validatePlannerPackForm({
     workspace: state.workspace,
@@ -587,6 +631,47 @@ async function submitPlannerPack() {
     state.plannerPack.status = friendlyError(raw);
   } finally {
     state.plannerPack.busy = false;
+    render();
+  }
+}
+
+async function executeBridge() {
+  const workspace = state.workspace.trim();
+  const runId = state.runId.trim();
+  const bridge = state.bridgeExecution.bridge.trim();
+  if (!workspace || !runId || !bridge) {
+    state.bridgeExecution.status = "Workspace, run ID, and bridge are required.";
+    render();
+    return;
+  }
+
+  state.bridgeExecution.busy = true;
+  state.bridgeExecution.status = state.bridgeExecution.dryRun
+    ? `Checking ${bridge} execution readiness…`
+    : `Executing ${bridge} bridge…`;
+  render();
+  try {
+    const result = await api<Record<string, unknown>>("/api/clawmodeler/run", {
+      args: buildBridgeExecuteArgs({
+        workspace,
+        runId,
+        bridge,
+        scenarioId: state.bridgeExecution.scenarioId.trim() || "baseline",
+        dryRun: state.bridgeExecution.dryRun,
+      }),
+    });
+    state.bridgeExecution.lastResult = result.json ?? null;
+    const payload = (result.json ?? {}) as Record<string, unknown>;
+    state.bridgeExecution.status =
+      typeof payload.bridge_execution_report === "string"
+        ? `${payload.status ?? "done"}: ${payload.bridge_execution_report}`
+        : `${payload.status ?? "done"}`;
+    await refreshArtifacts(false);
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    state.bridgeExecution.status = friendlyError(raw);
+  } finally {
+    state.bridgeExecution.busy = false;
     render();
   }
 }
@@ -870,6 +955,20 @@ function bindControls() {
     state.skipBridges = (event.target as HTMLInputElement).checked;
     saveForm();
   });
+  appRoot.querySelector<HTMLSelectElement>("#routing-source")?.addEventListener("change", (event) => {
+    state.routingSource = (event.target as HTMLSelectElement).value;
+    saveForm();
+  });
+  appRoot.querySelector<HTMLInputElement>("#routing-graph-id")?.addEventListener("input", (event) => {
+    state.routingGraphId = (event.target as HTMLInputElement).value;
+    saveForm();
+  });
+  appRoot
+    .querySelector<HTMLSelectElement>("#routing-impedance")
+    ?.addEventListener("change", (event) => {
+      state.routingImpedance = (event.target as HTMLSelectElement).value;
+      saveForm();
+    });
 
   appRoot
     .querySelector<HTMLButtonElement>("[data-action='doctor']")
@@ -937,6 +1036,9 @@ function bindControls() {
             runId: state.runId,
             scenarios: normalizeScenarios(state.scenarios),
             skipBridges: state.skipBridges,
+            routingSource: state.routingSource,
+            routingGraphId: state.routingGraphId,
+            routingImpedance: state.routingImpedance,
           }),
         }),
       );
@@ -954,6 +1056,30 @@ function bindControls() {
       void runAction("Regenerating report", () =>
         api("/api/clawmodeler/report-only", { workspace: state.workspace, runId: state.runId }),
       );
+    });
+
+  appRoot
+    .querySelector<HTMLSelectElement>("#bridge-execution-bridge")
+    ?.addEventListener("change", (event) => {
+      state.bridgeExecution.bridge = (event.target as HTMLSelectElement).value;
+      saveBridgeExecutionForm();
+    });
+  appRoot
+    .querySelector<HTMLInputElement>("#bridge-execution-scenario")
+    ?.addEventListener("input", (event) => {
+      state.bridgeExecution.scenarioId = (event.target as HTMLInputElement).value;
+      saveBridgeExecutionForm();
+    });
+  appRoot
+    .querySelector<HTMLInputElement>("#bridge-execution-dry-run")
+    ?.addEventListener("change", (event) => {
+      state.bridgeExecution.dryRun = (event.target as HTMLInputElement).checked;
+      saveBridgeExecutionForm();
+    });
+  appRoot
+    .querySelector<HTMLButtonElement>("[data-action='bridge-execute']")
+    ?.addEventListener("click", () => {
+      void executeBridge();
     });
   appRoot
     .querySelector<HTMLButtonElement>("[data-action='refresh']")
@@ -1584,6 +1710,12 @@ function renderArtifacts() {
     runSummary?.bridgeGeneratedFileCount === null || runSummary?.bridgeGeneratedFileCount === undefined
       ? "No bridge file links recorded"
       : `${runSummary.bridgeGeneratedFileCount} generated bridge file link(s)`;
+  const bridgeExecutionReportCount = runSummary?.bridgeExecutionReports.length ?? 0;
+  const routing = runSummary?.routing;
+  const routingText = routing
+    ? `${routing.selectedSource} (${routing.impedance})`
+    : "No routing diagnosis recorded";
+  const routingDetail = routing?.detail ?? "";
   const qaExportReady = runSummary?.qaExportReady;
   const bridgePackageReady = runSummary?.bridgeExportReady;
   const detailedForecastReady = runSummary?.detailedForecastReady;
@@ -1659,6 +1791,14 @@ function renderArtifacts() {
           <span>${escapeHtml(bridgeGenerated)}</span>
         </div>
         <div>
+          <strong>Bridge execution</strong>
+          <span>${escapeHtml(`${bridgeExecutionReportCount} report(s)`)}</span>
+        </div>
+        <div>
+          <strong>Routing</strong>
+          <span>${escapeHtml(routingText)}</span>
+        </div>
+        <div>
           <strong>Generated artifacts</strong>
           <span>${escapeHtml(generated)}</span>
         </div>
@@ -1686,6 +1826,19 @@ function renderArtifacts() {
       <details>
         <summary>Bridge package inputs</summary>
         ${skippedBridges}
+      </details>
+      <details>
+        <summary>Routing diagnosis</summary>
+        <p>${escapeHtml(routingDetail || "No routing diagnosis recorded.")}</p>
+        <p>Requested: <code>${escapeHtml(routing?.requestedSource ?? "unknown")}</code>. Graph ID: <code>${escapeHtml(routing?.graphId ?? "none")}</code>.</p>
+      </details>
+      <details>
+        <summary>Bridge execution reports</summary>
+        ${
+          runSummary && runSummary.bridgeExecutionReports.length > 0
+            ? `<ul>${runSummary.bridgeExecutionReports.map((path) => `<li><code>${escapeHtml(path)}</code></li>`).join("")}</ul>`
+            : "<p>No bridge execution reports recorded.</p>"
+        }
       </details>
     </section>
 
@@ -1752,6 +1905,50 @@ function renderArtifacts() {
   `;
 }
 
+function renderBridgeExecution() {
+  const execution = state.bridgeExecution;
+  const scenario = execution.scenarioId || normalizeScenarios(state.scenarios)[0] || "baseline";
+  const last = execution.lastResult
+    ? `<pre>${escapeHtml(JSON.stringify(execution.lastResult, null, 2))}</pre>`
+    : `<p class="muted">Run a dry-run check first. It writes the same execution report shape without starting the external engine.</p>`;
+  return `
+    <section class="panel bridge-execution-panel" id="bridge-execution">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow"><span class="step-num">4</span> Bridge Execution</p>
+          <h2>External Engine Check</h2>
+        </div>
+        <span>${escapeHtml(execution.status || "Ready")}</span>
+      </div>
+      <p class="muted">Execution reports confirm a bridge command ran or was blocked. Forecast claims still require validation-ready detailed-engine evidence.</p>
+      <div class="bridge-exec-grid">
+        <label>
+          Bridge
+          <select id="bridge-execution-bridge">
+            <option value="sumo" ${selected("sumo", execution.bridge)}>SUMO</option>
+            <option value="matsim" ${selected("matsim", execution.bridge)}>MATSim</option>
+            <option value="urbansim" ${selected("urbansim", execution.bridge)}>UrbanSim</option>
+            <option value="dtalite" ${selected("dtalite", execution.bridge)}>DTALite</option>
+            <option value="tbest" ${selected("tbest", execution.bridge)}>TBEST</option>
+          </select>
+        </label>
+        <label>
+          Scenario
+          <input id="bridge-execution-scenario" value="${escapeHtml(scenario)}" spellcheck="false" />
+        </label>
+        <label class="check-row">
+          <input id="bridge-execution-dry-run" type="checkbox" ${execution.dryRun ? "checked" : ""} />
+          Dry run
+        </label>
+      </div>
+      <button data-action="bridge-execute" ${execution.busy ? "disabled" : ""}>${execution.dryRun ? "Check readiness" : "Execute bridge"}</button>
+      <div class="log bridge-exec-result">
+        ${last}
+      </div>
+    </section>
+  `;
+}
+
 function render() {
   appRoot.innerHTML = `
     <main class="shell">
@@ -1768,6 +1965,7 @@ function render() {
           <a href="#workspace">Workspace</a>
           <a href="#run">Run</a>
           <a href="#qa">QA</a>
+          <a href="#bridge-execution">Bridge</a>
           <a href="#report">Report</a>
           <a href="#planner-pack">Planner Pack</a>
           <a href="#chat">Chat</a>
@@ -1855,6 +2053,33 @@ function render() {
               )}" placeholder="baseline build" spellcheck="false" />
               <small class="help">Space- or comma-separated names for the scenarios to run (e.g., "baseline build"). Defaults to "baseline".</small>
             </label>
+            <div class="routing-grid">
+              <label>
+                Routing source
+                <select id="routing-source">
+                  <option value="question" ${selected("question", state.routingSource)}>Use question.json</option>
+                  <option value="auto" ${selected("auto", state.routingSource)}>Auto</option>
+                  <option value="network_edges_csv" ${selected("network_edges_csv", state.routingSource)}>Network edges CSV</option>
+                  <option value="graphml" ${selected("graphml", state.routingSource)}>GraphML cache</option>
+                  <option value="euclidean_proxy" ${selected("euclidean_proxy", state.routingSource)}>Proxy travel times</option>
+                </select>
+                <small class="help">Controls the run's accessibility routing source without editing question.json.</small>
+              </label>
+              <label>
+                Graph ID
+                <input id="routing-graph-id" value="${escapeHtml(
+                  state.routingGraphId,
+                )}" placeholder="davis-drive" spellcheck="false" />
+                <small class="help">Optional GraphML cache name in cache/graphs, used with GraphML routing.</small>
+              </label>
+              <label>
+                Impedance
+                <select id="routing-impedance">
+                  <option value="minutes" ${selected("minutes", state.routingImpedance)}>Minutes</option>
+                </select>
+                <small class="help">Minutes is the supported routing impedance for this release.</small>
+              </label>
+            </div>
             <label class="check-row">
               <input id="skip-bridges" type="checkbox" ${state.skipBridges ? "checked" : ""} />
               Skip bridge packages
@@ -1892,6 +2117,8 @@ function render() {
         <div id="qa" class="results">
           ${renderArtifacts()}
         </div>
+
+        ${renderBridgeExecution()}
 
         ${renderPlannerPack()}
 

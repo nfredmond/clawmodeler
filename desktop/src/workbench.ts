@@ -37,6 +37,14 @@ export type DetailedForecastStatusSummary = {
   summary: string | null;
 };
 
+export type RoutingSummary = {
+  requestedSource: string;
+  selectedSource: string;
+  graphId: string | null;
+  impedance: string;
+  detail: string | null;
+};
+
 export type RunSummary = {
   runId: string;
   workspacePath: string;
@@ -48,7 +56,9 @@ export type RunSummary = {
   detailedForecastReady: boolean | null;
   detailedForecastStatuses: DetailedForecastStatusSummary[];
   bridgeGeneratedFileCount: number | null;
+  bridgeExecutionReports: string[];
   bridgeSkippedInputs: BridgeSkippedSummary[];
+  routing: RoutingSummary | null;
   plannerPackArtifacts: string[];
   generatedArtifacts: GeneratedArtifactSummary[];
   missingSidecars: string[];
@@ -161,6 +171,9 @@ export function buildFullWorkflowArgs(params: {
   runId: string;
   scenarios: string[];
   skipBridges: boolean;
+  routingSource?: string;
+  routingGraphId?: string;
+  routingImpedance?: string;
 }): string[] {
   const args = [
     "workflow",
@@ -176,8 +189,41 @@ export function buildFullWorkflowArgs(params: {
     "--scenarios",
     ...params.scenarios,
   ];
+  if (params.routingSource && params.routingSource !== "question") {
+    args.push("--routing-source", params.routingSource);
+  }
+  if (params.routingGraphId?.trim()) {
+    args.push("--routing-graph-id", params.routingGraphId.trim());
+  }
+  if (params.routingImpedance?.trim()) {
+    args.push("--routing-impedance", params.routingImpedance.trim());
+  }
   if (params.skipBridges) {
     args.push("--skip-bridges");
+  }
+  return args;
+}
+
+export function buildBridgeExecuteArgs(params: {
+  workspace: string;
+  runId: string;
+  bridge: string;
+  scenarioId: string;
+  dryRun: boolean;
+}): string[] {
+  const args = [
+    "bridge",
+    params.bridge,
+    "execute",
+    "--workspace",
+    params.workspace,
+    "--run-id",
+    params.runId,
+    "--scenario-id",
+    params.scenarioId || "baseline",
+  ];
+  if (params.dryRun) {
+    args.push("--dry-run");
   }
   return args;
 }
@@ -396,6 +442,29 @@ function bridgeGeneratedFileCount(workflowReport: Record<string, unknown> | null
   return seen.size > 0 ? seen.size : null;
 }
 
+function bridgeExecutionReports(files: string[]): string[] {
+  return files
+    .filter((path) => normalizedSuffix(path).endsWith("bridge_execution_report.json"))
+    .toSorted();
+}
+
+function routingSummary(workflowReport: Record<string, unknown> | null): RoutingSummary | null {
+  const routing = workflowReport?.routing;
+  if (!routing || typeof routing !== "object" || Array.isArray(routing)) {
+    return null;
+  }
+  const row = routing as Record<string, unknown>;
+  return {
+    requestedSource:
+      typeof row.requested_source === "string" ? row.requested_source : "auto",
+    selectedSource:
+      typeof row.selected_source === "string" ? row.selected_source : "unknown",
+    graphId: asString(row.graph_id),
+    impedance: typeof row.impedance === "string" ? row.impedance : "minutes",
+    detail: asString(row.detail),
+  };
+}
+
 function bridgeSkippedInputs(workflowReport: Record<string, unknown> | null): BridgeSkippedSummary[] {
   const bridgePrepare = workflowReport?.bridges;
   if (!bridgePrepare || typeof bridgePrepare !== "object" || Array.isArray(bridgePrepare)) {
@@ -480,7 +549,9 @@ export function summarizeRunArtifacts(artifacts: WorkspaceArtifacts | null): Run
     detailedForecastReady: detailedForecastReady(artifacts.workflowReport, artifacts.manifest),
     detailedForecastStatuses: detailedForecastStatuses(artifacts.workflowReport, artifacts.manifest),
     bridgeGeneratedFileCount: bridgeGeneratedFileCount(artifacts.workflowReport),
+    bridgeExecutionReports: bridgeExecutionReports(artifacts.files),
     bridgeSkippedInputs: bridgeSkippedInputs(artifacts.workflowReport),
+    routing: routingSummary(artifacts.workflowReport),
     plannerPackArtifacts: detectPlannerPackArtifacts(artifacts.files, artifacts.manifest),
     generatedArtifacts: generatedArtifactSummary(artifacts.manifest),
     missingSidecars: missingManifestSidecars(artifacts),

@@ -1285,6 +1285,93 @@ class ClawModelerEngineTest(unittest.TestCase):
             ).read_text(encoding="utf-8")
             self.assertIn("graphml_dijkstra:fast", accessibility)
 
+    def test_workflow_full_routing_override_updates_analysis_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            workspace = temp / "workspace"
+            zones = temp / "zones.geojson"
+            socio = temp / "socio.csv"
+            zone_node_map = temp / "zone_node_map.csv"
+            question = temp / "question.json"
+            zones.write_text(
+                json.dumps(
+                    {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "a"},
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                            },
+                            {
+                                "type": "Feature",
+                                "properties": {"zone_id": "b"},
+                                "geometry": {"type": "Point", "coordinates": [1, 0]},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            socio.write_text("zone_id,population,jobs\na,10,5\nb,20,80\n", encoding="utf-8")
+            zone_node_map.write_text("zone_id,node_id\na,n1\nb,n2\n", encoding="utf-8")
+            question.write_text(json.dumps({"question_type": "accessibility"}), encoding="utf-8")
+            graph_dir = workspace / "cache" / "graphs"
+            graph_dir.mkdir(parents=True, exist_ok=True)
+            (graph_dir / "fast.graphml").write_text(
+                """<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <key id="d0" for="edge" attr.name="travel_time" attr.type="double"/>
+  <graph id="G" edgedefault="directed">
+    <node id="n1"/>
+    <node id="n2"/>
+    <edge source="n1" target="n2"><data key="d0">300</data></edge>
+  </graph>
+</graphml>
+""",
+                encoding="utf-8",
+            )
+
+            self.run_engine(
+                "workflow",
+                "full",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(zones),
+                str(socio),
+                str(zone_node_map),
+                "--question",
+                str(question),
+                "--run-id",
+                "override",
+                "--skip-bridges",
+                "--routing-source",
+                "graphml",
+                "--routing-graph-id",
+                "fast",
+                "--routing-impedance",
+                "minutes",
+                "--scenarios",
+                "baseline",
+            )
+
+            analysis_plan = json.loads((workspace / "analysis_plan.json").read_text())
+            self.assertEqual(analysis_plan["question"]["routing"]["source"], "graphml")
+            workflow = json.loads(
+                (workspace / "runs" / "override" / "workflow_report.json").read_text()
+            )
+            self.assertEqual(workflow["routing"]["selected_source"], "graphml")
+            accessibility = (
+                workspace
+                / "runs"
+                / "override"
+                / "outputs"
+                / "tables"
+                / "accessibility_by_zone.csv"
+            ).read_text(encoding="utf-8")
+            self.assertIn("graphml_dijkstra:fast", accessibility)
+
     def test_question_routing_rejects_unsupported_impedance(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)

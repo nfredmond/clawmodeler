@@ -151,6 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_full.add_argument("--run-id", required=True)
     workflow_full.add_argument("--scenarios", nargs="*", default=["baseline"])
     workflow_full.add_argument("--format", choices=["md"], default="md")
+    add_routing_override_arguments(workflow_full)
     workflow_full.add_argument(
         "--skip-bridges",
         action="store_true",
@@ -757,6 +758,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def add_routing_override_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--routing-source",
+        choices=["auto", "network_edges_csv", "graphml", "euclidean_proxy"],
+        help="Override question.routing.source for this run.",
+    )
+    parser.add_argument(
+        "--routing-graph-id",
+        help="Override question.routing.graph_id for this run.",
+    )
+    parser.add_argument(
+        "--routing-impedance",
+        choices=["minutes"],
+        help="Override question.routing.impedance for this run.",
+    )
+
+
 def add_bridge_execute_arguments(parser: argparse.ArgumentParser, bridge: str) -> None:
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--run-id", required=True)
@@ -920,6 +938,7 @@ def command_workflow_full(args: argparse.Namespace) -> None:
         scenarios=args.scenarios,
         export_format=args.format,
         prepare_bridges=not args.skip_bridges,
+        routing_overrides=cli_routing_overrides(args),
     )
     report = read_json(path)
     print(
@@ -942,6 +961,16 @@ def command_workflow_full(args: argparse.Namespace) -> None:
             }
         )
     )
+
+
+def cli_routing_overrides(args: argparse.Namespace) -> dict[str, str] | None:
+    raw = {
+        "source": getattr(args, "routing_source", None),
+        "graph_id": getattr(args, "routing_graph_id", None),
+        "impedance": getattr(args, "routing_impedance", None),
+    }
+    overrides = {key: str(value) for key, value in raw.items() if value}
+    return overrides or None
 
 
 def command_workflow_demo_full(args: argparse.Namespace) -> None:

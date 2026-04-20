@@ -106,6 +106,7 @@ def execute_bridge(
         return path
 
     assert command is not None
+    before_files = bridge_dir_files(bridge_dir)
     stdout_log = bridge_dir / f"{scenario_id}.{bridge}.stdout.log"
     stderr_log = bridge_dir / f"{scenario_id}.{bridge}.stderr.log"
     result = subprocess.run(
@@ -117,6 +118,7 @@ def execute_bridge(
     )
     stdout_log.write_text(result.stdout, encoding="utf-8")
     stderr_log.write_text(result.stderr, encoding="utf-8")
+    after_files = bridge_dir_files(bridge_dir)
     status = "execution_succeeded" if result.returncode == 0 else "execution_failed"
     path = write_execution_report(
         report_path,
@@ -132,13 +134,22 @@ def execute_bridge(
         stdout_log=str(stdout_log),
         stderr_log=str(stderr_log),
         generated_outputs=sorted(
-            set(manifest_file_links(manifest_path)) | {str(stdout_log), str(stderr_log)}
+            set(manifest_file_links(manifest_path))
+            | {str(stdout_log), str(stderr_log)}
+            | after_files
+            | (after_files - before_files)
         ),
         forecast_readiness=manifest.get("forecast_readiness"),
         limitations=execution_limitations(manifest),
     )
     update_manifest_execution(manifest_path, manifest, path, status)
     return path
+
+
+def bridge_dir_files(bridge_dir: Path) -> set[str]:
+    if not bridge_dir.exists():
+        return set()
+    return {str(path) for path in bridge_dir.rglob("*") if path.is_file()}
 
 
 def validate_bridge_for_execution(

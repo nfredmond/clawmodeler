@@ -27,7 +27,9 @@ clawmodeler-engine workflow full \
   --inputs zones.geojson socio.csv network_edges.csv projects.csv feed.zip \
   --question question.json \
   --run-id demo \
-  --scenarios baseline scenario-a
+  --scenarios baseline scenario-a \
+  --routing-source auto \
+  --routing-impedance minutes
 
 clawmodeler-engine workflow demo-full --workspace ./demo --run-id demo
 clawmodeler-engine workflow report-only --workspace ./demo --run-id demo

@@ -12,6 +12,7 @@
     "release:assets": "node scripts/check-release-assets.mjs",
     "release:assets:test": "node scripts/check-release-assets.mjs --self-test",
     "release:latest-policy:test": "node scripts/release-latest-policy.mjs --self-test",
+    "release:version-check": "node scripts/check-version-consistency.mjs",
     "release:sidecar-smoke": "node scripts/check-release-sidecar.mjs",
     "ui:dev": "pnpm --dir desktop dev",
     "ui:build": "pnpm --dir desktop build",

@@ -35,11 +35,16 @@ def run_full_workflow(
     scenarios: list[str],
     export_format: str = "md",
     prepare_bridges: bool = True,
+    routing_overrides: dict[str, str] | None = None,
 ) -> Path:
     scenario_ids = normalize_scenario_ids(scenarios)
     init_workspace(workspace)
     intake_path = write_intake(workspace, input_paths)
-    analysis_plan_path, engine_selection_path = write_plan(workspace, question_path)
+    analysis_plan_path, engine_selection_path = write_plan(
+        workspace,
+        question_path,
+        routing_overrides=routing_overrides,
+    )
     manifest_path, qa_report_path = write_run(workspace, run_id, scenario_ids)
     report_path = write_export(workspace, run_id, export_format)
 
@@ -79,6 +84,7 @@ def run_full_workflow(
             "bridge_validation": read_json(bridge_validation_path)
             if bridge_validation_path
             else None,
+            "routing": routing_diagnosis(workspace, read_json(intake_path)),
             "detailed_engine_readiness": read_json(manifest_path).get(
                 "detailed_engine_readiness"
             ),
@@ -143,6 +149,10 @@ def run_report_only_workflow(
             "bridge_validation": read_json(bridge_validation_path)
             if bridge_validation_path
             else None,
+            "routing": routing_diagnosis(
+                workspace,
+                read_optional_json(workspace / "intake_receipt.json"),
+            ),
             "detailed_engine_readiness": build_detailed_engine_readiness(workspace),
         },
         "workflow_report",

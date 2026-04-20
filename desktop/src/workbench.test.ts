@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   artifactBasename,
+  buildBridgeExecuteArgs,
   buildDiffArgs,
   buildFullWorkflowArgs,
   buildPlannerPackArgs,
@@ -77,6 +78,9 @@ describe("clawmodeler workbench helpers", () => {
         runId: "demo",
         scenarios: ["baseline"],
         skipBridges: true,
+        routingSource: "graphml",
+        routingGraphId: "davis-drive",
+        routingImpedance: "minutes",
       }),
     ).toEqual([
       "workflow",
@@ -92,7 +96,36 @@ describe("clawmodeler workbench helpers", () => {
       "demo",
       "--scenarios",
       "baseline",
+      "--routing-source",
+      "graphml",
+      "--routing-graph-id",
+      "davis-drive",
+      "--routing-impedance",
+      "minutes",
       "--skip-bridges",
+    ]);
+  });
+
+  it("builds bridge execution args", () => {
+    expect(
+      buildBridgeExecuteArgs({
+        workspace: "/tmp/demo",
+        runId: "demo",
+        bridge: "matsim",
+        scenarioId: "baseline",
+        dryRun: true,
+      }),
+    ).toEqual([
+      "bridge",
+      "matsim",
+      "execute",
+      "--workspace",
+      "/tmp/demo",
+      "--run-id",
+      "demo",
+      "--scenario-id",
+      "baseline",
+      "--dry-run",
     ]);
   });
 
@@ -168,9 +201,19 @@ describe("clawmodeler workbench helpers", () => {
           detailed_forecast_ready: false,
           blockers: ["sumo_not_ready"],
         },
+        routing: {
+          requested_source: "auto",
+          selected_source: "network_edges_csv",
+          graph_id: null,
+          impedance: "minutes",
+          detail: "Auto-selection uses staged network_edges.csv.",
+        },
       },
       reportMarkdown: null,
-      files: ["/tmp/ws/runs/demo/outputs/tables/ceqa_vmt.csv"],
+      files: [
+        "/tmp/ws/runs/demo/outputs/tables/ceqa_vmt.csv",
+        "/tmp/ws/runs/demo/outputs/bridges/matsim/bridge_execution_report.json",
+      ],
       filesTruncated: false,
     });
 
@@ -190,6 +233,16 @@ describe("clawmodeler workbench helpers", () => {
       },
     ]);
     expect(summary?.bridgeGeneratedFileCount).toBe(2);
+    expect(summary?.bridgeExecutionReports).toEqual([
+      "/tmp/ws/runs/demo/outputs/bridges/matsim/bridge_execution_report.json",
+    ]);
+    expect(summary?.routing).toEqual({
+      requestedSource: "auto",
+      selectedSource: "network_edges_csv",
+      graphId: null,
+      impedance: "minutes",
+      detail: "Auto-selection uses staged network_edges.csv.",
+    });
     expect(summary?.bridgeSkippedInputs).toEqual([
       {
         bridge: "tbest",

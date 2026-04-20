@@ -4,7 +4,7 @@ ClawModeler releases are tag-driven. Pushing a `vX.Y.Z` tag builds Linux, macOS 
 
 Before tagging:
 
-- Confirm all version fields match the intended tag: root `package.json`, Python package metadata, `ENGINE_VERSION`, Tauri `Cargo.toml`, `Cargo.lock`, and `tauri.conf.json`.
+- Confirm all version fields match the intended tag with `pnpm release:version-check`: root `package.json`, Python package metadata, `ENGINE_VERSION`, Tauri `Cargo.toml`, `Cargo.lock`, and `tauri.conf.json`.
 - Run the core checks: `python3 -m ruff check .`, `pnpm engine:test`, `pnpm engine:check`, `pnpm ui:test`, `pnpm ui:build`, `pnpm desktop:acceptance`, and `cargo check` in `desktop/src-tauri`.
 - Build the sidecar with `pnpm sidecar:build`, then run `pnpm release:sidecar-smoke`.
 

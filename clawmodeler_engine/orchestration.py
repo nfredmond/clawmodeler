@@ -53,10 +53,16 @@ def write_intake(workspace: Path, input_paths: list[Path]) -> Path:
     return output_path
 
 
-def write_plan(workspace: Path, question_path: Path) -> tuple[Path, Path]:
+def write_plan(
+    workspace: Path,
+    question_path: Path,
+    *,
+    routing_overrides: dict[str, str] | None = None,
+) -> tuple[Path, Path]:
     ensure_workspace(workspace)
     receipt = load_receipt(workspace)
     question = normalize_question_contract(read_json(question_path))
+    question = apply_routing_overrides(question, routing_overrides)
     input_flags = discover_workspace_inputs(workspace)
     engine_selection = select_engine(question, input_flags)
     analysis_plan = stamp_contract(
@@ -122,6 +128,30 @@ def select_engine(question: dict[str, Any], flags: dict[str, bool]) -> dict[str,
 def normalize_scenario_ids(scenarios: list[str]) -> list[str]:
     scenario_ids = [str(scenario).strip() for scenario in scenarios if str(scenario).strip()]
     return scenario_ids or ["baseline"]
+
+
+def apply_routing_overrides(
+    question: dict[str, Any],
+    routing_overrides: dict[str, str] | None,
+) -> dict[str, Any]:
+    if not routing_overrides:
+        return question
+
+    routing = question.get("routing")
+    if not isinstance(routing, dict):
+        routing = {}
+    else:
+        routing = dict(routing)
+
+    for key in ("source", "graph_id", "impedance"):
+        value = str(routing_overrides.get(key, "")).strip()
+        if value:
+            routing[key] = value
+
+    updated = dict(question)
+    if routing:
+        updated["routing"] = routing
+    return updated
 
 
 def write_run(workspace: Path, run_id: str, scenarios: list[str]) -> tuple[Path, Path]:
