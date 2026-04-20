@@ -17,6 +17,7 @@ clawmodeler-engine doctor
 clawmodeler-engine tools --json
 clawmodeler-engine init --workspace ./demo
 clawmodeler-engine demo --workspace ./demo --run-id demo
+clawmodeler-engine data index --workspace ./demo --json
 ```
 
 ## Workflow Commands
@@ -46,6 +47,17 @@ clawmodeler-engine export --workspace ./demo --run-id demo --format md
 ```
 
 `export --format` currently supports `md` and `pdf`. PDF requires the optional `pdf` dependency set.
+
+## Workspace Data Index
+
+```bash
+clawmodeler-engine data index --workspace ./demo --run-id demo --json
+```
+
+`data index` refreshes the local workspace index, syncing `project.duckdb` when the optional
+DuckDB dependency is installed and always writing `logs/workspace_index.json`. The index records
+staged inputs, import validation checks, runs, artifacts, QA summaries, bridge readiness,
+portfolio rows, and run diffs so UI or automation clients can query one stable summary.
 
 ## Planner Pack Commands
 

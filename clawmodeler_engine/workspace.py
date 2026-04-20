@@ -21,6 +21,19 @@ WORKSPACE_DIRS = (
     "logs",
 )
 
+WORKSPACE_INDEX_SCHEMA_VERSION = "1.0.0"
+
+WORKSPACE_INDEX_TABLES = (
+    "workspace_inputs",
+    "import_validation",
+    "runs",
+    "run_artifacts",
+    "run_qa",
+    "bridge_readiness",
+    "portfolio_runs",
+    "run_diffs",
+)
+
 
 class ClawModelerError(Exception):
     exit_code = 1
@@ -70,6 +83,15 @@ def read_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise InputValidationError(f"{path} must contain a JSON object")
     return data
+
+
+def read_optional_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        return read_json(path)
+    except (OSError, json.JSONDecodeError, InputValidationError):
+        return None
 
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
@@ -187,6 +209,105 @@ def ensure_project_database(path: Path) -> str:
               scenario_id VARCHAR,
               created_at TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS workspace_inputs (
+              kind VARCHAR,
+              source_path VARCHAR,
+              staged_path VARCHAR,
+              sha256 VARCHAR,
+              row_count INTEGER,
+              zone_id_count INTEGER,
+              warnings_json JSON,
+              ingested_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS import_validation (
+              check_name VARCHAR,
+              status VARCHAR,
+              detail VARCHAR,
+              expected_value VARCHAR,
+              actual_value VARCHAR,
+              created_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS runs (
+              run_id VARCHAR PRIMARY KEY,
+              created_at TIMESTAMP,
+              engine_version VARCHAR,
+              scenario_count INTEGER,
+              base_run_id VARCHAR,
+              manifest_path VARCHAR,
+              workflow_report_path VARCHAR,
+              report_path VARCHAR,
+              export_ready BOOLEAN,
+              qa_blockers_json JSON,
+              planner_pack_artifacts_json JSON,
+              bridge_execution_report_count INTEGER,
+              updated_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS run_artifacts (
+              run_id VARCHAR,
+              artifact_category VARCHAR,
+              artifact_name VARCHAR,
+              path VARCHAR,
+              suffix VARCHAR,
+              size_bytes BIGINT,
+              sha256 VARCHAR,
+              updated_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS run_qa (
+              run_id VARCHAR PRIMARY KEY,
+              export_ready BOOLEAN,
+              fact_block_count INTEGER,
+              blockers_json JSON,
+              checks_json JSON,
+              qa_report_path VARCHAR,
+              updated_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS bridge_readiness (
+              run_id VARCHAR,
+              bridge VARCHAR,
+              package_status VARCHAR,
+              forecast_status VARCHAR,
+              forecast_status_label VARCHAR,
+              validation_ready BOOLEAN,
+              structural_ready BOOLEAN,
+              blockers_json JSON,
+              execution_status VARCHAR,
+              execution_ready BOOLEAN,
+              validation_report_path VARCHAR,
+              execution_report_path VARCHAR,
+              updated_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS portfolio_runs (
+              run_id VARCHAR PRIMARY KEY,
+              engine_version VARCHAR,
+              created_at TIMESTAMP,
+              base_run_id VARCHAR,
+              scenario_count INTEGER,
+              project_count INTEGER,
+              mean_total_score DOUBLE,
+              top_project_id VARCHAR,
+              top_project_name VARCHAR,
+              top_project_score DOUBLE,
+              vmt_flagged_count INTEGER,
+              dac_share DOUBLE,
+              fact_block_count INTEGER,
+              export_ready BOOLEAN,
+              qa_blockers_json JSON,
+              planner_pack_artifacts_json JSON,
+              has_what_if_overrides BOOLEAN,
+              source_path VARCHAR,
+              generated_at TIMESTAMP,
+              updated_at TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS run_diffs (
+              run_a_id VARCHAR,
+              run_b_id VARCHAR,
+              report_path VARCHAR,
+              csv_path VARCHAR,
+              json_path VARCHAR,
+              totals_json JSON,
+              generated_at TIMESTAMP,
+              updated_at TIMESTAMP
+            );
             """
         )
     finally:
@@ -215,9 +336,738 @@ def sync_project_database(
             sync_input_tables(connection, workspace, receipt)
         if run_id:
             sync_run_tables(connection, workspace, run_id)
+        sync_workspace_index(connection, workspace, receipt=receipt)
     finally:
         connection.close()
     return "ready"
+
+
+def refresh_workspace_index(workspace: Path, *, run_id: str | None = None) -> dict[str, Any]:
+    """Refresh project.duckdb when available and persist a JSON index summary."""
+    ensure_workspace(workspace)
+    status = sync_project_database(workspace, run_id=run_id)
+    summary = build_workspace_index_summary(
+        workspace,
+        run_id=run_id,
+        database_status=status,
+    )
+    write_json(workspace / "logs" / "workspace_index.json", summary)
+    return summary
+
+
+def sync_workspace_index(
+    connection: Any,
+    workspace: Path,
+    *,
+    receipt: dict[str, Any] | None = None,
+) -> None:
+    """Sync workspace-level query tables from the file-backed artifacts."""
+    summary = build_workspace_index_summary(
+        workspace,
+        receipt=receipt,
+        database_status="ready",
+    )
+    updated_at = summary["created_at"]
+
+    for table in WORKSPACE_INDEX_TABLES:
+        connection.execute(f"DELETE FROM {table}")
+
+    for item in summary["inputs"]:
+        connection.execute(
+            """
+            INSERT INTO workspace_inputs
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                item["kind"],
+                item["source_path"],
+                item["staged_path"],
+                item["sha256"],
+                item["row_count"],
+                item["zone_id_count"],
+                dump_json(item["warnings"]),
+                updated_at,
+            ],
+        )
+
+    for check in summary["import_validation"]["checks"]:
+        connection.execute(
+            """
+            INSERT INTO import_validation
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                check["check_name"],
+                check["status"],
+                check["detail"],
+                check["expected_value"],
+                check["actual_value"],
+                updated_at,
+            ],
+        )
+
+    for run in summary["runs"]:
+        connection.execute(
+            """
+            INSERT INTO runs
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                run["run_id"],
+                run["created_at"],
+                run["engine_version"],
+                run["scenario_count"],
+                run["base_run_id"],
+                run["manifest_path"],
+                run["workflow_report_path"],
+                run["report_path"],
+                run["export_ready"],
+                dump_json(run["qa_blockers"]),
+                dump_json(run["planner_pack_artifacts"]),
+                run["bridge_execution_report_count"],
+                updated_at,
+            ],
+        )
+
+    for artifact in summary["artifacts"]:
+        connection.execute(
+            """
+            INSERT INTO run_artifacts
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                artifact["run_id"],
+                artifact["artifact_category"],
+                artifact["artifact_name"],
+                artifact["path"],
+                artifact["suffix"],
+                artifact["size_bytes"],
+                artifact["sha256"],
+                updated_at,
+            ],
+        )
+
+    for qa in summary["qa"]:
+        connection.execute(
+            """
+            INSERT INTO run_qa
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                qa["run_id"],
+                qa["export_ready"],
+                qa["fact_block_count"],
+                dump_json(qa["blockers"]),
+                dump_json(qa["checks"]),
+                qa["qa_report_path"],
+                updated_at,
+            ],
+        )
+
+    for bridge in summary["bridge_readiness"]:
+        connection.execute(
+            """
+            INSERT INTO bridge_readiness
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                bridge["run_id"],
+                bridge["bridge"],
+                bridge["package_status"],
+                bridge["forecast_status"],
+                bridge["forecast_status_label"],
+                bridge["validation_ready"],
+                bridge["structural_ready"],
+                dump_json(bridge["blockers"]),
+                bridge["execution_status"],
+                bridge["execution_ready"],
+                bridge["validation_report_path"],
+                bridge["execution_report_path"],
+                updated_at,
+            ],
+        )
+
+    for run in summary["portfolio_runs"]:
+        connection.execute(
+            """
+            INSERT INTO portfolio_runs
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                run["run_id"],
+                run["engine_version"],
+                run["created_at"],
+                run["base_run_id"],
+                run["scenario_count"],
+                run["project_count"],
+                run["mean_total_score"],
+                run["top_project_id"],
+                run["top_project_name"],
+                run["top_project_score"],
+                run["vmt_flagged_count"],
+                run["dac_share"],
+                run["fact_block_count"],
+                run["export_ready"],
+                dump_json(run["qa_blockers"]),
+                dump_json(run["planner_pack_artifacts"]),
+                run["has_what_if_overrides"],
+                run["source_path"],
+                run["generated_at"],
+                updated_at,
+            ],
+        )
+
+    for diff in summary["diffs"]:
+        connection.execute(
+            """
+            INSERT INTO run_diffs
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                diff["run_a_id"],
+                diff["run_b_id"],
+                diff["report_path"],
+                diff["csv_path"],
+                diff["json_path"],
+                dump_json(diff["totals"]),
+                diff["generated_at"],
+                updated_at,
+            ],
+        )
+
+
+def build_workspace_index_summary(
+    workspace: Path,
+    *,
+    receipt: dict[str, Any] | None = None,
+    run_id: str | None = None,
+    database_status: str = "unknown",
+) -> dict[str, Any]:
+    receipt = receipt or read_optional_json(workspace / "intake_receipt.json")
+    inputs = workspace_input_rows(workspace, receipt)
+    import_checks = build_import_validation_rows(receipt)
+    all_runs = workspace_run_rows(workspace)
+    selected_runs = [run for run in all_runs if run_id in (None, run["run_id"])]
+    selected_run_ids = [run["run_id"] for run in selected_runs]
+    artifacts = [
+        artifact
+        for selected_run_id in selected_run_ids
+        for artifact in collect_run_artifact_rows(workspace, selected_run_id)
+    ]
+    qa_rows = [workspace_qa_row(workspace, selected_run_id) for selected_run_id in selected_run_ids]
+    bridge_rows = [
+        bridge
+        for selected_run_id in selected_run_ids
+        for bridge in workspace_bridge_readiness_rows(workspace, selected_run_id)
+    ]
+    portfolio_rows = [
+        row for row in workspace_portfolio_rows(workspace) if run_id in (None, row["run_id"])
+    ]
+    diff_rows = [
+        row
+        for row in workspace_diff_rows(workspace)
+        if run_id is None or run_id in {row["run_a_id"], row["run_b_id"]}
+    ]
+    checks = import_checks["checks"]
+    return {
+        "schema_version": WORKSPACE_INDEX_SCHEMA_VERSION,
+        "created_at": utc_now(),
+        "workspace": str(workspace),
+        "project_database": str(workspace / "project.duckdb"),
+        "database_status": database_status,
+        "run_id": run_id,
+        "tables": list(WORKSPACE_INDEX_TABLES),
+        "input_count": len(inputs),
+        "input_kinds": sorted({item["kind"] for item in inputs}),
+        "inputs": inputs,
+        "import_validation": {
+            "check_count": len(checks),
+            "pass_count": sum(1 for check in checks if check["status"] == "pass"),
+            "warning_count": sum(1 for check in checks if check["status"] == "warn"),
+            "checks": checks,
+        },
+        "run_count": len(selected_runs),
+        "runs": selected_runs,
+        "artifact_count": len(artifacts),
+        "artifacts": artifacts,
+        "qa": qa_rows,
+        "bridge_readiness_count": len(bridge_rows),
+        "bridge_readiness": bridge_rows,
+        "portfolio_run_count": len(portfolio_rows),
+        "portfolio_runs": portfolio_rows,
+        "diff_count": len(diff_rows),
+        "diffs": diff_rows,
+    }
+
+
+def dump_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True)
+
+
+def workspace_input_rows(
+    workspace: Path,
+    receipt: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not receipt:
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in receipt.get("inputs", []):
+        if not isinstance(item, dict):
+            continue
+        staged_path = resolve_workspace_path(workspace, receipt, item.get("staged_path"))
+        rows.append(
+            {
+                "kind": str(item.get("kind", "unknown")),
+                "source_path": str(item.get("source_path", "")),
+                "staged_path": str(staged_path),
+                "sha256": str(item.get("sha256", "")),
+                "row_count": optional_int(item.get("rows")),
+                "zone_id_count": len(item.get("zone_ids", []) or []),
+                "warnings": [str(warning) for warning in item.get("warnings", []) or []],
+            }
+        )
+    return rows
+
+
+def build_import_validation_rows(receipt: dict[str, Any] | None) -> dict[str, Any]:
+    if not receipt:
+        return {
+            "checks": [
+                {
+                    "check_name": "intake_receipt_present",
+                    "status": "warn",
+                    "detail": "No intake_receipt.json found in the workspace.",
+                    "expected_value": "intake_receipt.json",
+                    "actual_value": "missing",
+                }
+            ]
+        }
+
+    inputs = [item for item in receipt.get("inputs", []) if isinstance(item, dict)]
+    checks: list[dict[str, Any]] = [
+        {
+            "check_name": "intake_receipt_present",
+            "status": "pass",
+            "detail": "Workspace intake receipt is available.",
+            "expected_value": "intake_receipt.json",
+            "actual_value": "present",
+        },
+        {
+            "check_name": "input_count",
+            "status": "pass" if inputs else "warn",
+            "detail": "Number of staged input artifacts recorded in the receipt.",
+            "expected_value": ">0",
+            "actual_value": str(len(inputs)),
+        },
+    ]
+
+    validation = receipt.get("validation")
+    if isinstance(validation, dict):
+        zone_present = bool(validation.get("zone_id_present"))
+        checks.append(
+            {
+                "check_name": "zone_id_present",
+                "status": "pass" if zone_present else "warn",
+                "detail": "At least one staged input includes zone IDs.",
+                "expected_value": "true",
+                "actual_value": str(zone_present).lower(),
+            }
+        )
+        if validation.get("join_coverage_threshold"):
+            checks.append(
+                {
+                    "check_name": "join_coverage_threshold",
+                    "status": "pass",
+                    "detail": "Configured minimum join coverage for zone-linked tables.",
+                    "expected_value": ">=95%",
+                    "actual_value": str(validation["join_coverage_threshold"]),
+                }
+            )
+
+    checks.extend(socio_join_validation_checks(inputs))
+    for item in inputs:
+        warnings = [str(warning) for warning in item.get("warnings", []) or []]
+        if warnings:
+            checks.append(
+                {
+                    "check_name": f"input_warnings:{item.get('kind', 'unknown')}",
+                    "status": "warn",
+                    "detail": "; ".join(warnings),
+                    "expected_value": "no warnings",
+                    "actual_value": str(len(warnings)),
+                }
+            )
+    return {"checks": checks}
+
+
+def socio_join_validation_checks(inputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    zones = next((item for item in inputs if item.get("kind") == "zones_geojson"), None)
+    if not zones:
+        return []
+
+    zone_ids = {str(zone_id) for zone_id in zones.get("zone_ids", []) or []}
+    checks: list[dict[str, Any]] = []
+    for socio in (item for item in inputs if item.get("kind") == "socio_csv"):
+        socio_zone_ids = {str(zone_id) for zone_id in socio.get("zone_ids", []) or []}
+        matched = zone_ids & socio_zone_ids
+        extra_socio = sorted(socio_zone_ids - zone_ids)
+        missing_socio = sorted(zone_ids - socio_zone_ids)
+        socio_coverage = len(matched) / len(socio_zone_ids) if socio_zone_ids else 0.0
+        zone_coverage = len(matched) / len(zone_ids) if zone_ids else 0.0
+        coverage = min(socio_coverage, zone_coverage)
+        status = "pass" if coverage >= 0.95 and not extra_socio and not missing_socio else "warn"
+        checks.append(
+            {
+                "check_name": "socio_join_coverage",
+                "status": status,
+                "detail": (
+                    f"{len(matched)} matched zone(s), {len(extra_socio)} extra socio "
+                    f"zone(s), {len(missing_socio)} GeoJSON zone(s) without socio rows."
+                ),
+                "expected_value": ">=95% coverage in both directions",
+                "actual_value": f"{coverage:.1%}",
+            }
+        )
+    return checks
+
+
+def workspace_run_rows(workspace: Path) -> list[dict[str, Any]]:
+    runs = list_workspace_run_summaries(workspace)
+    rows: list[dict[str, Any]] = []
+    for run in runs:
+        run_id = str(run.get("run_id", ""))
+        if not run_id:
+            continue
+        rows.append(
+            {
+                "run_id": run_id,
+                "created_at": run.get("created_at"),
+                "engine_version": run.get("engine_version"),
+                "scenario_count": optional_int(run.get("scenario_count")) or 0,
+                "base_run_id": run.get("base_run_id"),
+                "manifest_path": str(workspace / "runs" / run_id / "manifest.json"),
+                "workflow_report_path": existing_path(
+                    workspace / "runs" / run_id / "workflow_report.json"
+                ),
+                "report_path": report_path_for_run(workspace, run_id),
+                "export_ready": bool(run.get("export_ready")),
+                "qa_blockers": list(run.get("qa_blockers", []) or []),
+                "planner_pack_artifacts": list(run.get("planner_pack_artifacts", []) or []),
+                "bridge_execution_report_count": len(
+                    list(
+                        (workspace / "runs" / run_id / "outputs" / "bridges").glob(
+                            "*/bridge_execution_report.json"
+                        )
+                    )
+                ),
+            }
+        )
+    return rows
+
+
+def list_workspace_run_summaries(workspace: Path) -> list[dict[str, Any]]:
+    try:
+        from .portfolio import list_runs
+    except ImportError:
+        return []
+
+    try:
+        return [run.to_json() for run in list_runs(workspace)]
+    except ClawModelerError:
+        return []
+
+
+def collect_run_artifact_rows(workspace: Path, run_id: str) -> list[dict[str, Any]]:
+    run_root = workspace / "runs" / run_id
+    paths: list[Path] = []
+    if run_root.exists():
+        paths.extend(sorted(path for path in run_root.rglob("*") if path.is_file()))
+    reports_dir = workspace / "reports"
+    if reports_dir.exists():
+        paths.extend(sorted(path for path in reports_dir.glob(f"{run_id}_*") if path.is_file()))
+
+    rows: list[dict[str, Any]] = []
+    for path in unique_paths(paths):
+        try:
+            size_bytes = path.stat().st_size
+            checksum = sha256_file(path)
+        except OSError:
+            continue
+        rows.append(
+            {
+                "run_id": run_id,
+                "artifact_category": artifact_category(workspace, run_root, path),
+                "artifact_name": path.name,
+                "path": str(path),
+                "suffix": path.suffix,
+                "size_bytes": size_bytes,
+                "sha256": checksum,
+            }
+        )
+    return rows
+
+
+def unique_paths(paths: list[Path]) -> list[Path]:
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(path)
+    return unique
+
+
+def artifact_category(workspace: Path, run_root: Path, path: Path) -> str:
+    reports_dir = workspace / "reports"
+    try:
+        path.relative_to(reports_dir)
+        return "report"
+    except ValueError:
+        pass
+
+    try:
+        relative = path.relative_to(run_root)
+    except ValueError:
+        return "artifact"
+    parts = relative.parts
+    if not parts:
+        return "artifact"
+    if parts[0] == "manifest.json":
+        return "manifest"
+    if parts[0] == "qa_report.json":
+        return "qa"
+    if parts[0] == "workflow_report.json":
+        return "workflow"
+    if parts[:2] == ("outputs", "tables"):
+        return "table"
+    if parts[:2] == ("outputs", "maps"):
+        return "map"
+    if parts[:2] == ("outputs", "figures"):
+        return "figure"
+    if parts[:2] == ("outputs", "bridges"):
+        return "bridge"
+    if parts[0] == "logs":
+        return "log"
+    return "artifact"
+
+
+def workspace_qa_row(workspace: Path, run_id: str) -> dict[str, Any]:
+    qa_report_path = workspace / "runs" / run_id / "qa_report.json"
+    qa = read_optional_json(qa_report_path) or {}
+    checks = qa.get("checks") if isinstance(qa.get("checks"), dict) else {}
+    fact_block_count = optional_int(checks.get("fact_block_count")) if checks else 0
+    return {
+        "run_id": run_id,
+        "export_ready": bool(qa.get("export_ready")) if qa else False,
+        "fact_block_count": fact_block_count or 0,
+        "blockers": list(qa.get("blockers", []) or []) if qa else [],
+        "checks": checks,
+        "qa_report_path": str(qa_report_path) if qa_report_path.exists() else None,
+    }
+
+
+def workspace_bridge_readiness_rows(workspace: Path, run_id: str) -> list[dict[str, Any]]:
+    run_root = workspace / "runs" / run_id
+    manifest = read_optional_json(run_root / "manifest.json") or {}
+    detailed = manifest.get("detailed_engine_readiness")
+    engines = detailed.get("engines", {}) if isinstance(detailed, dict) else {}
+    if not isinstance(engines, dict):
+        engines = {}
+
+    validation_path = run_root / "outputs" / "bridges" / "bridge_validation_report.json"
+    validation = read_optional_json(validation_path) or {}
+    raw_validation_bridges = validation.get("bridges") if isinstance(validation, dict) else []
+    validation_bridges = (
+        raw_validation_bridges if isinstance(raw_validation_bridges, list) else []
+    )
+    validation_by_bridge = {
+        str(item.get("bridge")): item
+        for item in validation_bridges
+        if isinstance(item, dict) and item.get("bridge")
+    }
+
+    execution_by_bridge: dict[str, dict[str, Any]] = {}
+    bridges_root = run_root / "outputs" / "bridges"
+    if bridges_root.exists():
+        for path in sorted(bridges_root.glob("*/bridge_execution_report.json")):
+            report = read_optional_json(path)
+            if not report:
+                continue
+            bridge = str(report.get("bridge") or path.parent.name)
+            execution_by_bridge[bridge] = {**report, "_path": str(path)}
+
+    bridge_names = sorted(set(engines) | set(validation_by_bridge) | set(execution_by_bridge))
+    rows: list[dict[str, Any]] = []
+    for bridge in bridge_names:
+        readiness = engines.get(bridge, {}) if isinstance(engines.get(bridge), dict) else {}
+        validation_row = validation_by_bridge.get(bridge, {})
+        forecast = (
+            validation_row.get("forecast_readiness")
+            if isinstance(validation_row.get("forecast_readiness"), dict)
+            else readiness
+        )
+        execution = execution_by_bridge.get(bridge, {})
+        blockers = bridge_blockers(validation_row, forecast, execution)
+        forecast_status = forecast.get("status") if isinstance(forecast, dict) else None
+        if isinstance(forecast, dict):
+            validation_ready = (
+                bool(forecast.get("authoritative_forecast_ready"))
+                or forecast_status == "validation_ready"
+            )
+        else:
+            validation_ready = forecast_status == "validation_ready"
+        rows.append(
+            {
+                "run_id": run_id,
+                "bridge": bridge,
+                "package_status": validation_row.get("status") or readiness.get("status"),
+                "forecast_status": forecast_status,
+                "forecast_status_label": (
+                    forecast.get("status_label") if isinstance(forecast, dict) else None
+                ),
+                "validation_ready": validation_ready,
+                "structural_ready": validation_row.get("ready"),
+                "blockers": blockers,
+                "execution_status": execution.get("status"),
+                "execution_ready": execution.get("execution_ready"),
+                "validation_report_path": str(validation_path) if validation_path.exists() else None,
+                "execution_report_path": execution.get("_path"),
+            }
+        )
+    return rows
+
+
+def bridge_blockers(
+    validation_row: dict[str, Any],
+    forecast: dict[str, Any] | None,
+    execution: dict[str, Any],
+) -> list[str]:
+    blockers: list[str] = []
+    for key in ("blockers", "structural_blockers", "forecast_blockers"):
+        raw = validation_row.get(key)
+        if isinstance(raw, list):
+            blockers.extend(str(item) for item in raw)
+    if isinstance(forecast, dict):
+        raw = forecast.get("missing_readiness_blockers")
+        if isinstance(raw, list):
+            blockers.extend(str(item) for item in raw)
+    raw_execution = execution.get("blockers")
+    if isinstance(raw_execution, list):
+        blockers.extend(str(item) for item in raw_execution)
+    return sorted(set(blockers))
+
+
+def workspace_portfolio_rows(workspace: Path) -> list[dict[str, Any]]:
+    source_path = workspace / "portfolio" / "summary.json"
+    data = read_optional_json(source_path)
+    generated_at = data.get("generated_at") if data else None
+    raw_runs = data.get("runs") if isinstance(data, dict) else None
+    runs = raw_runs if isinstance(raw_runs, list) else list_workspace_run_summaries(workspace)
+    rows: list[dict[str, Any]] = []
+    for raw_run in runs:
+        if not isinstance(raw_run, dict) or not raw_run.get("run_id"):
+            continue
+        rows.append(
+            {
+                "run_id": str(raw_run["run_id"]),
+                "engine_version": raw_run.get("engine_version"),
+                "created_at": raw_run.get("created_at"),
+                "base_run_id": raw_run.get("base_run_id"),
+                "scenario_count": optional_int(raw_run.get("scenario_count")) or 0,
+                "project_count": optional_int(raw_run.get("project_count")) or 0,
+                "mean_total_score": optional_float(raw_run.get("mean_total_score")),
+                "top_project_id": raw_run.get("top_project_id"),
+                "top_project_name": raw_run.get("top_project_name"),
+                "top_project_score": optional_float(raw_run.get("top_project_score")),
+                "vmt_flagged_count": optional_int(raw_run.get("vmt_flagged_count")) or 0,
+                "dac_share": optional_float(raw_run.get("dac_share")),
+                "fact_block_count": optional_int(raw_run.get("fact_block_count")) or 0,
+                "export_ready": bool(raw_run.get("export_ready")),
+                "qa_blockers": list(raw_run.get("qa_blockers", []) or []),
+                "planner_pack_artifacts": list(raw_run.get("planner_pack_artifacts", []) or []),
+                "has_what_if_overrides": bool(raw_run.get("has_what_if_overrides")),
+                "source_path": str(source_path) if source_path.exists() else None,
+                "generated_at": generated_at,
+            }
+        )
+    return rows
+
+
+def workspace_diff_rows(workspace: Path) -> list[dict[str, Any]]:
+    diffs_root = workspace / "diffs"
+    rows: list[dict[str, Any]] = []
+    if not diffs_root.exists():
+        return rows
+    for path in sorted(diffs_root.glob("*/diff.json")):
+        data = read_optional_json(path)
+        if not data:
+            continue
+        run_a_id = str(data.get("run_a_id", ""))
+        run_b_id = str(data.get("run_b_id", ""))
+        if not run_a_id or not run_b_id:
+            continue
+        rows.append(
+            {
+                "run_a_id": run_a_id,
+                "run_b_id": run_b_id,
+                "report_path": str(workspace / "reports" / f"{run_a_id}_vs_{run_b_id}_diff.md"),
+                "csv_path": str(path.parent / "diff.csv"),
+                "json_path": str(path),
+                "totals": diff_totals(data),
+                "generated_at": data.get("generated_at"),
+            }
+        )
+    return rows
+
+
+def diff_totals(data: dict[str, Any]) -> dict[str, int]:
+    artifacts = data.get("artifacts")
+    if not isinstance(artifacts, list):
+        return {"added": 0, "removed": 0, "changed": 0, "unchanged": 0}
+    artifact_dicts = [item for item in artifacts if isinstance(item, dict)]
+    return {
+        "added": sum(optional_int(item.get("added_count")) or 0 for item in artifact_dicts),
+        "removed": sum(optional_int(item.get("removed_count")) or 0 for item in artifact_dicts),
+        "changed": sum(optional_int(item.get("changed_count")) or 0 for item in artifact_dicts),
+        "unchanged": sum(
+            optional_int(item.get("unchanged_count")) or 0 for item in artifact_dicts
+        ),
+    }
+
+
+def report_path_for_run(workspace: Path, run_id: str) -> str | None:
+    reports_dir = workspace / "reports"
+    preferred = reports_dir / f"{run_id}_report.md"
+    if preferred.exists():
+        return str(preferred)
+    if not reports_dir.exists():
+        return None
+    matches = sorted(path for path in reports_dir.glob(f"{run_id}_report*") if path.is_file())
+    return str(matches[0]) if matches else None
+
+
+def existing_path(path: Path) -> str | None:
+    return str(path) if path.exists() else None
+
+
+def optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 def sync_input_tables(connection: Any, workspace: Path, receipt: dict[str, Any]) -> None:

@@ -25,7 +25,7 @@ from clawmodeler_engine.planner_pack import (
     write_lapm_exhibit,
     write_rtp_chapter,
 )
-from clawmodeler_engine.workspace import InsufficientDataError
+from clawmodeler_engine.workspace import InsufficientDataError, refresh_workspace_index
 
 
 @contextmanager
@@ -278,6 +278,10 @@ class WriteRunDiffTest(unittest.TestCase):
             self.assertTrue(proj["present_in_a"])
             self.assertTrue(proj["present_in_b"])
             self.assertGreaterEqual(proj["added_count"], 1)
+            index = refresh_workspace_index(workspace)
+            self.assertEqual(index["diff_count"], 1)
+            self.assertEqual(index["diffs"][0]["run_a_id"], run_a)
+            self.assertEqual(index["diffs"][0]["run_b_id"], run_b)
 
     def test_end_to_end_with_full_planner_pack(self) -> None:
         with two_run_workspace() as (workspace, run_a, run_b):

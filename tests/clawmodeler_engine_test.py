@@ -154,8 +154,76 @@ class ClawModelerEngineTest(unittest.TestCase):
                     connection.execute("SELECT count(*) FROM run_fact_blocks").fetchone()[0],
                     0,
                 )
+                self.assertGreater(
+                    connection.execute("SELECT count(*) FROM workspace_inputs").fetchone()[0],
+                    0,
+                )
+                self.assertGreater(
+                    connection.execute("SELECT count(*) FROM import_validation").fetchone()[0],
+                    0,
+                )
+                self.assertEqual(connection.execute("SELECT count(*) FROM runs").fetchone()[0], 1)
+                self.assertGreater(
+                    connection.execute("SELECT count(*) FROM run_artifacts").fetchone()[0],
+                    0,
+                )
+                self.assertEqual(
+                    connection.execute("SELECT count(*) FROM run_qa").fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute("SELECT count(*) FROM portfolio_runs").fetchone()[0],
+                    1,
+                )
+                self.assertEqual(
+                    connection.execute("SELECT count(*) FROM bridge_readiness").fetchone()[0],
+                    0,
+                )
             finally:
                 connection.close()
+
+    def test_data_index_command_writes_file_backed_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "demo"
+            inputs = write_demo_inputs(workspace)
+            self.run_engine(
+                "workflow",
+                "full",
+                "--workspace",
+                str(workspace),
+                "--inputs",
+                str(inputs["zones"]),
+                str(inputs["socio"]),
+                str(inputs["projects"]),
+                str(inputs["network_edges"]),
+                "--question",
+                str(inputs["question"]),
+                "--run-id",
+                "demo",
+                "--skip-bridges",
+                "--scenarios",
+                "baseline",
+            )
+            result = self.run_engine(
+                "data",
+                "index",
+                "--workspace",
+                str(workspace),
+                "--run-id",
+                "demo",
+                "--json",
+            )
+            payload = json.loads(result.stdout)
+            self.assertIn(
+                payload["database_status"],
+                {"ready", "duckdb_python_module_missing"},
+            )
+            self.assertEqual(payload["run_count"], 1)
+            self.assertEqual(payload["runs"][0]["run_id"], "demo")
+            self.assertGreater(payload["input_count"], 0)
+            self.assertGreater(payload["artifact_count"], 0)
+            self.assertEqual(payload["portfolio_run_count"], 1)
+            self.assertTrue((workspace / "logs" / "workspace_index.json").exists())
 
     def test_toolbox_packaged_fallback_and_model_root_override(self) -> None:
         toolbox = load_toolbox()

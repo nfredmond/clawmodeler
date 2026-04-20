@@ -257,13 +257,14 @@ def write_export(
                 ai_narrative=narrative_context,
             )
             paths.append(path)
+        sync_project_database(workspace, run_id=run_id)
         return paths
 
     if report_type not in REPORT_TYPES:
         raise InsufficientDataError(
             f"Unknown --report-type {report_type!r}; expected one of {REPORT_TYPES} or 'all'."
         )
-    return _write_single_report(
+    path = _write_single_report(
         manifest,
         reports_dir,
         run_id,
@@ -271,6 +272,8 @@ def write_export(
         export_format,
         ai_narrative=narrative_context,
     )
+    sync_project_database(workspace, run_id=run_id)
+    return path
 
 
 def _generate_ai_narrative(

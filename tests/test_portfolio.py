@@ -25,7 +25,7 @@ from clawmodeler_engine.portfolio import (
 )
 from clawmodeler_engine.qa import is_valid_fact_block
 from clawmodeler_engine.what_if import WhatIfOverrides, write_what_if
-from clawmodeler_engine.workspace import InsufficientDataError
+from clawmodeler_engine.workspace import InsufficientDataError, refresh_workspace_index
 
 
 @contextmanager
@@ -197,6 +197,9 @@ class PortfolioWritePersistsArtifactsTest(unittest.TestCase):
                 rows = list(csv.DictReader(f))
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["run_id"], "alpha")
+            index = refresh_workspace_index(workspace)
+            self.assertEqual(index["portfolio_run_count"], 1)
+            self.assertEqual(index["portfolio_runs"][0]["run_id"], "alpha")
 
     def test_fact_blocks_pass_qa_gate_schema(self) -> None:
         with demo_workspace("alpha") as (workspace, _):

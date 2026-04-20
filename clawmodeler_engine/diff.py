@@ -30,7 +30,13 @@ from pathlib import Path
 from typing import Any
 
 from .report import read_fact_blocks
-from .workspace import ENGINE_VERSION, InsufficientDataError, utc_now, write_json
+from .workspace import (
+    ENGINE_VERSION,
+    InsufficientDataError,
+    sync_project_database,
+    utc_now,
+    write_json,
+)
 
 # Per-artifact diff spec: which column is the row key, which columns are
 # tracked for change detection, and which are numeric (so the diff can
@@ -782,6 +788,7 @@ def write_run_diff(
         "changed": sum(a.changed_count for a in result.artifacts),
         "unchanged": sum(a.unchanged_count for a in result.artifacts),
     }
+    sync_project_database(workspace)
     return {
         "report_path": str(report_path),
         "csv_path": str(csv_path),

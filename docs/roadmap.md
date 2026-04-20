@@ -32,6 +32,9 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 - QA blocks unsupported report export and validates manifest and fact-block evidence.
 - Planner Pack emitters cover CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP.
 - Diff, what-if, portfolio, and grounded chat are deterministic downstream tools over finished runs.
+- `clawmodeler-engine data index` refreshes stable workspace index tables for staged inputs,
+  import validation checks, runs, artifacts, QA summaries, bridge readiness, portfolio rows, and
+  run diffs, and writes `logs/workspace_index.json` even when DuckDB is not installed.
 - The desktop app is vanilla TypeScript on Tauri v2 and invokes only the `clawmodeler-engine` sidecar or local Python fallback.
 - The desktop workbench has a top-level Workflow Guide that links workspace setup, run execution, QA/artifact review, Planner Pack generation, grounded chat, what-if, portfolio, and diff readiness.
 - The desktop workbench preserves recent workspaces, active run history, and planner-facing run labels locally so existing runs can be reopened without retyping paths.
@@ -40,9 +43,10 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 
 ## Next Engineering Milestones
 
-1. **Deepen the local data layer.**
+1. **Wire desktop summaries to the workspace index.**
 
-   Build on the DuckDB starter sync with stable table schemas, import validation summaries, and queryable run/artifact indexes for portfolio, diff, and desktop summaries.
+   Replace the remaining desktop filesystem scans for workspace summaries with the
+   `data index` summary and add UI affordances for stale or missing index state.
 
 2. **Add optional ML workflows last.**
 
@@ -70,4 +74,6 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when the local data layer has stable DuckDB-backed workspace tables for staged inputs, runs, artifacts, QA summaries, bridge readiness, and portfolio/diff indexes, with import validation summaries that the CLI and desktop can query without walking the filesystem every time.
+The next pass is done when the desktop workbench refreshes and reads `logs/workspace_index.json`
+for run, artifact, QA, bridge-readiness, portfolio, and diff summaries, with graceful fallback
+when an older workspace has not been indexed yet.

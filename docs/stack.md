@@ -67,7 +67,14 @@ Core JSON artifacts are versioned with `schema_version` and `artifact_type`. The
 - `workflow_report`
 - `workflow_diagnosis`
 
-When the Python `duckdb` module is installed, the sidecar creates `project.duckdb` and syncs staged zones, socioeconomic rows, projects, network edges, zone-node maps, run scenarios, and fact blocks into starter relational tables. If DuckDB is absent, it writes an explicit missing-dependency note beside the database path and continues with file-backed artifacts.
+When the Python `duckdb` module is installed, the sidecar creates `project.duckdb` and syncs
+staged zones, socioeconomic rows, projects, network edges, zone-node maps, run scenarios, and
+fact blocks into relational tables. The workspace index also maintains stable tables for staged
+inputs, import validation checks, runs, run artifacts, QA summaries, bridge readiness,
+portfolio rows, and run diffs. `clawmodeler-engine data index --workspace ./demo --json`
+refreshes those tables and always writes `logs/workspace_index.json`. If DuckDB is absent, the
+sidecar writes an explicit missing-dependency note beside the database path and continues with
+file-backed artifacts plus the JSON index summary.
 
 ## Implemented Analysis Modules
 

@@ -31,6 +31,8 @@ from .workspace import (
     InsufficientDataError,
     ensure_workspace,
     read_json,
+    refresh_workspace_index,
+    sync_project_database,
     write_json,
 )
 
@@ -133,6 +135,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output machine-readable JSON.",
     )
     tools.set_defaults(func=command_tools)
+
+    data = subparsers.add_parser(
+        "data",
+        help="Refresh or inspect the local workspace data index.",
+    )
+    data_subparsers = data.add_subparsers(required=True)
+    data_index = data_subparsers.add_parser(
+        "index",
+        help="Refresh project.duckdb index tables and logs/workspace_index.json.",
+    )
+    data_index.add_argument("--workspace", required=True, type=Path)
+    data_index.add_argument(
+        "--run-id",
+        dest="run_id",
+        default=None,
+        help="Optional run ID to filter the returned summary.",
+    )
+    data_index.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the workspace index summary as JSON.",
+    )
+    data_index.set_defaults(func=command_data_index)
 
     demo = subparsers.add_parser("demo", help="Create and run a complete demo workspace.")
     demo.add_argument("--workspace", required=True, type=Path)
@@ -887,6 +913,21 @@ def command_tools(args: argparse.Namespace) -> None:
     print("\n".join(toolbox_summary_lines(assessment)))
 
 
+def command_data_index(args: argparse.Namespace) -> None:
+    summary = refresh_workspace_index(args.workspace, run_id=args.run_id)
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    print(
+        f"Workspace index: {summary['database_status']} "
+        f"({summary['run_count']} run(s), {summary['artifact_count']} artifact(s))."
+    )
+    print(f"Inputs: {summary['input_count']} staged artifact(s).")
+    print(f"Bridge readiness rows: {summary['bridge_readiness_count']}.")
+    print(f"Portfolio rows: {summary['portfolio_run_count']}; diffs: {summary['diff_count']}.")
+    print(f"JSON: {args.workspace / 'logs' / 'workspace_index.json'}")
+
+
 def command_demo(args: argparse.Namespace) -> None:
     inputs = write_demo_inputs(args.workspace)
     command_intake(
@@ -1051,12 +1092,14 @@ def command_workflow_diagnose(args: argparse.Namespace) -> None:
 def command_bridge_sumo_prepare(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = prepare_sumo_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     print(json.dumps({"sumo_run_manifest": str(path)}))
 
 
 def command_bridge_prepare_all(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = prepare_all_bridges(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     report = read_json(path)
     print(
         json.dumps(
@@ -1079,6 +1122,7 @@ def command_bridge_prepare_all(args: argparse.Namespace) -> None:
 def command_bridge_validate(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = validate_all_bridges(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     report = read_json(path)
     print(
         json.dumps(
@@ -1095,6 +1139,7 @@ def command_bridge_validate(args: argparse.Namespace) -> None:
 def command_bridge_sumo_run(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = run_sumo_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     print(json.dumps({"sumo_run_manifest": str(path)}))
 
 
@@ -1107,6 +1152,7 @@ def command_bridge_execute(args: argparse.Namespace) -> None:
         scenario_id=args.scenario_id,
         dry_run=args.dry_run,
     )
+    sync_project_database(args.workspace, run_id=args.run_id)
     report = read_json(path)
     operator_feedback = report.get("operator_feedback") or {}
     print(
@@ -1129,6 +1175,7 @@ def command_bridge_execute(args: argparse.Namespace) -> None:
 def command_bridge_sumo_validate(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = validate_sumo_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     report = read_json(path)
     print(json.dumps({"bridge_qa_report": str(path), "export_ready": report["export_ready"]}))
 
@@ -1136,24 +1183,28 @@ def command_bridge_sumo_validate(args: argparse.Namespace) -> None:
 def command_bridge_matsim_prepare(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = prepare_matsim_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     print(json.dumps({"matsim_bridge_manifest": str(path)}))
 
 
 def command_bridge_urbansim_prepare(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = prepare_urbansim_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     print(json.dumps({"urbansim_bridge_manifest": str(path)}))
 
 
 def command_bridge_dtalite_prepare(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = prepare_dtalite_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     print(json.dumps({"dtalite_bridge_manifest": str(path)}))
 
 
 def command_bridge_tbest_prepare(args: argparse.Namespace) -> None:
     ensure_workspace(args.workspace)
     path = prepare_tbest_bridge(args.workspace, args.run_id, scenario_id=args.scenario_id)
+    sync_project_database(args.workspace, run_id=args.run_id)
     print(json.dumps({"tbest_bridge_manifest": str(path)}))
 
 

@@ -34,6 +34,7 @@ from .workspace import (
     discover_workspace_inputs,
     ensure_workspace,
     read_json,
+    sync_project_database,
     utc_now,
     write_json,
 )
@@ -106,6 +107,7 @@ def run_full_workflow(
     validate_contract(workflow_report, "workflow_report")
     output_path = workspace / "runs" / run_id / "workflow_report.json"
     write_json(output_path, workflow_report)
+    sync_project_database(workspace, run_id=run_id)
     return output_path
 
 
@@ -172,6 +174,7 @@ def run_report_only_workflow(
     validate_contract(workflow_report, "workflow_report")
     output_path = workspace / "runs" / run_id / "workflow_report.json"
     write_json(output_path, workflow_report)
+    sync_project_database(workspace, run_id=run_id)
     return output_path
 
 

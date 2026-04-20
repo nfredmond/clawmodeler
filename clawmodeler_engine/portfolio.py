@@ -33,6 +33,7 @@ from .workspace import (
     ENGINE_VERSION,
     InsufficientDataError,
     read_json,
+    sync_project_database,
     utc_now,
     write_json,
 )
@@ -509,6 +510,7 @@ def write_portfolio(workspace: Path) -> dict[str, Any]:
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(render_portfolio_markdown(result), encoding="utf-8")
+    sync_project_database(workspace)
 
     summary_payload = result.summary.to_json() if result.summary is not None else None
     return {
