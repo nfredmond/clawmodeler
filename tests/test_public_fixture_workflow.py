@@ -36,6 +36,14 @@ class PublicFixtureWorkflowTest(unittest.TestCase):
             self.assertTrue(workflow["qa"]["export_ready"])
             self.assertTrue(workflow["bridge_validation"]["export_ready"])
             self.assertTrue((workspace / "reports" / "baseline_report.md").exists())
+            self.assertEqual(workflow["routing"]["selected_source"], "network_edges_csv")
+            proxy_comparison = workflow["routing"]["proxy_comparison"]
+            self.assertEqual(proxy_comparison["network_engine"], "network_edges_dijkstra")
+            self.assertEqual(proxy_comparison["compared_pairs"], 6)
+            self.assertEqual(proxy_comparison["reachable_pairs"], 6)
+            self.assertEqual(proxy_comparison["unreachable_pairs"], 0)
+            self.assertGreater(proxy_comparison["max_abs_delta_minutes"], 0)
+            self.assertIn("screening QA diagnostic", proxy_comparison["note"])
 
             bridge_prepare = workflow["bridges"]
             self.assertEqual(

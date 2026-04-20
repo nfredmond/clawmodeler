@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +8,17 @@ from .bridge_prepare import prepare_all_bridges
 from .bridge_validation import validate_all_bridges
 from .contracts import stamp_contract, validate_contract
 from .demo import write_demo_inputs
-from .model import artifact_paths, routing_spec, select_graphml_path
+from .model import (
+    DEFAULT_SPEED_KPH,
+    artifact_paths,
+    load_travel_time_graph,
+    load_zones,
+    parse_float,
+    routing_spec,
+    select_graphml_path,
+    shortest_path_minutes,
+    travel_minutes,
+)
 from .orchestration import (
     normalize_scenario_ids,
     write_export,
@@ -19,6 +30,7 @@ from .project import init_workspace
 from .readiness import build_detailed_engine_readiness
 from .toolbox import assess_toolbox
 from .workspace import (
+    InputValidationError,
     discover_workspace_inputs,
     ensure_workspace,
     read_json,
@@ -340,6 +352,12 @@ def routing_diagnosis(workspace: Path, receipt: dict[str, Any] | None) -> dict[s
         selected_source = "graphml"
         detail = f"Auto-selection uses mapped GraphML cache {selected_graph.name}."
 
+    comparison = routing_proxy_comparison(
+        workspace=workspace,
+        receipt=receipt,
+        question=question,
+        selected_source=selected_source,
+    )
     return {
         "requested_source": routing["source"],
         "graph_id": routing["graph_id"] or None,
@@ -351,4 +369,92 @@ def routing_diagnosis(workspace: Path, receipt: dict[str, Any] | None) -> dict[s
             "zone_node_map_csv": bool(zone_map_paths),
         },
         "detail": detail,
+        "proxy_comparison": comparison,
     }
+
+
+def routing_proxy_comparison(
+    workspace: Path,
+    receipt: dict[str, Any] | None,
+    question: dict[str, Any],
+    selected_source: str,
+) -> dict[str, Any] | None:
+    if receipt is None or selected_source not in {"network_edges_csv", "graphml"}:
+        return None
+
+    try:
+        graph, graph_engine, zone_node_map = load_travel_time_graph(workspace, receipt, question)
+        zones = load_zones(workspace, receipt)
+    except (InputValidationError, FileNotFoundError, KeyError, ValueError):
+        return None
+    if not graph or len(zones) < 2:
+        return None
+
+    speed_kph = parse_float(question.get("proxy_speed_kph"), DEFAULT_SPEED_KPH)
+    compared_pairs = 0
+    reachable_pairs = 0
+    unreachable_pairs = 0
+    network_total = 0.0
+    proxy_total = 0.0
+    abs_delta_total = 0.0
+    max_abs_delta = 0.0
+
+    for origin in zones:
+        origin_zone_id = str(origin["zone_id"])
+        origin_node = zone_node_map.get(origin_zone_id, origin_zone_id)
+        network_minutes_by_node = shortest_path_minutes(graph, origin_node)
+        for destination in zones:
+            destination_zone_id = str(destination["zone_id"])
+            if destination_zone_id == origin_zone_id:
+                continue
+            compared_pairs += 1
+            destination_node = zone_node_map.get(destination_zone_id, destination_zone_id)
+            network_minutes = network_minutes_by_node.get(destination_node, math.inf)
+            if not math.isfinite(network_minutes):
+                unreachable_pairs += 1
+                continue
+
+            proxy_minutes = travel_minutes(origin, destination, speed_kph)
+            abs_delta = abs(network_minutes - proxy_minutes)
+            reachable_pairs += 1
+            network_total += network_minutes
+            proxy_total += proxy_minutes
+            abs_delta_total += abs_delta
+            max_abs_delta = max(max_abs_delta, abs_delta)
+
+    if compared_pairs == 0:
+        return None
+
+    comparison: dict[str, Any] = {
+        "method": "selected_network_vs_euclidean_proxy_zone_pairs",
+        "network_engine": graph_engine,
+        "zone_count": len(zones),
+        "compared_pairs": compared_pairs,
+        "reachable_pairs": reachable_pairs,
+        "unreachable_pairs": unreachable_pairs,
+        "proxy_speed_kph": round(speed_kph, 3),
+        "note": (
+            "Compares selected network shortest paths with straight-line proxy travel times "
+            "between staged zone centroids. This is a screening QA diagnostic, not a "
+            "calibrated validation target."
+        ),
+    }
+    if reachable_pairs:
+        comparison.update(
+            {
+                "mean_network_minutes": round(network_total / reachable_pairs, 3),
+                "mean_proxy_minutes": round(proxy_total / reachable_pairs, 3),
+                "mean_abs_delta_minutes": round(abs_delta_total / reachable_pairs, 3),
+                "max_abs_delta_minutes": round(max_abs_delta, 3),
+            }
+        )
+    else:
+        comparison.update(
+            {
+                "mean_network_minutes": None,
+                "mean_proxy_minutes": None,
+                "mean_abs_delta_minutes": None,
+                "max_abs_delta_minutes": None,
+            }
+        )
+    return comparison

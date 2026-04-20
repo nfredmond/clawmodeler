@@ -79,6 +79,7 @@ The current stack implements these plan modules:
 - Accessibility Engine: writes 15, 30, and 45 minute cumulative jobs-accessible outputs using a Euclidean proxy travel-time method.
 - Accessibility Engine: uses staged `network_edges.csv` shortest paths when available, then `cache/graphs/*.graphml`, otherwise falls back to Euclidean proxy travel times.
 - Accessibility Engine: supports optional `question.routing` controls for `auto`, `network_edges_csv`, `graphml`, or `euclidean_proxy` routing source selection.
+- Workflow reports include a routing QA diagnostic that compares selected network shortest paths with straight-line proxy travel times between staged zone centroids. This is a screening comparison, not calibration.
 - VMT & Climate: writes screening VMT and CO2e estimates using explicit per-capita and emissions-factor assumptions.
 - Transit Analyzer: validates GTFS core files and writes route span, trip count, and frequency metrics.
 - Project Scoring: writes weighted safety, equity, climate, and feasibility scores.

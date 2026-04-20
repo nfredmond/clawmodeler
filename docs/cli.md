@@ -126,7 +126,7 @@ Runs may optionally set `question.routing`:
 }
 ```
 
-Supported `source` values are `auto`, `network_edges_csv`, `graphml`, and `euclidean_proxy`. `minutes` is the only supported impedance in this pass.
+Supported `source` values are `auto`, `network_edges_csv`, `graphml`, and `euclidean_proxy`. `minutes` is the only supported impedance in this pass. `workflow full`, `workflow report-only`, and `workflow diagnose` write routing diagnostics; when a network source is selected, the report includes a zone-pair comparison against straight-line proxy travel times as a screening QA check.
 
 ## Notes
 

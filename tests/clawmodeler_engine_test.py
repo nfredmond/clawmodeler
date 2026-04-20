@@ -1362,6 +1362,11 @@ class ClawModelerEngineTest(unittest.TestCase):
                 (workspace / "runs" / "override" / "workflow_report.json").read_text()
             )
             self.assertEqual(workflow["routing"]["selected_source"], "graphml")
+            self.assertEqual(
+                workflow["routing"]["proxy_comparison"]["network_engine"],
+                "graphml_dijkstra:fast",
+            )
+            self.assertEqual(workflow["routing"]["proxy_comparison"]["reachable_pairs"], 1)
             accessibility = (
                 workspace
                 / "runs"

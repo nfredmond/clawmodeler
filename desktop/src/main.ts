@@ -266,6 +266,10 @@ function escapeHtml(value: unknown): string {
     .replace(/"/gu, "&quot;");
 }
 
+function formatOptionalNumber(value: number | null | undefined, digits = 1): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "n/a";
+}
+
 function readinessLabel(value: boolean | null | undefined): string {
   if (value === true) return "ready";
   if (value === false) return "blocked";
@@ -1716,6 +1720,25 @@ function renderArtifacts() {
     ? `${routing.selectedSource} (${routing.impedance})`
     : "No routing diagnosis recorded";
   const routingDetail = routing?.detail ?? "";
+  const routingComparison = routing?.proxyComparison;
+  const routingComparisonText = routingComparison
+    ? `${routingComparison.reachablePairs ?? 0}/${routingComparison.comparedPairs ?? 0} zone pairs compared; mean absolute delta ${formatOptionalNumber(
+        routingComparison.meanAbsDeltaMinutes,
+        1,
+      )} min.`
+    : "No network/proxy comparison recorded.";
+  const routingComparisonDetail = routingComparison
+    ? `Network mean ${formatOptionalNumber(
+        routingComparison.meanNetworkMinutes,
+        1,
+      )} min; proxy mean ${formatOptionalNumber(
+        routingComparison.meanProxyMinutes,
+        1,
+      )} min at ${formatOptionalNumber(routingComparison.proxySpeedKph, 1)} kph; max delta ${formatOptionalNumber(
+        routingComparison.maxAbsDeltaMinutes,
+        1,
+      )} min; unreachable pairs ${routingComparison.unreachablePairs ?? 0}.`
+    : "";
   const qaExportReady = runSummary?.qaExportReady;
   const bridgePackageReady = runSummary?.bridgeExportReady;
   const detailedForecastReady = runSummary?.detailedForecastReady;
@@ -1831,6 +1854,14 @@ function renderArtifacts() {
         <summary>Routing diagnosis</summary>
         <p>${escapeHtml(routingDetail || "No routing diagnosis recorded.")}</p>
         <p>Requested: <code>${escapeHtml(routing?.requestedSource ?? "unknown")}</code>. Graph ID: <code>${escapeHtml(routing?.graphId ?? "none")}</code>.</p>
+        <p>${escapeHtml(routingComparisonText)}</p>
+        ${
+          routingComparison
+            ? `<p>${escapeHtml(routingComparisonDetail)}</p><p>${escapeHtml(
+                routingComparison.note ?? "Comparison is a screening diagnostic, not calibration.",
+              )}</p>`
+            : ""
+        }
       </details>
       <details>
         <summary>Bridge execution reports</summary>

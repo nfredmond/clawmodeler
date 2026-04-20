@@ -102,6 +102,11 @@ if not bridge_validation["detailed_forecast_blockers"]:
     raise SystemExit("expected detailed forecast blockers for fixture bridge packages")
 if portfolio["run_count"] != 2:
     raise SystemExit(f"expected 2 portfolio runs, got {portfolio['run_count']}")
+if workflow["routing"]["selected_source"] != "network_edges_csv":
+    raise SystemExit(f"expected network_edges_csv routing, got {workflow['routing']}")
+routing_comparison = workflow["routing"].get("proxy_comparison")
+if not routing_comparison or routing_comparison["reachable_pairs"] != 6:
+    raise SystemExit(f"missing routing proxy comparison: {routing_comparison}")
 
 prepared = {item["bridge"] for item in workflow["bridges"]["prepared"]}
 if prepared != {"sumo", "matsim", "urbansim", "dtalite"}:

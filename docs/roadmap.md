@@ -26,6 +26,7 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 - Run manifests, bridge manifests, workflow summaries, reports, and desktop summaries now distinguish handoff-only bridge readiness from calibrated forecast readiness.
 - Detailed-engine readiness records method notes, required calibration inputs, required validation targets, and missing readiness blockers.
 - Routing choices are controlled through both CLI and desktop workflow surfaces, with diagnostics recorded in workflow reports.
+- The tiny public fixture and desktop acceptance gate now prove network-edge routing end to end and record a network-vs-proxy zone-pair comparison without treating it as calibration.
 - Bridge execution dry runs and command reports are available from both CLI and desktop surfaces, with generated bridge outputs included in audit reports.
 - QA blocks unsupported report export and validates manifest and fact-block evidence.
 - Planner Pack emitters cover CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP.
@@ -37,9 +38,9 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 
 ## Next Engineering Milestones
 
-1. **Make routing data real.**
+1. **Deepen routing import quality.**
 
-   Add a small real-network fixture path that exercises network edge CSV or GraphML routing end to end, then make the routing diagnostics compare proxy and network-backed methods without overstating calibrated forecast quality.
+   Add stronger validation for `network_edges.csv`, add a GraphML fixture path with `zone_node_map.csv`, and make routing diagnostics expose unreachable pairs and weak graph coverage in planner-readable terms.
 
 2. **Turn bridge execution from dry-run confidence into useful operator feedback.**
 
@@ -75,4 +76,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when one fixture-backed workflow proves network-backed routing, routing diagnostics, bridge execution reporting, and desktop summaries stay aligned across CLI, reports, and UI without claiming calibrated forecasts from screening-level inputs.
+The next pass is done when routing import validation catches malformed or disconnected networks, the GraphML path is covered by a public fixture, and desktop summaries explain routing coverage problems without claiming calibrated forecasts from screening-level inputs.

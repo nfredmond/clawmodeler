@@ -43,6 +43,21 @@ export type RoutingSummary = {
   graphId: string | null;
   impedance: string;
   detail: string | null;
+  proxyComparison: RoutingProxyComparison | null;
+};
+
+export type RoutingProxyComparison = {
+  networkEngine: string | null;
+  zoneCount: number | null;
+  comparedPairs: number | null;
+  reachablePairs: number | null;
+  unreachablePairs: number | null;
+  meanNetworkMinutes: number | null;
+  meanProxyMinutes: number | null;
+  meanAbsDeltaMinutes: number | null;
+  maxAbsDeltaMinutes: number | null;
+  proxySpeedKph: number | null;
+  note: string | null;
 };
 
 export type RunSummary = {
@@ -454,6 +469,10 @@ function routingSummary(workflowReport: Record<string, unknown> | null): Routing
     return null;
   }
   const row = routing as Record<string, unknown>;
+  const comparison =
+    row.proxy_comparison && typeof row.proxy_comparison === "object" && !Array.isArray(row.proxy_comparison)
+      ? (row.proxy_comparison as Record<string, unknown>)
+      : null;
   return {
     requestedSource:
       typeof row.requested_source === "string" ? row.requested_source : "auto",
@@ -462,6 +481,21 @@ function routingSummary(workflowReport: Record<string, unknown> | null): Routing
     graphId: asString(row.graph_id),
     impedance: typeof row.impedance === "string" ? row.impedance : "minutes",
     detail: asString(row.detail),
+    proxyComparison: comparison
+      ? {
+          networkEngine: asString(comparison.network_engine),
+          zoneCount: asNumber(comparison.zone_count),
+          comparedPairs: asNumber(comparison.compared_pairs),
+          reachablePairs: asNumber(comparison.reachable_pairs),
+          unreachablePairs: asNumber(comparison.unreachable_pairs),
+          meanNetworkMinutes: asNumber(comparison.mean_network_minutes),
+          meanProxyMinutes: asNumber(comparison.mean_proxy_minutes),
+          meanAbsDeltaMinutes: asNumber(comparison.mean_abs_delta_minutes),
+          maxAbsDeltaMinutes: asNumber(comparison.max_abs_delta_minutes),
+          proxySpeedKph: asNumber(comparison.proxy_speed_kph),
+          note: asString(comparison.note),
+        }
+      : null,
   };
 }
 
