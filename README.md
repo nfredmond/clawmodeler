@@ -3,9 +3,9 @@
 [![CI](https://github.com/nfredmond/clawmodeler/actions/workflows/ci.yml/badge.svg)](https://github.com/nfredmond/clawmodeler/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-ClawModeler is an OpenClaw-powered transportation modeling workbench. It is designed to let local agents help a planner go from raw transportation data to reproducible scenario outputs, QA-gated evidence, and report-ready narratives.
+ClawModeler is a standalone, local-first transportation sketch-planning workbench. It helps a planner go from raw transportation data to reproducible scenario outputs, QA-gated evidence, and report-ready narratives without uploading project files to a cloud service.
 
-The long-term goal is an installable OpenClaw transportation edition where agents can inspect local tools, select the right modeling method, run the workflow, validate the outputs, and explain every limitation.
+The long-term goal is an installable desktop app plus `clawmodeler-engine` sidecar where planners can inspect local tools, select defensible methods, run workflows, validate outputs, compare alternatives, and generate Planner Pack artifacts with every limitation visible.
 
 For the big-picture roadmap and scope guardrails, see `docs/roadmap.md`.
 
@@ -251,7 +251,7 @@ It includes:
 - ML: scikit-learn, PyTorch, XGBoost, LightGBM, transformers,
 - reporting: Pandoc, Graphviz, Office/PDF helpers.
 
-The local transportation model directories are intentional resources:
+Local transportation model directories may exist next to this repository or in a larger modeling workspace:
 
 ```text
 matsim-libs/
@@ -261,7 +261,7 @@ DTALite/
 tbest-tools/
 ```
 
-Do not delete them as accidental untracked files. Agents should treat them as local modeling engines or bridge targets.
+Do not package them accidentally. Agents should treat them as local modeling engines or bridge targets when present, while keeping the ClawModeler Python wheel lean.
 
 ## Install Profiles
 
@@ -339,21 +339,24 @@ Implemented now:
 - project scoring,
 - fact-block generation,
 - QA-gated Markdown export,
+- QA-gated PDF export when the `pdf` optional dependency set is installed,
 - bridge manifests for SUMO, MATSim, UrbanSim, DTALite, and TBEST,
+- Planner Pack artifacts for CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP,
+- run-to-run diff, what-if runs, grounded chat, and portfolio summaries,
+- Tauri v2 desktop workbench with a vanilla TypeScript front end,
 - toolbox inventory and install profiles.
 
 Still to build:
 
-- Tauri/React ClawModeler UI,
 - real DuckDB spatial ingestion path as the default,
-- OSMnx/NetworkX graph routing,
+- deeper OSMnx/NetworkX routing controls,
 - R5 transit accessibility execution,
 - SUMO network/demand conversion and execution,
 - MATSim population/plans conversion,
 - UrbanSim scenario adapter,
 - DTALite assignment adapter,
 - MOVES export package,
-- PDF/DOCX report rendering,
+- DOCX report rendering,
 - packaged install profiles for desktop and containers.
 
 ## Verification

@@ -1,0 +1,109 @@
+# CMAQ Cycle Packet — run `{{ run_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+- Analysis year: **{{ result.analysis_year }}**
+- Pollutants in scope: **{% for p in result.pollutants %}{{ p | upper | replace('PM2_5', 'PM2.5') }}{% if not loop.last %}, {% endif %}{% endfor %}**
+- Candidate projects screened: **{{ result.project_count }}**
+- Per-pollutant estimates produced: **{{ result.estimates | length }}**
+
+## Scope
+
+This packet documents the Congestion Mitigation and Air Quality
+Improvement Program (CMAQ) emissions-reduction screen for each
+candidate project produced by ClawModeler run `{{ run_id }}`. CMAQ is
+authorized under 23 USC 149 and is the primary federal funding source
+for transportation projects that reduce criteria-pollutant emissions
+in designated nonattainment and maintenance areas. Screening follows
+the FHWA *CMAQ Reference Guide* (current edition), which requires a
+defensible per-pollutant emissions-reduction estimate (kilograms per
+day) plus a cost-effectiveness value (USD per kilogram reduced),
+grouped by the Reference Guide's eligibility categories.
+
+## Methodology
+
+Per the FHWA CMAQ Reference Guide, each candidate must attach:
+
+- **Pollutant-specific kg/day reduction estimate** — the expected
+  change in daily emissions for each applicable criteria pollutant
+  (PM2.5, PM10, NOx, VOC, or CO), estimated via an approved method
+  (EPA MOVES, CARB EMFAC, or an agency-approved sketch tool).
+- **Cost-effectiveness** — total project cost divided by total
+  lifetime kilograms reduced, expressed in USD per kilogram. Lower is
+  more favorable in every CMAQ cycle.
+- **Eligibility category** — the Reference Guide category the project
+  falls under (for example, *transit service / expansion*, *diesel
+  retrofit*, *travel demand management*, *active transportation*).
+- **Nonattainment or maintenance area designation** — the EPA-
+  designated area whose air-quality plan the reduction is credited to.
+
+ClawModeler does not synthesize CMAQ inputs. When the lead agency has
+not yet staged the `cmaq_overlay.csv` sidecar (long format: one row
+per project × pollutant), candidates are not represented in the
+estimates table; the portfolio count still reflects total candidates.
+
+## Per-project estimates
+
+{% if estimates %}| Project | Name | Pollutant | kg/day | USD/kg | Eligibility | Nonattainment area |
+|---|---|:-:|---:|---:|---|---|
+{% for estimate in estimates %}| `{{ estimate.project_id }}` | {{ estimate.name }} | {{ estimate.pollutant | upper | replace('PM2_5', 'PM2.5') }} | {{ "%.3f"|format(estimate.kg_per_day_reduced) }} | {{ "%.2f"|format(estimate.cost_effectiveness_usd_per_kg) if estimate.cost_effectiveness_usd_per_kg is not none else 'n/a' }} | {{ estimate.eligibility_category }} | {{ estimate.nonattainment_area }} |
+{% endfor %}
+{% else %}_No CMAQ overlay data has been supplied for any candidate. Stage `inputs/cmaq_overlay.csv` (or reference it from the run manifest under `cmaq_overlay_csv`) before the CMAQ application package can be assembled._
+{% endif %}
+
+## Portfolio totals by pollutant
+
+{% if summary and pollutant_rows %}| Pollutant | Total kg/day reduced | Mean cost-effectiveness (USD/kg) |
+|---|---:|---:|
+{% for row in pollutant_rows %}| {{ row.label }} | {{ "%.3f"|format(row.total_kg_per_day) }} | {{ "%.2f"|format(row.mean_cost_effectiveness_usd_per_kg) if row.mean_cost_effectiveness_usd_per_kg is not none else 'n/a' }} |
+{% endfor %}
+{% else %}_No portfolio totals were produced._
+{% endif %}
+
+## Eligibility categories represented
+
+{% if summary and summary.eligibility_categories %}The following FHWA CMAQ Reference Guide eligibility categories appear
+in this cycle's overlay. The lead agency must confirm each category
+placement against the current FHWA CMAQ Reference Guide before the
+application package is finalized.
+
+{% for category in summary.eligibility_categories %}- {{ category }}
+{% endfor %}
+{% else %}_No eligibility categories have been recorded. Each candidate in the CMAQ application package must be mapped to a Reference Guide category._
+{% endif %}
+
+## Data sources
+
+{% set supplied = estimates | selectattr('overlay_supplied') | list %}
+{% if supplied %}Overlay data for the following estimates was sourced as follows. The
+lead agency is responsible for confirming each source and retaining
+the underlying EMFAC/MOVES runs or agency-approved sketch worksheets
+in the CMAQ application package.
+
+{% for estimate in supplied %}- `{{ estimate.project_id }}` ({{ estimate.pollutant | upper | replace('PM2_5', 'PM2.5') }}) — {{ estimate.data_source_ref }}
+{% endfor %}
+{% else %}_No overlay data has been supplied for any candidate._
+{% endif %}
+
+## Citations
+
+- 23 USC 149 (Congestion Mitigation and Air Quality Improvement Program).
+- Federal Highway Administration, *CMAQ Reference Guide* (current edition).
+- U.S. EPA, *MOVES* motor-vehicle emissions simulator (current version).
+- California Air Resources Board, *EMFAC* emission factor model (current version).
+
+## Notes
+
+- Estimates in this packet are **not** a CMAQ application. They are a
+  cycle-readiness diagnostic the lead agency uses to focus effort on
+  candidates whose emissions-reduction estimates and cost-effectiveness
+  values can survive FHWA / state DOT review before the full
+  application package is assembled.
+- Every estimate in this packet is mirrored as a
+  `cmaq_emissions_estimate` fact_block (plus one `cmaq_portfolio_summary`)
+  appended to this run's `fact_blocks.jsonl`, so subsequent narrative
+  and chat turns remain subject to the ClawModeler citation contract.
+
+---
+
+*ClawModeler Planner Pack — CMAQ cycle packet (23 USC 149; FHWA CMAQ Reference Guide).*

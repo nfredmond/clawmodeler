@@ -133,6 +133,36 @@ async function listFiles(root: string): Promise<{ files: string[]; truncated: bo
   return { files: files.toSorted(), truncated };
 }
 
+async function listReportFiles(workspace: string, runId: string): Promise<string[]> {
+  const reportsDir = path.join(workspace, "reports");
+  let entries: Array<{ name: string; isFile(): boolean }>;
+  try {
+    entries = (await fs.readdir(reportsDir, { withFileTypes: true })) as Array<{
+      name: string;
+      isFile(): boolean;
+    }>;
+  } catch {
+    return [];
+  }
+  const prefixes = [`${runId}_`, `${runId}.`];
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => prefixes.some((prefix) => name.startsWith(prefix)))
+    .map((name) => path.join(reportsDir, name))
+    .toSorted();
+}
+
+function optionalNumber(body: Record<string, unknown>, key: string): number | null {
+  const value = body[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function optionalStringArray(body: Record<string, unknown>, key: string): string[] {
+  const value = body[key];
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+}
+
 function clawModelerApiPlugin(): Plugin {
   return {
     name: "clawmodeler-api",
@@ -161,7 +191,8 @@ function clawModelerApiPlugin(): Plugin {
               throw new Error("workspace is required");
             }
             const runRoot = path.join(workspace, "runs", runId);
-            const { files, truncated } = await listFiles(runRoot);
+            const { files: runFiles, truncated } = await listFiles(runRoot);
+            const reportFiles = await listReportFiles(workspace, runId);
             const payload = {
               workspace,
               runId,
@@ -171,7 +202,7 @@ function clawModelerApiPlugin(): Plugin {
               reportMarkdown: await readTextIfExists(
                 path.join(workspace, "reports", `${runId}_report.md`),
               ),
-              files,
+              files: [...runFiles, ...reportFiles].toSorted(),
               filesTruncated: truncated,
             };
             sendJson(response, 200, { ok: true, json: payload });
@@ -237,6 +268,96 @@ function clawModelerApiPlugin(): Plugin {
               throw new Error("args must be a string array");
             }
             const result = await runEngine(args as string[]);
+            sendJson(response, result.ok ? 200 : 500, result);
+            return;
+          }
+
+          if (route === "/chat") {
+            const args = [
+              "chat",
+              "--workspace",
+              requiredString(body, "workspace"),
+              "--run-id",
+              requiredString(body, "runId"),
+              "--message",
+              requiredString(body, "message"),
+              "--json",
+            ];
+            if (body.noHistory === true) {
+              args.push("--no-history");
+            }
+            const result = await runEngine(args);
+            sendJson(response, result.ok ? 200 : 500, result);
+            return;
+          }
+
+          if (route === "/what-if") {
+            const args = [
+              "what-if",
+              "--workspace",
+              requiredString(body, "workspace"),
+              "--base-run-id",
+              requiredString(body, "baseRunId"),
+              "--new-run-id",
+              requiredString(body, "newRunId"),
+              "--json",
+            ];
+            const weights = [
+              ["weightSafety", "--weight-safety"],
+              ["weightEquity", "--weight-equity"],
+              ["weightClimate", "--weight-climate"],
+              ["weightFeasibility", "--weight-feasibility"],
+            ] as const;
+            for (const [bodyKey, argKey] of weights) {
+              const value = optionalNumber(body, bodyKey);
+              if (value !== null) {
+                args.push(argKey, String(value));
+              }
+            }
+            const referenceVmt = optionalNumber(body, "referenceVmtPerCapita");
+            if (referenceVmt !== null) {
+              args.push("--reference-vmt-per-capita", String(referenceVmt));
+            }
+            const thresholdPct = optionalNumber(body, "thresholdPct");
+            if (thresholdPct !== null) {
+              args.push("--threshold-pct", String(thresholdPct));
+            }
+            for (const projectId of optionalStringArray(body, "includeProjects")) {
+              args.push("--include-project", projectId);
+            }
+            for (const projectId of optionalStringArray(body, "excludeProjects")) {
+              args.push("--exclude-project", projectId);
+            }
+            if (typeof body.sensitivityFloor === "string" && body.sensitivityFloor.trim()) {
+              args.push("--sensitivity-floor", body.sensitivityFloor.trim());
+            }
+            const result = await runEngine(args);
+            sendJson(response, result.ok ? 200 : 500, result);
+            return;
+          }
+
+          if (route === "/portfolio") {
+            const result = await runEngine([
+              "portfolio",
+              "--workspace",
+              requiredString(body, "workspace"),
+              "--json",
+            ]);
+            sendJson(response, result.ok ? 200 : 500, result);
+            return;
+          }
+
+          if (route === "/diff") {
+            const result = await runEngine([
+              "diff",
+              "--workspace",
+              requiredString(body, "workspace"),
+              "--run-a",
+              requiredString(body, "runA"),
+              "--run-b",
+              requiredString(body, "runB"),
+              "--json",
+            ]);
             sendJson(response, result.ok ? 200 : 500, result);
             return;
           }

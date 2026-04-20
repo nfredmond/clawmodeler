@@ -1,0 +1,111 @@
+# HSIP Cycle Screen — run `{{ run_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+- HSIP cycle: **{{ result.cycle_label }}** (cycle year {{ result.cycle_year }})
+- Minimum benefit-cost ratio applied: **{{ "%.2f"|format(result.min_bc_ratio) }}**
+- Candidate projects screened: **{{ result.project_count }}**
+
+## Scope
+
+This packet documents the Highway Safety Improvement Program (HSIP) cycle
+screen for each candidate project produced by ClawModeler run
+`{{ run_id }}`. HSIP is authorized under 23 USC 148 and administered in
+California by Caltrans Division of Local Assistance. Screening follows
+the FHWA *Highway Safety Improvement Program Manual* (Chapter 3), which
+requires a documented crash-history basis, a defensible countermeasure
+linkage, and a benefit-cost ratio at or above the lead agency's
+applicable minimum.
+
+## Methodology
+
+Per the FHWA HSIP Manual (Chapter 3), each candidate is evaluated against:
+
+- **Crash history** — total and fatal/serious-injury crashes across the
+  most recent five-year window available from the lead agency's official
+  crash-data source.
+- **Systemic risk** — a risk score that flags sites without a
+  statistically high crash history but with features known to correlate
+  with severe crashes elsewhere in the network.
+- **Benefit-cost ratio (B/C)** — the ratio of expected crash-cost
+  reduction to project cost. Projects with a B/C below
+  **{{ "%.2f"|format(result.min_bc_ratio) }}** are flagged as below the
+  minimum for this cycle.
+- **Proven countermeasure** — whether the project delivers at least one
+  FHWA *Proven Safety Countermeasure* (FHWA-SA-21-054 list), which the
+  HSIP cycle call typically prioritizes.
+
+ClawModeler does not synthesize HSIP inputs. When the lead agency has
+not yet staged the `hsip_overlay.csv` sidecar, the crash, systemic, and
+benefit-cost fields appear as `unknown` and the project is reported as
+`not yet screened` rather than silently treated as ineligible. Fields
+marked *n/a* below reflect this data gap, not a determination.
+
+## Per-project screen
+
+{% if screens %}| Project | Name | Overlay | Crash 5-yr | F+S 5-yr | Systemic | B/C | ≥ min? | Proven CM | Status |
+|---|---|:-:|---:|---:|---:|---:|:-:|:-:|---|
+{% for screen in screens %}| `{{ screen.project_id }}` | {{ screen.name }} | {{ 'yes' if screen.overlay_supplied else 'no' }} | {{ screen.crash_history_5yr if screen.crash_history_5yr is not none else 'n/a' }} | {{ screen.fatal_serious_5yr if screen.fatal_serious_5yr is not none else 'n/a' }} | {{ screen.systemic_risk_score if screen.systemic_risk_score is not none else 'n/a' }} | {{ "%.2f"|format(screen.benefit_cost_ratio) if screen.benefit_cost_ratio is not none else 'n/a' }} | {{ 'yes' if screen.bc_ratio_passes else 'no' }} | {{ 'yes' if screen.proven_countermeasure else 'no' }} | **{{ screen.screen_status }}** |
+{% endfor %}
+{% else %}_No candidate projects were available for HSIP screening._
+{% endif %}
+
+## Portfolio summary
+
+{% if summary %}- Candidates screened: **{{ summary.project_count }}**
+- Candidates with overlay data supplied: **{{ summary.overlay_supplied_count }}**
+- Candidates clearing the {{ "%.2f"|format(result.min_bc_ratio) }} B/C minimum: **{{ summary.bc_ratio_passes_count }}**
+- Candidates delivering an FHWA proven countermeasure: **{{ summary.proven_countermeasure_count }}**
+- Mean benefit-cost ratio across supplied overlays: **{{ "%.2f"|format(summary.mean_benefit_cost_ratio) if summary.mean_benefit_cost_ratio is not none else 'n/a' }}**
+- Mean systemic-risk score across supplied overlays: **{{ "%.2f"|format(summary.mean_systemic_risk_score) if summary.mean_systemic_risk_score is not none else 'n/a' }}**
+- Total fatal + serious-injury crashes (5-yr) across supplied overlays: **{{ summary.total_fatal_serious_5yr if summary.total_fatal_serious_5yr is not none else 'n/a' }}**
+{% else %}_No portfolio summary was produced._
+{% endif %}
+
+## Proven countermeasure citations
+
+{% set proven = screens | selectattr('proven_countermeasure') | list %}
+{% if proven %}The following candidates report delivery of at least one FHWA Proven
+Safety Countermeasure. The lead agency must confirm each citation
+against the current FHWA Proven Safety Countermeasure list (FHWA-SA-21-054)
+before the HSIP application package is finalized.
+
+{% for screen in proven %}- `{{ screen.project_id }}` ({{ screen.name }}) — {{ screen.proven_countermeasure_citation }}
+{% endfor %}
+{% else %}_No candidates in this run report a proven countermeasure; the HSIP application package should document each project's countermeasure linkage before submission._
+{% endif %}
+
+## Data sources
+
+{% set supplied = screens | selectattr('overlay_supplied') | list %}
+{% if supplied %}Overlay data for the following candidates was sourced as follows. The
+lead agency is responsible for confirming each source and retaining the
+underlying crash reports, systemic-risk rasters, and B/C worksheets in
+the HSIP application package.
+
+{% for screen in supplied %}- `{{ screen.project_id }}` — {{ screen.data_source_ref }}
+{% endfor %}
+{% else %}_No overlay data has been supplied for any candidate. Stage `inputs/hsip_overlay.csv` (or reference it from the run manifest under `hsip_overlay_csv`) before the HSIP application package can be assembled._
+{% endif %}
+
+## Citations
+
+- 23 USC 148 (Highway Safety Improvement Program).
+- Federal Highway Administration, *Highway Safety Improvement Program Manual*, Chapter 3 (current edition).
+- Federal Highway Administration, *Proven Safety Countermeasures* (FHWA-SA-21-054).
+- Caltrans Division of Local Assistance, HSIP cycle call materials for cycle year {{ result.cycle_year }}.
+
+## Notes
+
+- Screens in this packet are **not** an HSIP application. They are a
+  cycle-readiness diagnostic the lead agency uses to focus effort on
+  candidates that can clear FHWA HSIP eligibility before the full
+  application package is assembled.
+- Every screen in this packet is mirrored as an `hsip_project_screen`
+  fact_block (plus one `hsip_portfolio_summary`) appended to this run's
+  `fact_blocks.jsonl`, so subsequent narrative and chat turns remain
+  subject to the ClawModeler citation contract.
+
+---
+
+*ClawModeler Planner Pack — HSIP cycle screen (23 USC 148; FHWA HSIP Manual Ch. 3).*

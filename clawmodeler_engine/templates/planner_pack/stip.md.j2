@@ -1,0 +1,110 @@
+# STIP Cycle Packet — run `{{ run_id }}`
+
+- Engine version: `{{ engine_version }}`
+- Generated: `{{ result.generated_at }}`
+- STIP cycle: **{{ result.cycle_label }}**
+- Region filter: **{{ result.region_filter if result.region_filter else 'statewide (no filter)' }}**
+- Candidate projects screened: **{{ result.project_count }}**
+- Programming rows produced: **{{ result.programming_rows | length }}**
+
+## Scope
+
+This packet documents the State Transportation Improvement Program
+(STIP) programming entries for each candidate project produced by
+ClawModeler run `{{ run_id }}`. California's STIP is governed by
+Streets & Highways Code §§14525-14529.11 and the current CTC STIP
+Guidelines; it is adopted biennially by the California Transportation
+Commission and programs Regional Improvement Program (RIP, 75% share)
+and Interregional Improvement Program (IIP, 25% share) funds across a
+four-year horizon. S&HC §188 further requires a 40% northern region /
+60% southern region statewide split.
+
+## Methodology
+
+Per the CTC STIP Guidelines, each candidate programmed into the cycle
+must attach:
+
+- **Phase** — PA&ED (Project Approval & Environmental Document), PS&E
+  (Plans, Specifications & Estimate), R/W (Right-of-Way), or CON
+  (Construction).
+- **Fiscal year** — California's state fiscal year follows the format
+  `YYYY-YY` (e.g., `2026-27` denotes July 2026 through June 2027).
+- **Programmed cost** — in thousands of dollars, matching the CTC's
+  application currency.
+- **Funding source** — ``RIP`` (Regional Improvement Program), ``IIP``
+  (Interregional Improvement Program), ``SB1``, or another
+  CTC-recognized category.
+- **PPNO** — the Caltrans Project Programming Number, assigned when
+  the project enters a Caltrans districts' PPNO directory. Candidates
+  that do not yet carry a PPNO are reported without one; the lead
+  agency must coordinate with the district before the application
+  package is assembled.
+- **Region** — ``north`` (10-county northern region) or ``south``
+  (12-county southern region) per S&HC §188.
+
+ClawModeler does not synthesize STIP inputs. When the lead agency has
+not yet staged the `stip_overlay.csv` sidecar (long format: one row
+per project × phase × fiscal year), candidates are not represented in
+the programming table; the portfolio count still reflects total
+candidates.
+
+## Programming rows
+
+{% if programming_rows %}| Project | Name | Phase | FY | Cost ($000s) | Funding | PPNO | Region |
+|---|---|:-:|:-:|---:|:-:|:-:|:-:|
+{% for row in programming_rows %}| `{{ row.project_id }}` | {{ row.name }} | {{ row.phase }} | {{ row.fiscal_year }} | {{ "%.0f"|format(row.cost_thousands) }} | {{ row.funding_source }} | {{ row.ppno if row.ppno else 'n/a' }} | {{ row.region if row.region else 'n/a' }} |
+{% endfor %}
+{% else %}_No STIP overlay data has been supplied for any candidate. Stage `inputs/stip_overlay.csv` (or reference it from the run manifest under `stip_overlay_csv`) before the STIP application package can be assembled._
+{% endif %}
+
+## Totals by fiscal year
+
+{% if fiscal_year_rows %}| Fiscal year | Total cost ($000s) |
+|---|---:|
+{% for row in fiscal_year_rows %}| {{ row.fiscal_year }} | {{ "%.0f"|format(row.total_cost_thousands) }} |
+{% endfor %}
+{% else %}_No fiscal-year totals were produced._
+{% endif %}
+
+## Totals by funding source
+
+{% if funding_source_rows %}| Funding source | Total cost ($000s) |
+|---|---:|
+{% for row in funding_source_rows %}| {{ row.funding_source }} | {{ "%.0f"|format(row.total_cost_thousands) }} |
+{% endfor %}
+{% else %}_No funding-source totals were produced._
+{% endif %}
+
+## Northern / southern region split (S&HC §188)
+
+{% if summary and summary.north_south_split %}{% set split = summary.north_south_split %}| Region | Cost ($000s) | Share | Target | Within ±5%? |
+|---|---:|---:|---:|:-:|
+| North | {{ "%.0f"|format(split.north_cost_thousands) }} | {{ "%.1f"|format(split.north_share * 100) }}% | {{ "%.0f"|format(split.target_north_share * 100) }}% | {{ '✓' if split.meets_target else '✗' }} |
+| South | {{ "%.0f"|format(split.south_cost_thousands) }} | {{ "%.1f"|format(split.south_share * 100) }}% | {{ "%.0f"|format(split.target_south_share * 100) }}% | {{ '✓' if split.meets_target else '✗' }} |
+
+_{{ split.notes }}_
+{% else %}_No N/S split was computed._
+{% endif %}
+
+## Citations
+
+- California Streets and Highways Code §§14525-14529.11 (STIP adoption and programming).
+- California Streets and Highways Code §188 (40% north / 60% south statewide split).
+- California Transportation Commission, *STIP Guidelines* (current adoption).
+- Caltrans, *PPNO (Project Programming Number) Directory* (current edition).
+
+## Notes
+
+- This packet is **not** a STIP application. It is a cycle-readiness
+  diagnostic the lead agency uses to focus effort on candidates whose
+  phase, fiscal-year, funding-source, and region placements can
+  survive CTC and Caltrans district review before the full application
+  package is assembled.
+- Every programming row in this packet is mirrored as a
+  `stip_programming_row` fact_block (plus one `stip_portfolio_summary`)
+  appended to this run's `fact_blocks.jsonl`, so subsequent narrative
+  and chat turns remain subject to the ClawModeler citation contract.
+
+---
+
+*ClawModeler Planner Pack — STIP cycle packet (S&HC §§14525-14529.11 and §188; CTC STIP Guidelines).*

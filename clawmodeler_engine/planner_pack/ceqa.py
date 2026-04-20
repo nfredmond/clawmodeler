@@ -25,13 +25,12 @@ determination is purely arithmetic.
 from __future__ import annotations
 
 import csv
-import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..report import read_fact_blocks
 from ..workspace import ENGINE_VERSION, InsufficientDataError, read_json, utc_now, write_json
+from .utilities import append_fact_blocks, jinja_env
 
 OPR_DEFAULT_THRESHOLD_PCT = 0.15
 PROJECT_TYPES = ("residential", "employment", "retail")
@@ -184,18 +183,7 @@ def ceqa_vmt_fact_blocks(
 
 def render_ceqa_vmt_markdown(result: CeqaVmtResult, *, run_id: str) -> str:
     """Render the CEQA §15064.3 VMT memo as Markdown."""
-    from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
-    templates_dir = Path(__file__).parent.parent / "templates" / "planner_pack"
-    env = Environment(
-        loader=FileSystemLoader(str(templates_dir)),
-        autoescape=False,
-        trim_blocks=False,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-        undefined=StrictUndefined,
-    )
-    template = env.get_template("ceqa_vmt.md.j2")
+    template = jinja_env().get_template("ceqa_vmt.md.j2")
     return template.render(
         run_id=run_id,
         engine_version=ENGINE_VERSION,
@@ -209,23 +197,6 @@ def _read_vmt_screening_csv(path: Path) -> list[dict[str, Any]]:
         return []
     with path.open("r", encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
-
-
-def _append_fact_blocks(path: Path, new_blocks: list[dict[str, Any]]) -> int:
-    if not new_blocks:
-        return 0
-    existing_ids: set[str] = set()
-    if path.exists():
-        existing_ids = {str(b.get("fact_id")) for b in read_fact_blocks(path)}
-    appended = 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        for block in new_blocks:
-            if block["fact_id"] in existing_ids:
-                continue
-            f.write(json.dumps(block) + "\n")
-            appended += 1
-    return appended
 
 
 def _resolve_reference_vmt_per_capita(workspace: Path) -> float:
@@ -312,7 +283,7 @@ def write_ceqa_vmt(
     write_json(ceqa_json_path, result.to_json())
 
     new_blocks = ceqa_vmt_fact_blocks(result, ceqa_csv_path)
-    appended = _append_fact_blocks(fact_blocks_path, new_blocks)
+    appended = append_fact_blocks(fact_blocks_path, new_blocks)
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     markdown = render_ceqa_vmt_markdown(result, run_id=run_id)

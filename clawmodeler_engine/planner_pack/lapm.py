@@ -24,13 +24,18 @@ run's outputs or clearly labeled as a lead-agency placeholder.
 from __future__ import annotations
 
 import csv
-import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..report import read_fact_blocks
 from ..workspace import ENGINE_VERSION, InsufficientDataError, utc_now, write_json
+from .utilities import (
+    append_fact_blocks,
+    coerce_str,
+    jinja_env,
+    manifest_artifact_paths,
+    parse_optional_float,
+)
 
 DEFAULT_LEAD_AGENCY = "Lead agency to be provided"
 DEFAULT_DISTRICT = "District to be provided by lead agency"
@@ -75,21 +80,6 @@ class LapmExhibitResult:
         }
 
 
-def _parse_optional_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_str(value: Any, default: str = "") -> str:
-    if value in (None, ""):
-        return default
-    return str(value).strip() or default
-
-
 def compute_lapm_exhibit(
     score_rows: list[dict[str, Any]],
     *,
@@ -114,57 +104,57 @@ def compute_lapm_exhibit(
 
     project_by_id: dict[str, dict[str, Any]] = {}
     for row in project_rows or []:
-        project_id = _coerce_str(row.get("project_id"))
+        project_id = coerce_str(row.get("project_id"))
         if project_id:
             project_by_id[project_id] = row
 
     exhibits: list[LapmProgrammingExhibit] = []
     for row in score_rows:
-        project_id = _coerce_str(row.get("project_id"))
+        project_id = coerce_str(row.get("project_id"))
         if not project_id:
             continue
         sidecar = project_by_id.get(project_id, {})
-        lat = _parse_optional_float(sidecar.get("lat"))
-        lon = _parse_optional_float(sidecar.get("lon"))
+        lat = parse_optional_float(sidecar.get("lat"))
+        lon = parse_optional_float(sidecar.get("lon"))
         if lat is not None and lon is not None:
             location_note = f"{lat:.5f}, {lon:.5f}"
         else:
             location_note = "Location to be provided by lead agency"
-        description = _coerce_str(
+        description = coerce_str(
             sidecar.get("description"),
             "Project description to be provided by lead agency.",
         )
-        project_type = _coerce_str(
+        project_type = coerce_str(
             sidecar.get("project_type"),
             "Project type to be provided by lead agency",
         )
-        schedule_note = _coerce_str(
+        schedule_note = coerce_str(
             sidecar.get("schedule"),
             "PA&ED, PS&E, R/W, and CON schedule to be provided by lead agency",
         )
-        estimated_cost = _parse_optional_float(sidecar.get("estimated_cost_usd"))
+        estimated_cost = parse_optional_float(sidecar.get("estimated_cost_usd"))
         exhibits.append(
             LapmProgrammingExhibit(
                 project_id=project_id,
-                name=_coerce_str(row.get("name"), project_id),
+                name=coerce_str(row.get("name"), project_id),
                 lead_agency=lead_agency,
                 district=district,
                 safety_score=round(
-                    _parse_optional_float(row.get("safety_score")) or 0.0, 3
+                    parse_optional_float(row.get("safety_score")) or 0.0, 3
                 ),
                 equity_score=round(
-                    _parse_optional_float(row.get("equity_score")) or 0.0, 3
+                    parse_optional_float(row.get("equity_score")) or 0.0, 3
                 ),
                 climate_score=round(
-                    _parse_optional_float(row.get("climate_score")) or 0.0, 3
+                    parse_optional_float(row.get("climate_score")) or 0.0, 3
                 ),
                 feasibility_score=round(
-                    _parse_optional_float(row.get("feasibility_score")) or 0.0, 3
+                    parse_optional_float(row.get("feasibility_score")) or 0.0, 3
                 ),
                 total_score=round(
-                    _parse_optional_float(row.get("total_score")) or 0.0, 3
+                    parse_optional_float(row.get("total_score")) or 0.0, 3
                 ),
-                sensitivity_flag=_coerce_str(
+                sensitivity_flag=coerce_str(
                     row.get("sensitivity_flag"), "UNKNOWN"
                 ),
                 location_note=location_note,
@@ -222,18 +212,7 @@ def lapm_fact_blocks(
 
 def render_lapm_markdown(result: LapmExhibitResult, *, run_id: str) -> str:
     """Render the LAPM programming exhibits packet as Markdown."""
-    from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
-    templates_dir = Path(__file__).parent.parent / "templates" / "planner_pack"
-    env = Environment(
-        loader=FileSystemLoader(str(templates_dir)),
-        autoescape=False,
-        trim_blocks=False,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-        undefined=StrictUndefined,
-    )
-    template = env.get_template("lapm_exhibit.md.j2")
+    template = jinja_env().get_template("lapm_exhibit.md.j2")
     return template.render(
         run_id=run_id,
         engine_version=ENGINE_VERSION,
@@ -251,22 +230,12 @@ def _read_csv(path: Path) -> list[dict[str, Any]]:
 
 def _resolve_project_rows(workspace: Path, run_root: Path) -> list[dict[str, Any]]:
     """Find a candidate-projects CSV for enrichment, if the user staged one."""
-    manifest_path = run_root / "outputs" / "run_manifest.json"
-    if manifest_path.exists():
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            manifest = {}
-        artifacts = manifest.get("artifacts") if isinstance(manifest, dict) else None
-        if isinstance(artifacts, dict):
-            candidates = artifacts.get("candidate_projects_csv") or []
-            for candidate in candidates:
-                candidate_path = Path(str(candidate))
-                if not candidate_path.is_absolute():
-                    candidate_path = workspace / candidate_path
-                rows = _read_csv(candidate_path)
-                if rows:
-                    return rows
+    for candidate_path in manifest_artifact_paths(
+        workspace, run_root, "candidate_projects_csv"
+    ):
+        rows = _read_csv(candidate_path)
+        if rows:
+            return rows
     for candidate in (
         workspace / "inputs" / "projects.csv",
         workspace / "inputs" / "processed" / "projects.csv",
@@ -276,23 +245,6 @@ def _resolve_project_rows(workspace: Path, run_root: Path) -> list[dict[str, Any
         if rows:
             return rows
     return []
-
-
-def _append_fact_blocks(path: Path, new_blocks: list[dict[str, Any]]) -> int:
-    if not new_blocks:
-        return 0
-    existing_ids: set[str] = set()
-    if path.exists():
-        existing_ids = {str(b.get("fact_id")) for b in read_fact_blocks(path)}
-    appended = 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        for block in new_blocks:
-            if block["fact_id"] in existing_ids:
-                continue
-            f.write(json.dumps(block) + "\n")
-            appended += 1
-    return appended
 
 
 def write_lapm_exhibit(
@@ -363,7 +315,7 @@ def write_lapm_exhibit(
     write_json(lapm_json_path, result.to_json())
 
     new_blocks = lapm_fact_blocks(result, lapm_csv_path)
-    appended = _append_fact_blocks(fact_blocks_path, new_blocks)
+    appended = append_fact_blocks(fact_blocks_path, new_blocks)
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     markdown = render_lapm_markdown(result, run_id=run_id)

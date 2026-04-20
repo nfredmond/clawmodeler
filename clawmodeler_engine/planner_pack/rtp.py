@@ -24,13 +24,12 @@ This module does not call an LLM.
 from __future__ import annotations
 
 import csv
-import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..report import read_fact_blocks
 from ..workspace import ENGINE_VERSION, InsufficientDataError, utc_now, write_json
+from .utilities import append_fact_blocks, coerce_str, jinja_env, parse_optional_float
 
 DEFAULT_AGENCY = "Lead agency to be provided"
 DEFAULT_RTP_CYCLE = "RTP cycle to be provided"
@@ -81,21 +80,6 @@ class RtpChapterResult:
         }
 
 
-def _parse_optional_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_str(value: Any, default: str = "") -> str:
-    if value in (None, ""):
-        return default
-    return str(value).strip() or default
-
-
 def compute_rtp_chapter(
     score_rows: list[dict[str, Any]],
     vmt_rows: list[dict[str, Any]],
@@ -129,35 +113,35 @@ def compute_rtp_chapter(
 
     lapm_by_id: dict[str, dict[str, Any]] = {}
     for row in lapm_rows or []:
-        project_id = _coerce_str(row.get("project_id"))
+        project_id = coerce_str(row.get("project_id"))
         if project_id:
             lapm_by_id[project_id] = row
 
     projects: list[RtpProjectEntry] = []
     for row in score_rows:
-        project_id = _coerce_str(row.get("project_id"))
+        project_id = coerce_str(row.get("project_id"))
         if not project_id:
             continue
         lapm = lapm_by_id.get(project_id, {})
         projects.append(
             RtpProjectEntry(
                 project_id=project_id,
-                name=_coerce_str(row.get("name"), project_id),
+                name=coerce_str(row.get("name"), project_id),
                 total_score=round(
-                    _parse_optional_float(row.get("total_score")) or 0.0, 3
+                    parse_optional_float(row.get("total_score")) or 0.0, 3
                 ),
-                sensitivity_flag=_coerce_str(
+                sensitivity_flag=coerce_str(
                     row.get("sensitivity_flag"), "UNKNOWN"
                 ),
-                lapm_location=_coerce_str(
+                lapm_location=coerce_str(
                     lapm.get("location_note"),
                     "Location to be provided in LAPM exhibit",
                 ),
-                lapm_project_type=_coerce_str(
+                lapm_project_type=coerce_str(
                     lapm.get("project_type"),
                     "Project type to be provided in LAPM exhibit",
                 ),
-                lapm_estimated_cost_usd=_parse_optional_float(
+                lapm_estimated_cost_usd=parse_optional_float(
                     lapm.get("estimated_cost_usd")
                 ),
             )
@@ -170,16 +154,16 @@ def compute_rtp_chapter(
 
     ceqa_by_scenario: dict[str, dict[str, Any]] = {}
     for row in ceqa_rows or []:
-        scenario_id = _coerce_str(row.get("scenario_id"))
+        scenario_id = coerce_str(row.get("scenario_id"))
         if scenario_id:
             ceqa_by_scenario[scenario_id] = row
 
     delta_by_scenario: dict[str, float] = {}
     for row in delta_rows or []:
-        scenario_id = _coerce_str(row.get("scenario_id"))
+        scenario_id = coerce_str(row.get("scenario_id"))
         if not scenario_id:
             continue
-        delta_value = _parse_optional_float(row.get("delta_jobs_accessible"))
+        delta_value = parse_optional_float(row.get("delta_jobs_accessible"))
         if delta_value is None:
             continue
         delta_by_scenario[scenario_id] = (
@@ -188,11 +172,11 @@ def compute_rtp_chapter(
 
     scenarios: list[RtpScenarioEntry] = []
     for row in vmt_rows:
-        scenario_id = _coerce_str(row.get("scenario_id"))
+        scenario_id = coerce_str(row.get("scenario_id"))
         if not scenario_id:
             continue
-        population = _parse_optional_float(row.get("population")) or 0.0
-        daily_vmt = _parse_optional_float(row.get("daily_vmt")) or 0.0
+        population = parse_optional_float(row.get("population")) or 0.0
+        daily_vmt = parse_optional_float(row.get("daily_vmt")) or 0.0
         vmt_per_capita: float | None
         if population > 0:
             vmt_per_capita = round(daily_vmt / population, 3)
@@ -210,10 +194,10 @@ def compute_rtp_chapter(
                     if scenario_id in delta_by_scenario
                     else None
                 ),
-                ceqa_determination=_coerce_str(
+                ceqa_determination=coerce_str(
                     ceqa.get("determination"), "not screened"
                 ),
-                ceqa_threshold_vmt_per_capita=_parse_optional_float(
+                ceqa_threshold_vmt_per_capita=parse_optional_float(
                     ceqa.get("threshold_vmt_per_capita")
                 ),
             )
@@ -286,18 +270,7 @@ def rtp_chapter_fact_blocks(
 
 def render_rtp_chapter_markdown(result: RtpChapterResult, *, run_id: str) -> str:
     """Render the RTP *Projects and Performance* chapter as Markdown."""
-    from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
-    templates_dir = Path(__file__).parent.parent / "templates" / "planner_pack"
-    env = Environment(
-        loader=FileSystemLoader(str(templates_dir)),
-        autoescape=False,
-        trim_blocks=False,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-        undefined=StrictUndefined,
-    )
-    template = env.get_template("rtp_chapter.md.j2")
+    template = jinja_env().get_template("rtp_chapter.md.j2")
     return template.render(
         run_id=run_id,
         engine_version=ENGINE_VERSION,
@@ -312,23 +285,6 @@ def _read_csv(path: Path) -> list[dict[str, Any]]:
         return []
     with path.open("r", encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
-
-
-def _append_fact_blocks(path: Path, new_blocks: list[dict[str, Any]]) -> int:
-    if not new_blocks:
-        return 0
-    existing_ids: set[str] = set()
-    if path.exists():
-        existing_ids = {str(b.get("fact_id")) for b in read_fact_blocks(path)}
-    appended = 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        for block in new_blocks:
-            if block["fact_id"] in existing_ids:
-                continue
-            f.write(json.dumps(block) + "\n")
-            appended += 1
-    return appended
 
 
 def write_rtp_chapter(
@@ -417,7 +373,7 @@ def write_rtp_chapter(
     write_json(rtp_json_path, result.to_json())
 
     new_blocks = rtp_chapter_fact_blocks(result, rtp_csv_path)
-    appended = _append_fact_blocks(fact_blocks_path, new_blocks)
+    appended = append_fact_blocks(fact_blocks_path, new_blocks)
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     markdown = render_rtp_chapter_markdown(result, run_id=run_id)

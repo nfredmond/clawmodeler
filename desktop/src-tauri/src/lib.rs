@@ -296,7 +296,9 @@ fn clawmodeler_workspace(workspace: String, run_id: String) -> Result<ArtifactRe
     };
     let run_root = workspace_path.join("runs").join(&run_id);
     let reports_dir = workspace_path.join("reports");
-    let (files, files_truncated) = list_files(&run_root);
+    let (mut files, files_truncated) = list_files(&run_root);
+    files.extend(list_report_files(&reports_dir, &run_id));
+    files.sort();
     let artifacts = WorkspaceArtifacts {
         workspace: workspace_path.to_string_lossy().to_string(),
         run_id: run_id.clone(),
@@ -328,6 +330,27 @@ fn list_files(root: &Path) -> (Vec<String>, bool) {
     let truncated = files.len() > FILE_LIST_LIMIT;
     files.truncate(FILE_LIST_LIMIT);
     (files, truncated)
+}
+
+fn list_report_files(reports_dir: &Path, run_id: &str) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(reports_dir) else {
+        return Vec::new();
+    };
+    let prefixes = [format!("{run_id}_"), format!("{run_id}.")];
+    let mut files: Vec<String> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| prefixes.iter().any(|prefix| name.starts_with(prefix)))
+                .unwrap_or(false)
+        })
+        .map(|path| path.to_string_lossy().to_string())
+        .collect();
+    files.sort();
+    files
 }
 
 fn collect_files(root: &Path, files: &mut Vec<String>) {

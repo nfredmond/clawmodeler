@@ -175,6 +175,61 @@ _TRACKED_ARTIFACTS: tuple[dict[str, Any], ...] = (
         ),
         "numeric": ("total_score", "estimated_cost_usd"),
     },
+    {
+        "name": "hsip",
+        "filename": "hsip.csv",
+        "key": "project_id",
+        "label": "FHWA HSIP cycle screen",
+        "tracked": (
+            "crash_history_5yr",
+            "fatal_serious_5yr",
+            "systemic_risk_score",
+            "benefit_cost_ratio",
+            "proven_countermeasure",
+            "overlay_supplied",
+            "bc_ratio_passes",
+            "screen_status",
+        ),
+        "numeric": (
+            "crash_history_5yr",
+            "fatal_serious_5yr",
+            "systemic_risk_score",
+            "benefit_cost_ratio",
+        ),
+    },
+    {
+        "name": "cmaq",
+        "filename": "cmaq.csv",
+        "key": ("project_id", "pollutant"),
+        "label": "FHWA CMAQ cycle packet",
+        "tracked": (
+            "kg_per_day_reduced",
+            "cost_effectiveness_usd_per_kg",
+            "eligibility_category",
+            "nonattainment_area",
+            "overlay_supplied",
+        ),
+        "numeric": (
+            "kg_per_day_reduced",
+            "cost_effectiveness_usd_per_kg",
+        ),
+    },
+    {
+        "name": "stip",
+        "filename": "stip.csv",
+        "key": ("project_id", "phase", "fiscal_year"),
+        "label": "California STIP cycle packet",
+        "tracked": (
+            "cost_thousands",
+            "funding_source",
+            "ppno",
+            "region",
+            "overlay_supplied",
+        ),
+        "numeric": (
+            "cost_thousands",
+        ),
+    },
 )
 
 
@@ -276,14 +331,27 @@ def _diff_single_artifact(
     tracked = tuple(spec["tracked"])
     numeric = set(spec["numeric"])
 
+    if isinstance(key, tuple):
+        key_columns: tuple[str, ...] = key
+        key_label = "+".join(key_columns)
+    else:
+        key_columns = (key,)
+        key_label = key
+
+    def _row_key(row: dict[str, Any]) -> str:
+        parts = [_normalize(row.get(col)) for col in key_columns]
+        if not all(parts):
+            return ""
+        return "|".join(parts)
+
     by_key_a: dict[str, dict[str, Any]] = {}
     for row in rows_a:
-        k = _normalize(row.get(key))
+        k = _row_key(row)
         if k:
             by_key_a[k] = row
     by_key_b: dict[str, dict[str, Any]] = {}
     for row in rows_b:
-        k = _normalize(row.get(key))
+        k = _row_key(row)
         if k:
             by_key_b[k] = row
 
@@ -378,7 +446,7 @@ def _diff_single_artifact(
         artifact=spec["name"],
         label=spec["label"],
         filename=spec["filename"],
-        key_column=key,
+        key_column=key_label,
         present_in_a=present_a,
         present_in_b=present_b,
         row_count_a=len(rows_a),

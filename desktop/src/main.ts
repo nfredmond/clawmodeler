@@ -4,6 +4,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   buildDiffArgs,
   buildFullWorkflowArgs,
+  buildPlannerPackArgs,
   type ChatTurn,
   chatTurnBadge,
   DEFAULT_WHAT_IF_WEIGHTS,
@@ -16,6 +17,8 @@ import {
   normalizeScenarios,
   parseChatTurn,
   parsePortfolioPayload,
+  type PlannerPackKind,
+  PLANNER_PACK_SPECS,
   type PortfolioResult,
   type PortfolioRun,
   type PortfolioSortDirection,
@@ -23,9 +26,11 @@ import {
   rebalanceWhatIfWeights,
   segmentChatText,
   sortPortfolioRuns,
+  summarizeRunArtifacts,
   summarizeQa,
   toggleRunSelection,
   validateDiffSelection,
+  validatePlannerPackForm,
   validateWhatIfForm,
   whatIfWeightSum,
   type WhatIfWeights,
@@ -97,6 +102,15 @@ type WhatIfState = {
   lastResult: Record<string, unknown> | null;
 };
 
+type PlannerPackState = {
+  kind: PlannerPackKind;
+  cycleYear: string;
+  analysisYear: string;
+  busy: boolean;
+  status: string;
+  lastResult: Record<string, unknown> | null;
+};
+
 type AppState = {
   workspace: string;
   runId: string;
@@ -115,6 +129,7 @@ type AppState = {
   chatBusy: boolean;
   chatNoHistory: boolean;
   chatStatus: string;
+  plannerPack: PlannerPackState;
   whatIf: WhatIfState;
   portfolio: PortfolioState;
 };
@@ -137,6 +152,14 @@ const state: AppState = {
   chatBusy: false,
   chatNoHistory: false,
   chatStatus: "",
+  plannerPack: {
+    kind: (localStorage.getItem("clawmodeler.plannerPack.kind") as PlannerPackKind) || "ceqa-vmt",
+    cycleYear: localStorage.getItem("clawmodeler.plannerPack.cycleYear") || "2027",
+    analysisYear: localStorage.getItem("clawmodeler.plannerPack.analysisYear") || "2027",
+    busy: false,
+    status: "",
+    lastResult: null,
+  },
   whatIf: {
     baseRunId: localStorage.getItem("clawmodeler.whatIf.baseRunId") || "",
     newRunId: localStorage.getItem("clawmodeler.whatIf.newRunId") || "",
@@ -440,6 +463,52 @@ function saveWhatIfForm() {
   );
 }
 
+function savePlannerPackForm() {
+  localStorage.setItem("clawmodeler.plannerPack.kind", state.plannerPack.kind);
+  localStorage.setItem("clawmodeler.plannerPack.cycleYear", state.plannerPack.cycleYear);
+  localStorage.setItem("clawmodeler.plannerPack.analysisYear", state.plannerPack.analysisYear);
+}
+
+async function submitPlannerPack() {
+  const validation = validatePlannerPackForm({
+    workspace: state.workspace,
+    runId: state.runId,
+    kind: state.plannerPack.kind,
+    cycleYear: state.plannerPack.cycleYear,
+    analysisYear: state.plannerPack.analysisYear,
+  });
+  if (!validation.ok) {
+    state.plannerPack.status = validation.error;
+    render();
+    return;
+  }
+
+  state.plannerPack.busy = true;
+  state.plannerPack.status = `Generating ${validation.payload.kind}…`;
+  render();
+  try {
+    const result = await api<Record<string, unknown>>("/api/clawmodeler/run", {
+      args: buildPlannerPackArgs(validation.payload),
+    });
+    state.plannerPack.lastResult = result.json ?? null;
+    const reportPath =
+      result.json && typeof result.json === "object"
+        ? (result.json as Record<string, unknown>).report_path
+        : null;
+    state.plannerPack.status =
+      typeof reportPath === "string"
+        ? `Wrote ${validation.payload.kind} to ${reportPath}.`
+        : `Generated ${validation.payload.kind}.`;
+    await refreshArtifacts(false);
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    state.plannerPack.status = friendlyError(raw);
+  } finally {
+    state.plannerPack.busy = false;
+    render();
+  }
+}
+
 async function submitWhatIf() {
   const validation = validateWhatIfForm({
     workspace: state.workspace,
@@ -548,10 +617,11 @@ async function diffSelectedRuns() {
       runA: validation.runA,
       runB: validation.runB,
     });
-    const diffPath =
-      (result.json && typeof result.json === "object"
-        ? (result.json as Record<string, unknown>).diff_report_path
-        : undefined) ?? null;
+    const diffPayload =
+      result.json && typeof result.json === "object"
+        ? (result.json as Record<string, unknown>)
+        : {};
+    const diffPath = diffPayload.report_path ?? diffPayload.diff_report_path ?? null;
     state.portfolio.lastDiffPath = typeof diffPath === "string" ? diffPath : null;
     state.portfolio.status = state.portfolio.lastDiffPath
       ? `Diff report written to ${state.portfolio.lastDiffPath}.`
@@ -830,6 +900,31 @@ function bindControls() {
       void sendChat();
     });
 
+  appRoot
+    .querySelector<HTMLSelectElement>("#planner-pack-kind")
+    ?.addEventListener("change", (event) => {
+      state.plannerPack.kind = (event.target as HTMLSelectElement).value as PlannerPackKind;
+      savePlannerPackForm();
+      render();
+    });
+  appRoot
+    .querySelector<HTMLInputElement>("#planner-pack-cycle-year")
+    ?.addEventListener("input", (event) => {
+      state.plannerPack.cycleYear = (event.target as HTMLInputElement).value;
+      savePlannerPackForm();
+    });
+  appRoot
+    .querySelector<HTMLInputElement>("#planner-pack-analysis-year")
+    ?.addEventListener("input", (event) => {
+      state.plannerPack.analysisYear = (event.target as HTMLInputElement).value;
+      savePlannerPackForm();
+    });
+  appRoot
+    .querySelector<HTMLButtonElement>("[data-action='planner-pack-submit']")
+    ?.addEventListener("click", () => {
+      void submitPlannerPack();
+    });
+
   appRoot.querySelector<HTMLInputElement>("#what-if-base")?.addEventListener("input", (event) => {
     state.whatIf.baseRunId = (event.target as HTMLInputElement).value;
     saveWhatIfForm();
@@ -1001,7 +1096,7 @@ function renderChat(): string {
     <section class="panel chat-panel" id="chat">
       <div class="section-head">
         <div>
-          <p class="eyebrow"><span class="step-num">5</span> Chat</p>
+          <p class="eyebrow"><span class="step-num">6</span> Chat</p>
           <h2>Chat With the Run</h2>
         </div>
         <span>${escapeHtml(state.chatStatus || (hasRun ? "Ready" : "Run a workflow first"))}</span>
@@ -1023,6 +1118,67 @@ function renderChat(): string {
         </label>
         <button data-action="chat-send" ${disabled ? "disabled" : ""}>${state.chatBusy ? "Thinking…" : "Send"}</button>
       </div>
+    </section>
+  `;
+}
+
+function renderPlannerPack(): string {
+  const planner = state.plannerPack;
+  const hasRun = Boolean(state.artifacts?.manifest);
+  const disabled = planner.busy || !hasRun;
+  const spec = PLANNER_PACK_SPECS.find((item) => item.kind === planner.kind);
+  const needsCycleYear = planner.kind === "hsip";
+  const needsAnalysisYear = planner.kind === "cmaq";
+  const lastResult = (() => {
+    const r = planner.lastResult;
+    if (!r) return "";
+    const reportPath = typeof r.report_path === "string" ? r.report_path : "";
+    const csvPath = typeof r.csv_path === "string" ? r.csv_path : "";
+    return `
+      <div class="planner-pack-result">
+        <p><strong>Last packet:</strong> ${escapeHtml(spec?.label ?? planner.kind)}</p>
+        ${reportPath ? `<p>Report: <code>${escapeHtml(reportPath)}</code></p>` : ""}
+        ${csvPath ? `<p>Table: <code>${escapeHtml(csvPath)}</code></p>` : ""}
+      </div>
+    `;
+  })();
+  return `
+    <section class="panel planner-pack-panel" id="planner-pack">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow"><span class="step-num">5</span> Planner Pack</p>
+          <h2>Generate Planning Artifacts</h2>
+        </div>
+        <span>${escapeHtml(planner.status || (hasRun ? "Ready" : "Run a workflow first"))}</span>
+      </div>
+      <p class="muted">Generate regulatory and grant-facing packets from the active run's manifest, tables, and fact blocks.</p>
+      <div class="planner-pack-grid">
+        <label>
+          Artifact
+          <select id="planner-pack-kind" ${planner.busy ? "disabled" : ""}>
+            ${PLANNER_PACK_SPECS.map(
+              (item) =>
+                `<option value="${escapeHtml(item.kind)}" ${
+                  item.kind === planner.kind ? "selected" : ""
+                }>${escapeHtml(item.label)}</option>`,
+            ).join("")}
+          </select>
+        </label>
+        <label class="${needsCycleYear ? "" : "conditional-field"}">
+          HSIP cycle year
+          <input id="planner-pack-cycle-year" value="${escapeHtml(planner.cycleYear)}" spellcheck="false" ${disabled || !needsCycleYear ? "disabled" : ""} />
+        </label>
+        <label class="${needsAnalysisYear ? "" : "conditional-field"}">
+          CMAQ analysis year
+          <input id="planner-pack-analysis-year" value="${escapeHtml(planner.analysisYear)}" spellcheck="false" ${disabled || !needsAnalysisYear ? "disabled" : ""} />
+        </label>
+      </div>
+      <div class="planner-pack-actions">
+        <button data-action="planner-pack-submit" ${disabled ? "disabled" : ""}>
+          ${planner.busy ? "Generating…" : "Generate artifact"}
+        </button>
+      </div>
+      ${lastResult}
     </section>
   `;
 }
@@ -1049,7 +1205,7 @@ function renderWhatIf(): string {
     <section class="panel what-if-panel" id="what-if">
       <div class="section-head">
         <div>
-          <p class="eyebrow"><span class="step-num">6</span> What-if</p>
+          <p class="eyebrow"><span class="step-num">7</span> What-if</p>
           <h2>What-if Simulator</h2>
         </div>
         <span>${escapeHtml(w.status || "Derive a new run from a finished baseline")}</span>
@@ -1249,7 +1405,7 @@ function renderPortfolio(): string {
     <section class="panel portfolio-panel" id="portfolio">
       <div class="section-head">
         <div>
-          <p class="eyebrow"><span class="step-num">7</span> Portfolio</p>
+          <p class="eyebrow"><span class="step-num">8</span> Portfolio</p>
           <h2>Workspace Portfolio</h2>
         </div>
         <span>${escapeHtml(status)}</span>
@@ -1272,8 +1428,69 @@ function renderArtifacts() {
   const qa = summarizeQa(artifacts?.qaReport ?? null);
   const categories = manifestOutputCategories(artifacts?.manifest ?? null);
   const report = artifacts?.reportMarkdown?.trim();
+  const runSummary = summarizeRunArtifacts(artifacts ?? null);
+  const generated = runSummary?.generatedArtifacts.length
+    ? runSummary.generatedArtifacts
+        .map((entry) => `${entry.category}: ${entry.count}`)
+        .join(", ")
+    : "No manifest outputs yet";
+  const plannerPack = runSummary?.plannerPackArtifacts.length
+    ? runSummary.plannerPackArtifacts.map((artifact) => `<code>${escapeHtml(artifact)}</code>`).join(" ")
+    : "No Planner Pack artifacts yet";
+  const warnings =
+    runSummary && runSummary.warnings.length > 0
+      ? `<ul>${runSummary.warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`
+      : "<p>No warnings recorded.</p>";
+  const missingSidecars =
+    runSummary && runSummary.missingSidecars.length > 0
+      ? `<ul>${runSummary.missingSidecars.map((sidecar) => `<li>${escapeHtml(sidecar)}</li>`).join("")}</ul>`
+      : "<p>No missing manifest sidecars recorded.</p>";
 
   return `
+    <section class="panel run-summary-panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Run Summary</p>
+          <h2>${escapeHtml(runSummary?.runId ?? state.runId)}</h2>
+        </div>
+        <span>${escapeHtml(runSummary?.scenarioIds.join(", ") || "No scenarios loaded")}</span>
+      </div>
+      <div class="run-summary-grid">
+        <div>
+          <strong>Manifest</strong>
+          <code>${escapeHtml(runSummary?.manifestPath ?? "No manifest yet")}</code>
+        </div>
+        <div>
+          <strong>QA export</strong>
+          <span class="pf-ready ${runSummary?.qaExportReady ? "ok" : "bad"}">${runSummary?.qaExportReady === null ? "unknown" : runSummary.qaExportReady ? "ready" : "blocked"}</span>
+        </div>
+        <div>
+          <strong>Bridge export</strong>
+          <span class="pf-ready ${runSummary?.bridgeExportReady ? "ok" : "bad"}">${runSummary?.bridgeExportReady === null ? "unknown" : runSummary.bridgeExportReady ? "ready" : "blocked"}</span>
+        </div>
+        <div>
+          <strong>Generated artifacts</strong>
+          <span>${escapeHtml(generated)}</span>
+        </div>
+        <div>
+          <strong>Planner Pack</strong>
+          <span>${plannerPack}</span>
+        </div>
+        <div>
+          <strong>Report</strong>
+          <code>${escapeHtml(runSummary?.reportPath ?? "No report path recorded")}</code>
+        </div>
+      </div>
+      <details>
+        <summary>Warnings</summary>
+        ${warnings}
+      </details>
+      <details>
+        <summary>Manifest sidecars</summary>
+        ${missingSidecars}
+      </details>
+    </section>
+
     <section class="panel qa-panel ${qa.tone}">
       <div>
         <p class="eyebrow"><span class="step-num">3</span> ClawQA</p>
@@ -1333,6 +1550,7 @@ function render() {
           <a href="#run">Run</a>
           <a href="#qa">QA</a>
           <a href="#report">Report</a>
+          <a href="#planner-pack">Planner Pack</a>
           <a href="#chat">Chat</a>
           <a href="#what-if">What-if</a>
           <a href="#portfolio">Portfolio</a>
@@ -1453,6 +1671,8 @@ function render() {
         <div id="qa" class="results">
           ${renderArtifacts()}
         </div>
+
+        ${renderPlannerPack()}
 
         ${renderChat()}
 

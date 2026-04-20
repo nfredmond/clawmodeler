@@ -12,8 +12,8 @@ trap cleanup EXIT
 
 cd "$repo_root"
 
-echo "Running ClawModeler sidecar tests with $python_bin"
-"$python_bin" -m unittest discover -s tests -p 'clawmodeler_engine_test.py'
+echo "Running ClawModeler engine tests with $python_bin"
+"$python_bin" -m unittest discover -s tests -p '*test*.py'
 
 wheel_dir="$work_dir/wheelhouse"
 venv_dir="$work_dir/venv"
@@ -38,6 +38,11 @@ wheel = Path(sys.argv[1])
 required = {
     "clawmodeler_engine/cli.py",
     "clawmodeler_engine/toolbox.default.json",
+    "clawmodeler_engine/templates/technical.md.j2",
+    "clawmodeler_engine/templates/planner_pack/ceqa_vmt.md.j2",
+    "clawmodeler_engine/templates/planner_pack/hsip.md.j2",
+    "clawmodeler_engine/templates/planner_pack/cmaq.md.j2",
+    "clawmodeler_engine/templates/planner_pack/stip.md.j2",
 }
 with zipfile.ZipFile(wheel) as archive:
     names = set(archive.namelist())

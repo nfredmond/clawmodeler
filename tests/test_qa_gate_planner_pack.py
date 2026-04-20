@@ -12,9 +12,12 @@ from clawmodeler_engine.orchestration import write_intake, write_plan, write_run
 from clawmodeler_engine.planner_pack import (
     write_atp_packet,
     write_ceqa_vmt,
+    write_cmaq,
     write_equity_lens,
+    write_hsip,
     write_lapm_exhibit,
     write_rtp_chapter,
+    write_stip,
 )
 from clawmodeler_engine.qa import build_qa_report, is_valid_fact_block
 
@@ -115,6 +118,27 @@ class PlannerPackQaGateTest(unittest.TestCase):
             self.assertTrue(report["export_ready"])
             self.assertEqual(report["blockers"], [])
 
+    def test_hsip_passes_qa_gate(self) -> None:
+        with demo_workspace("hsipgate") as (workspace, run_id):
+            write_hsip(workspace, run_id, cycle_year=2027)
+            report = build_qa_report(workspace, run_id)
+            self.assertTrue(report["export_ready"])
+            self.assertEqual(report["blockers"], [])
+
+    def test_cmaq_passes_qa_gate(self) -> None:
+        with demo_workspace("cmaqgate") as (workspace, run_id):
+            write_cmaq(workspace, run_id, analysis_year=2027)
+            report = build_qa_report(workspace, run_id)
+            self.assertTrue(report["export_ready"])
+            self.assertEqual(report["blockers"], [])
+
+    def test_stip_passes_qa_gate(self) -> None:
+        with demo_workspace("stipgate") as (workspace, run_id):
+            write_stip(workspace, run_id, cycle_label="2026 STIP")
+            report = build_qa_report(workspace, run_id)
+            self.assertTrue(report["export_ready"])
+            self.assertEqual(report["blockers"], [])
+
     def test_atp_packet_passes_qa_gate(self) -> None:
         with demo_workspace("atp") as (workspace, run_id):
             _stage_equity_overlay(workspace, run_id)
@@ -132,6 +156,9 @@ class PlannerPackQaGateTest(unittest.TestCase):
             write_rtp_chapter(workspace, run_id)
             write_equity_lens(workspace, run_id)
             write_atp_packet(workspace, run_id)
+            write_hsip(workspace, run_id, cycle_year=2027)
+            write_cmaq(workspace, run_id, analysis_year=2027)
+            write_stip(workspace, run_id, cycle_label="2026 STIP")
             report = build_qa_report(workspace, run_id)
             self.assertTrue(report["export_ready"])
             self.assertEqual(report["blockers"], [])

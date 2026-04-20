@@ -18,6 +18,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -42,6 +43,7 @@ button:disabled {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid #b8c2bd;
@@ -548,6 +550,82 @@ small {
   grid-column: span 1;
 }
 
+.run-summary-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 14px;
+}
+
+.run-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.run-summary-grid > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid #e2e9e5;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfdfc;
+}
+
+.run-summary-grid code,
+.run-summary-grid span {
+  overflow-wrap: anywhere;
+}
+
+.run-summary-panel details {
+  border-top: 1px solid #e2e9e5;
+  padding-top: 10px;
+}
+
+.run-summary-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.run-summary-panel ul,
+.run-summary-panel p {
+  margin: 8px 0 0;
+}
+
+.planner-pack-panel {
+  margin-top: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.planner-pack-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.5fr) minmax(160px, 0.5fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.conditional-field {
+  opacity: 0.55;
+}
+
+.planner-pack-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.planner-pack-result {
+  padding: 12px;
+  border: 1px solid #c8d4cd;
+  border-radius: 8px;
+  background: #eef5f1;
+}
+
+.planner-pack-result p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
 .chat-panel {
   margin-top: 20px;
   display: grid;
@@ -728,6 +806,10 @@ small {
 }
 
 @media (max-width: 900px) {
+  .run-summary-grid,
+  .planner-pack-grid {
+    grid-template-columns: 1fr;
+  }
   .what-if-grid {
     grid-template-columns: 1fr;
   }

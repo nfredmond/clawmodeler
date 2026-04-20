@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clawmodeler-engine"
-version = "0.8.3"
+version = "0.9.2"
 description = "ClawModeler transportation modeling engine."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -55,7 +55,11 @@ exclude = [
 ]
 
 [tool.setuptools.package-data]
-clawmodeler_engine = ["toolbox.default.json"]
+clawmodeler_engine = [
+  "toolbox.default.json",
+  "templates/*.j2",
+  "templates/planner_pack/*.j2",
+]
 
 [tool.setuptools]
 include-package-data = false
@@ -68,5 +72,5 @@ line-length = 100
 select = ["E9", "F63", "F7", "F82", "I"]
 
 [tool.pytest.ini_options]
-testpaths = ["skills"]
+testpaths = ["tests"]
 python_files = ["test_*.py"]

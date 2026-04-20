@@ -11,7 +11,12 @@ from pathlib import Path
 from clawmodeler_engine.cli import build_parser
 from clawmodeler_engine.demo import write_demo_inputs
 from clawmodeler_engine.orchestration import write_intake, write_plan, write_run
-from clawmodeler_engine.planner_pack import write_equity_lens
+from clawmodeler_engine.planner_pack import (
+    write_cmaq,
+    write_equity_lens,
+    write_hsip,
+    write_stip,
+)
 from clawmodeler_engine.portfolio import (
     compute_portfolio,
     list_runs,
@@ -130,6 +135,24 @@ class PortfolioWithPlannerPackTest(unittest.TestCase):
             run = result.runs[0]
             self.assertIn("equity_lens", run.planner_pack_artifacts)
             self.assertIsNotNone(run.dac_share)
+
+    def test_hsip_surfaces_in_planner_pack_artifacts(self) -> None:
+        with demo_workspace("alpha") as (workspace, run_id):
+            write_hsip(workspace, run_id, cycle_year=2027)
+            result = compute_portfolio(workspace)
+            self.assertIn("hsip", result.runs[0].planner_pack_artifacts)
+
+    def test_cmaq_surfaces_in_planner_pack_artifacts(self) -> None:
+        with demo_workspace("alpha") as (workspace, run_id):
+            write_cmaq(workspace, run_id, analysis_year=2027)
+            result = compute_portfolio(workspace)
+            self.assertIn("cmaq", result.runs[0].planner_pack_artifacts)
+
+    def test_stip_surfaces_in_planner_pack_artifacts(self) -> None:
+        with demo_workspace("alpha") as (workspace, run_id):
+            write_stip(workspace, run_id, cycle_label="2026 STIP")
+            result = compute_portfolio(workspace)
+            self.assertIn("stip", result.runs[0].planner_pack_artifacts)
 
 
 class PortfolioLineageTest(unittest.TestCase):

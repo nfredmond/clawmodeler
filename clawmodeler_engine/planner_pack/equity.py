@@ -31,13 +31,18 @@ run / overlay or clearly labeled as lead-agency-supplied.
 from __future__ import annotations
 
 import csv
-import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..report import read_fact_blocks
 from ..workspace import ENGINE_VERSION, InsufficientDataError, utc_now, write_json
+from .utilities import (
+    append_fact_blocks,
+    coerce_str,
+    jinja_env,
+    manifest_artifact_paths,
+    parse_optional_float,
+)
 
 DEFAULT_AGENCY = "Lead agency to be provided"
 DEFAULT_DATASET_NOTE = (
@@ -119,21 +124,6 @@ class EquityLensResult:
         }
 
 
-def _parse_optional_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_str(value: Any, default: str = "") -> str:
-    if value in (None, ""):
-        return default
-    return str(value).strip() or default
-
-
 def _coerce_bool(value: Any) -> bool:
     if value is None:
         return False
@@ -187,13 +177,13 @@ def compute_equity_lens(
 
     overlay_by_id: dict[str, dict[str, Any]] = {}
     for row in overlay_rows or []:
-        project_id = _coerce_str(row.get("project_id"))
+        project_id = coerce_str(row.get("project_id"))
         if project_id:
             overlay_by_id[project_id] = row
 
     findings: list[EquityProjectFinding] = []
     for row in score_rows:
-        project_id = _coerce_str(row.get("project_id"))
+        project_id = coerce_str(row.get("project_id"))
         if not project_id:
             continue
         overlay = overlay_by_id.get(project_id)
@@ -203,8 +193,8 @@ def compute_equity_lens(
         low_income = _coerce_bool(overlay.get("low_income_ab1550"))
         low_income_near_dac = _coerce_bool(overlay.get("low_income_near_dac"))
         tribal = _coerce_bool(overlay.get("tribal_area"))
-        ces = _parse_optional_float(overlay.get("ces_percentile"))
-        notes = _coerce_str(
+        ces = parse_optional_float(overlay.get("ces_percentile"))
+        notes = coerce_str(
             overlay.get("notes"),
             (
                 "No equity overlay staged for this project; lead agency must "
@@ -220,11 +210,11 @@ def compute_equity_lens(
         findings.append(
             EquityProjectFinding(
                 project_id=project_id,
-                name=_coerce_str(row.get("name"), project_id),
+                name=coerce_str(row.get("name"), project_id),
                 total_score=round(
-                    _parse_optional_float(row.get("total_score")) or 0.0, 3
+                    parse_optional_float(row.get("total_score")) or 0.0, 3
                 ),
-                sensitivity_flag=_coerce_str(
+                sensitivity_flag=coerce_str(
                     row.get("sensitivity_flag"), "UNKNOWN"
                 ),
                 dac_sb535=dac,
@@ -359,18 +349,7 @@ def equity_lens_fact_blocks(
 
 def render_equity_lens_markdown(result: EquityLensResult, *, run_id: str) -> str:
     """Render the equity-lens packet as Markdown."""
-    from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
-    templates_dir = Path(__file__).parent.parent / "templates" / "planner_pack"
-    env = Environment(
-        loader=FileSystemLoader(str(templates_dir)),
-        autoescape=False,
-        trim_blocks=False,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-        undefined=StrictUndefined,
-    )
-    template = env.get_template("equity_lens.md.j2")
+    template = jinja_env().get_template("equity_lens.md.j2")
     payload = result.to_json()
     return template.render(
         run_id=run_id,
@@ -397,22 +376,12 @@ def _resolve_equity_overlay_rows(
     workspace: Path, run_root: Path
 ) -> list[dict[str, Any]]:
     """Find an equity overlay CSV in the run manifest or under inputs/."""
-    manifest_path = run_root / "outputs" / "run_manifest.json"
-    if manifest_path.exists():
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            manifest = {}
-        artifacts = manifest.get("artifacts") if isinstance(manifest, dict) else None
-        if isinstance(artifacts, dict):
-            candidates = artifacts.get("equity_overlay_csv") or []
-            for candidate in candidates:
-                candidate_path = Path(str(candidate))
-                if not candidate_path.is_absolute():
-                    candidate_path = workspace / candidate_path
-                rows = _read_csv(candidate_path)
-                if rows:
-                    return rows
+    for candidate_path in manifest_artifact_paths(
+        workspace, run_root, "equity_overlay_csv"
+    ):
+        rows = _read_csv(candidate_path)
+        if rows:
+            return rows
     for candidate in (
         workspace / "inputs" / "equity_overlay.csv",
         workspace / "inputs" / "processed" / "equity_overlay.csv",
@@ -422,23 +391,6 @@ def _resolve_equity_overlay_rows(
         if rows:
             return rows
     return []
-
-
-def _append_fact_blocks(path: Path, new_blocks: list[dict[str, Any]]) -> int:
-    if not new_blocks:
-        return 0
-    existing_ids: set[str] = set()
-    if path.exists():
-        existing_ids = {str(b.get("fact_id")) for b in read_fact_blocks(path)}
-    appended = 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        for block in new_blocks:
-            if block["fact_id"] in existing_ids:
-                continue
-            f.write(json.dumps(block) + "\n")
-            appended += 1
-    return appended
 
 
 def write_equity_lens(
@@ -506,7 +458,7 @@ def write_equity_lens(
     write_json(equity_json_path, result.to_json())
 
     new_blocks = equity_lens_fact_blocks(result, equity_csv_path)
-    appended = _append_fact_blocks(fact_blocks_path, new_blocks)
+    appended = append_fact_blocks(fact_blocks_path, new_blocks)
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     markdown = render_equity_lens_markdown(result, run_id=run_id)

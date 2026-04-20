@@ -106,6 +106,9 @@ _PLANNER_PACK_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("rtp_chapter", "rtp_chapter_projects.csv"),
     ("equity_lens", "equity_lens.csv"),
     ("atp_packet", "atp_packet.csv"),
+    ("hsip", "hsip.csv"),
+    ("cmaq", "cmaq.csv"),
+    ("stip", "stip.csv"),
 )
 
 

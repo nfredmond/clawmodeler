@@ -27,13 +27,12 @@ This module does not call an LLM.
 from __future__ import annotations
 
 import csv
-import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..report import read_fact_blocks
 from ..workspace import ENGINE_VERSION, InsufficientDataError, utc_now, write_json
+from .utilities import append_fact_blocks, coerce_str, jinja_env, parse_optional_float
 
 DEFAULT_AGENCY = "Lead agency to be provided"
 DEFAULT_CYCLE = "ATP cycle to be provided"
@@ -98,21 +97,6 @@ class AtpGrantResult:
         }
 
 
-def _parse_optional_float(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _coerce_str(value: Any, default: str = "") -> str:
-    if value in (None, ""):
-        return default
-    return str(value).strip() or default
-
-
 def _coerce_bool(value: Any) -> bool:
     if value is None:
         return False
@@ -137,7 +121,7 @@ def _group_ceqa_by_project(
     if not ceqa_rows:
         return "CEQA §15064.3 VMT screening has not been run for this workspace."
     determinations = [
-        _coerce_str(r.get("determination")) for r in ceqa_rows
+        coerce_str(r.get("determination")) for r in ceqa_rows
     ]
     determinations = [d for d in determinations if d]
     if not determinations:
@@ -179,13 +163,13 @@ def compute_atp_packet(
 
     lapm_by_id: dict[str, dict[str, Any]] = {}
     for row in lapm_rows or []:
-        pid = _coerce_str(row.get("project_id"))
+        pid = coerce_str(row.get("project_id"))
         if pid:
             lapm_by_id[pid] = row
 
     equity_by_id: dict[str, dict[str, Any]] = {}
     for row in equity_rows or []:
-        pid = _coerce_str(row.get("project_id"))
+        pid = coerce_str(row.get("project_id"))
         if pid:
             equity_by_id[pid] = row
 
@@ -199,42 +183,42 @@ def compute_atp_packet(
 
     applications: list[AtpProjectApplication] = []
     for row in score_rows:
-        pid = _coerce_str(row.get("project_id"))
+        pid = coerce_str(row.get("project_id"))
         if not pid:
             continue
 
-        safety = _parse_optional_float(row.get("safety_score")) or 0.0
-        equity = _parse_optional_float(row.get("equity_score")) or 0.0
-        climate = _parse_optional_float(row.get("climate_score")) or 0.0
-        feasibility = _parse_optional_float(row.get("feasibility_score")) or 0.0
-        total = _parse_optional_float(row.get("total_score")) or 0.0
-        sensitivity = _coerce_str(row.get("sensitivity_flag"), "UNKNOWN")
+        safety = parse_optional_float(row.get("safety_score")) or 0.0
+        equity = parse_optional_float(row.get("equity_score")) or 0.0
+        climate = parse_optional_float(row.get("climate_score")) or 0.0
+        feasibility = parse_optional_float(row.get("feasibility_score")) or 0.0
+        total = parse_optional_float(row.get("total_score")) or 0.0
+        sensitivity = coerce_str(row.get("sensitivity_flag"), "UNKNOWN")
 
         lapm = lapm_by_id.get(pid, {})
-        location_note = _coerce_str(
+        location_note = coerce_str(
             lapm.get("location_note"),
             "Location to be provided by lead agency",
         )
-        description = _coerce_str(
+        description = coerce_str(
             lapm.get("description"),
             "Project description to be provided by lead agency.",
         )
-        project_type = _coerce_str(
+        project_type = coerce_str(
             lapm.get("project_type"),
             "Project type to be provided by lead agency",
         )
-        schedule_note = _coerce_str(
+        schedule_note = coerce_str(
             lapm.get("schedule_note"),
             "PA&ED, PS&E, R/W, and CON schedule to be provided by lead agency",
         )
-        estimated_cost = _parse_optional_float(lapm.get("estimated_cost_usd"))
+        estimated_cost = parse_optional_float(lapm.get("estimated_cost_usd"))
 
         equity_row = equity_by_id.get(pid, {})
         overlay_supplied = _coerce_bool(equity_row.get("overlay_supplied"))
         dac = _coerce_bool(equity_row.get("dac_sb535"))
         low_income = _coerce_bool(equity_row.get("low_income_ab1550"))
         tribal = _coerce_bool(equity_row.get("tribal_area"))
-        benefit_category = _coerce_str(
+        benefit_category = coerce_str(
             equity_row.get("benefit_category"),
             "Unknown" if not overlay_supplied else "Other",
         )
@@ -260,7 +244,7 @@ def compute_atp_packet(
         applications.append(
             AtpProjectApplication(
                 project_id=pid,
-                name=_coerce_str(row.get("name"), pid),
+                name=coerce_str(row.get("name"), pid),
                 agency=agency,
                 cycle=cycle,
                 total_score=round(total, 3),
@@ -386,18 +370,7 @@ def atp_grant_fact_blocks(
 
 def render_atp_markdown(result: AtpGrantResult, *, run_id: str) -> str:
     """Render the ATP application packet as Markdown."""
-    from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
-    templates_dir = Path(__file__).parent.parent / "templates" / "planner_pack"
-    env = Environment(
-        loader=FileSystemLoader(str(templates_dir)),
-        autoescape=False,
-        trim_blocks=False,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-        undefined=StrictUndefined,
-    )
-    template = env.get_template("atp_packet.md.j2")
+    template = jinja_env().get_template("atp_packet.md.j2")
     payload = result.to_json()
     return template.render(
         run_id=run_id,
@@ -413,23 +386,6 @@ def _read_csv(path: Path) -> list[dict[str, Any]]:
         return []
     with path.open("r", encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
-
-
-def _append_fact_blocks(path: Path, new_blocks: list[dict[str, Any]]) -> int:
-    if not new_blocks:
-        return 0
-    existing_ids: set[str] = set()
-    if path.exists():
-        existing_ids = {str(b.get("fact_id")) for b in read_fact_blocks(path)}
-    appended = 0
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        for block in new_blocks:
-            if block["fact_id"] in existing_ids:
-                continue
-            f.write(json.dumps(block) + "\n")
-            appended += 1
-    return appended
 
 
 def write_atp_packet(
@@ -515,7 +471,7 @@ def write_atp_packet(
     write_json(atp_json_path, result.to_json())
 
     new_blocks = atp_grant_fact_blocks(result, atp_csv_path)
-    appended = _append_fact_blocks(fact_blocks_path, new_blocks)
+    appended = append_fact_blocks(fact_blocks_path, new_blocks)
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     markdown = render_atp_markdown(result, run_id=run_id)

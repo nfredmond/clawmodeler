@@ -1,50 +1,28 @@
 # ClawModeler Stack
 
-ClawModeler is a local-first transportation sketch-planning stack. The current implementation centers on the Python sidecar `clawmodeler-engine`, which stages inputs, chooses a screening engine, runs local analysis, writes reproducibility artifacts, gates report export, and prepares handoff folders for heavier transportation modeling engines.
+ClawModeler is a local-first transportation sketch-planning stack. The current implementation centers on the Python sidecar `clawmodeler-engine` plus a Tauri v2 desktop workbench with a vanilla TypeScript front end. The sidecar stages inputs, chooses a screening engine, runs local analysis, writes reproducibility artifacts, gates report export, prepares handoff folders for heavier transportation modeling engines, and emits Planner Pack artifacts.
 
-For the product-level overview, start with `CLAWMODELER_README.md`. For the sequencing plan and rabbit-hole guardrails, see `docs/clawmodeler-roadmap.md`.
+For the product-level overview, start with `README.md`. For the sequencing plan and rabbit-hole guardrails, see `docs/roadmap.md`.
 
 ## Sidecar Commands
 
 Run the sidecar through the package scripts:
 
 ```bash
-pnpm clawmodeler:engine --version
-pnpm clawmodeler:test
+pnpm engine -- --version
+pnpm engine:test
 ```
 
-Run it through OpenClaw:
+Or run the installed console script directly:
 
 ```bash
-openclaw clawmodeler doctor
-openclaw clawmodeler tools
-openclaw clawmodeler init --workspace ./demo
-openclaw clawmodeler demo --workspace ./demo
-openclaw clawmodeler workflow full --workspace ./demo --inputs zones.geojson socio.csv --question question.json --run-id demo
-openclaw clawmodeler workflow demo-full --workspace ./demo --run-id demo
-openclaw clawmodeler workflow report-only --workspace ./demo --run-id demo
-openclaw clawmodeler workflow diagnose --workspace ./demo
-openclaw clawmodeler intake --workspace ./demo --inputs zones.geojson socio.csv
-openclaw clawmodeler plan --workspace ./demo --question question.json
-openclaw clawmodeler run --workspace ./demo --run-id demo --scenarios baseline scenario-a
-openclaw clawmodeler export --workspace ./demo --run-id demo --format md
-openclaw clawmodeler bridge sumo prepare --workspace ./demo --run-id demo
-openclaw clawmodeler bridge sumo validate --workspace ./demo --run-id demo
-openclaw clawmodeler bridge matsim prepare --workspace ./demo --run-id demo
-openclaw clawmodeler bridge urbansim prepare --workspace ./demo --run-id demo
-openclaw clawmodeler bridge prepare-all --workspace ./demo --run-id demo
-openclaw clawmodeler bridge validate --workspace ./demo --run-id demo
-openclaw clawmodeler graph osmnx --workspace ./demo --place "Davis, California, USA"
-openclaw clawmodeler graph map-zones --workspace ./demo
-```
-
-The sidecar also runs directly:
-
-```bash
-python3 -m clawmodeler_engine intake --workspace /path/to/workspace --inputs zones.geojson socio.csv
-python3 -m clawmodeler_engine plan --workspace /path/to/workspace --question question.json
-python3 -m clawmodeler_engine run --workspace /path/to/workspace --run-id demo --scenarios baseline scenario-a
-python3 -m clawmodeler_engine export --workspace /path/to/workspace --run-id demo --format md
+clawmodeler-engine doctor
+clawmodeler-engine tools
+clawmodeler-engine init --workspace ./demo
+clawmodeler-engine workflow demo-full --workspace ./demo --run-id demo
+clawmodeler-engine workflow full --workspace ./demo --inputs zones.geojson socio.csv --question question.json --run-id demo
+clawmodeler-engine planner-pack ceqa-vmt --workspace ./demo --run-id demo
+clawmodeler-engine portfolio --workspace ./demo --json
 ```
 
 ## Internal Structure
@@ -55,6 +33,8 @@ The CLI and end-to-end workflows share the same core stage functions:
 - `clawmodeler_engine/workflow.py` composes those shared stages into full, demo, report-only, and diagnose workflows.
 - `clawmodeler_engine/cli.py` parses command-line arguments and prints concise JSON command results.
 - `clawmodeler_engine/report.py` renders Markdown reports from manifests and fact-block artifacts.
+- `desktop/src-tauri/src/lib.rs` exposes the sidecar to the desktop shell.
+- `desktop/src/workbench.ts` owns browser-safe UI helpers and shared client-side validation.
 
 New workflow behavior should be added to the shared orchestration layer first, then exposed through CLI or workflow wrappers. This keeps manual commands and `workflow full` aligned.
 
@@ -108,6 +88,26 @@ The current stack implements these plan modules:
 - TBEST Bridge: generates stop, route, service, and config tables from staged GTFS inputs.
 - Bridge Prepare All: prepares every applicable bridge package and records skipped packages with reasons.
 - Bridge Validation: writes a combined bridge validation report across prepared external-engine packages.
+- Planner Pack: writes CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP artifacts from finished runs.
+- What-if: derives a new run from a baseline with deterministic overrides.
+- Diff: compares two runs across engine and Planner Pack tables.
+- Portfolio: summarizes every run in a workspace.
+- Grounded chat and AI narrative: downstream only, with fact-block citation validation.
+
+## Desktop Workbench
+
+The desktop app is a Tauri v2 shell around the sidecar. In packaged builds it invokes the bundled `clawmodeler-engine` binary; in development it falls back to `python3 -m clawmodeler_engine` from the repo root. The Vite dev middleware mirrors the Tauri command routes so browser development and desktop development exercise the same workflow surfaces.
+
+The current planner-facing flow is:
+
+1. Pick or create a workspace.
+2. Run the built-in demo or a full workflow.
+3. Review QA readiness, bridge readiness, manifest path, generated artifacts, warnings, and sidecars.
+4. Preview the report.
+5. Generate Planner Pack artifacts.
+6. Ask grounded chat questions about a finished run.
+7. Create what-if runs.
+8. Refresh the portfolio and diff two runs.
 
 The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract.
 

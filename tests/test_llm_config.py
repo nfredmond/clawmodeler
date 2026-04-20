@@ -7,6 +7,7 @@ from pathlib import Path
 
 from clawmodeler_engine.llm import (
     AnthropicProvider,
+    FakeProvider,
     LLMConfig,
     LLMConfigError,
     OllamaProvider,
@@ -171,6 +172,13 @@ class BuildProviderTest(unittest.TestCase):
     def test_builds_openai(self) -> None:
         cfg = apply_updates(default_config(), {"provider": "openai"})
         self.assertIsInstance(build_provider(cfg), OpenAIProvider)
+
+    def test_builds_fake_provider(self) -> None:
+        cfg = LLMConfig(provider="fake", model="fake-configured")
+        provider = build_provider(cfg)
+
+        self.assertIsInstance(provider, FakeProvider)
+        self.assertEqual(provider.probe().model, "fake-configured")
 
 
 if __name__ == "__main__":

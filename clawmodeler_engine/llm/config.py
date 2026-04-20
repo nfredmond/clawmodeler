@@ -42,7 +42,7 @@ from .openai import (
 from .openai import (
     OpenAIProvider,
 )
-from .provider import LLMProvider
+from .provider import FakeProvider, LLMProvider
 
 CONFIG_FILENAME = "llm_config.json"
 SUPPORTED_PROVIDERS = ("ollama", "anthropic", "openai", "fake")
@@ -218,6 +218,8 @@ def build_provider(config: LLMConfig) -> LLMProvider:
             temperature=config.temperature,
             max_tokens=config.max_tokens,
         )
+    if config.provider == "fake":
+        return FakeProvider(model=config.model or "fake-model-v1")
     raise LLMConfigError(f"cannot build provider for {config.provider!r}")
 
 

@@ -2,15 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   buildDiffArgs,
   buildFullWorkflowArgs,
+  buildPlannerPackArgs,
   chatTurnBadge,
   countJsonLines,
   DEFAULT_WHAT_IF_WEIGHTS,
+  detectPlannerPackArtifacts,
   deriveQuestionSavePath,
   formatDacShare,
   formatMeanScore,
   friendlyError,
   isValidWhatIfWeights,
   manifestOutputCategories,
+  manifestOutputPaths,
   normalizePathList,
   normalizeScenarios,
   parseChatTurn,
@@ -19,9 +22,11 @@ import {
   rebalanceWhatIfWeights,
   segmentChatText,
   sortPortfolioRuns,
+  summarizeRunArtifacts,
   summarizeQa,
   toggleRunSelection,
   validateDiffSelection,
+  validatePlannerPackForm,
   validateWhatIfForm,
   whatIfWeightSum,
 } from "./workbench.js";
@@ -84,6 +89,62 @@ describe("clawmodeler workbench helpers", () => {
       "maps",
       "tables",
     ]);
+  });
+
+  it("normalizes run summary details from workspace artifacts", () => {
+    const summary = summarizeRunArtifacts({
+      workspace: "/tmp/ws",
+      runId: "demo",
+      manifest: {
+        scenarios: [{ scenario_id: "baseline" }, { scenario_id: "build" }],
+        outputs: {
+          tables: ["/tmp/ws/runs/demo/outputs/tables/ceqa_vmt.csv"],
+          maps: ["/tmp/ws/runs/demo/outputs/maps/access_baseline.html"],
+        },
+        artifacts: {
+          cmaq_overlay_csv: "inputs/missing_cmaq.csv",
+        },
+      },
+      qaReport: { export_ready: true, blockers: [] },
+      workflowReport: {
+        artifacts: {
+          manifest: "/tmp/ws/runs/demo/manifest.json",
+          report: "/tmp/ws/reports/demo_report.md",
+        },
+        bridge_validation: { export_ready: false, blockers: ["sumo_not_ready"] },
+      },
+      reportMarkdown: null,
+      files: ["/tmp/ws/runs/demo/outputs/tables/ceqa_vmt.csv"],
+      filesTruncated: false,
+    });
+
+    expect(summary?.manifestPath).toBe("/tmp/ws/runs/demo/manifest.json");
+    expect(summary?.reportPath).toBe("/tmp/ws/reports/demo_report.md");
+    expect(summary?.scenarioIds).toEqual(["baseline", "build"]);
+    expect(summary?.qaExportReady).toBe(true);
+    expect(summary?.bridgeExportReady).toBe(false);
+    expect(summary?.plannerPackArtifacts).toEqual(["ceqa-vmt"]);
+    expect(summary?.generatedArtifacts).toEqual([
+      { category: "maps", count: 1 },
+      { category: "tables", count: 1 },
+    ]);
+    expect(summary?.missingSidecars).toEqual(["cmaq_overlay_csv: inputs/missing_cmaq.csv"]);
+    expect(summary?.warnings).toContain("Bridge blocker: sumo_not_ready");
+  });
+
+  it("flattens manifest outputs and detects planner-pack tables", () => {
+    const manifest = {
+      outputs: {
+        tables: [
+          { path: "/tmp/ws/runs/demo/outputs/tables/hsip.csv" },
+          "/tmp/ws/runs/demo/outputs/tables/project_scores.csv",
+        ],
+      },
+    };
+    expect(manifestOutputPaths(manifest)).toContain(
+      "/tmp/ws/runs/demo/outputs/tables/hsip.csv",
+    );
+    expect(detectPlannerPackArtifacts([], manifest)).toEqual(["hsip"]);
   });
 
   it("translates engine errors into planner-friendly language", () => {
@@ -466,6 +527,62 @@ describe("clawmodeler workbench helpers", () => {
       "bravo",
       "--json",
     ]);
+  });
+
+  it("validates and builds Planner Pack args", () => {
+    expect(
+      buildPlannerPackArgs({
+        workspace: "/tmp/ws",
+        runId: "demo",
+        kind: "ceqa-vmt",
+        cycleYear: null,
+        analysisYear: null,
+      }),
+    ).toEqual([
+      "planner-pack",
+      "ceqa-vmt",
+      "--workspace",
+      "/tmp/ws",
+      "--run-id",
+      "demo",
+      "--json",
+    ]);
+    expect(
+      buildPlannerPackArgs({
+        workspace: "/tmp/ws",
+        runId: "demo",
+        kind: "hsip",
+        cycleYear: 2027,
+        analysisYear: null,
+      }),
+    ).toContain("--cycle-year");
+    expect(
+      buildPlannerPackArgs({
+        workspace: "/tmp/ws",
+        runId: "demo",
+        kind: "cmaq",
+        cycleYear: null,
+        analysisYear: 2028,
+      }),
+    ).toContain("--analysis-year");
+
+    expect(
+      validatePlannerPackForm({
+        workspace: "/tmp/ws",
+        runId: "demo",
+        kind: "cmaq",
+        cycleYear: "",
+        analysisYear: "",
+      }).ok,
+    ).toBe(false);
+    const valid = validatePlannerPackForm({
+      workspace: "/tmp/ws",
+      runId: "demo",
+      kind: "hsip",
+      cycleYear: "2027",
+      analysisYear: "",
+    });
+    expect(valid.ok).toBe(true);
   });
 
   it("formatMeanScore/formatDacShare render null as em-dash", () => {

@@ -283,6 +283,24 @@ class ClawModelerEngineTest(unittest.TestCase):
                 ).exists()
             )
 
+    def test_export_parser_rejects_docx_until_writer_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "demo"
+            self.run_engine("demo", "--workspace", str(workspace), "--run-id", "sample")
+
+            result = self.run_engine(
+                "export",
+                "--workspace",
+                str(workspace),
+                "--run-id",
+                "sample",
+                "--format",
+                "docx",
+                expected_code=2,
+            )
+
+            self.assertIn("invalid choice", result.stderr)
+
     def test_run_resolves_relative_receipt_paths_from_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)

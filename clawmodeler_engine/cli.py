@@ -97,7 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     export = subparsers.add_parser("export", help="Export report artifacts when QA allows it.")
     export.add_argument("--workspace", required=True, type=Path)
     export.add_argument("--run-id", required=True)
-    export.add_argument("--format", choices=["md", "pdf", "docx"], default="md")
+    export.add_argument("--format", choices=["md", "pdf"], default="md")
     export.add_argument(
         "--report-type",
         choices=["technical", "layperson", "brief", "all"],
@@ -514,6 +514,109 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output the full ATP packet summary as JSON.",
     )
     atp_packet.set_defaults(func=command_planner_pack_atp_packet)
+
+    hsip = planner_subparsers.add_parser(
+        "hsip",
+        help=(
+            "Screen a run's candidate projects against FHWA HSIP "
+            "(23 USC 148) cycle eligibility."
+        ),
+    )
+    hsip.add_argument("--workspace", required=True, type=Path)
+    hsip.add_argument("--run-id", dest="run_id", required=True)
+    hsip.add_argument(
+        "--cycle-year",
+        dest="cycle_year",
+        required=True,
+        type=int,
+        help="HSIP cycle year (e.g. 2027).",
+    )
+    hsip.add_argument(
+        "--cycle-label",
+        dest="cycle_label",
+        default=None,
+        help="Optional HSIP cycle label (e.g. 'HSIP Cycle 12').",
+    )
+    hsip.add_argument(
+        "--min-bc-ratio",
+        dest="min_bc_ratio",
+        default=None,
+        type=float,
+        help="Minimum benefit-cost ratio (default 1.0).",
+    )
+    hsip.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full HSIP screen summary as JSON.",
+    )
+    hsip.set_defaults(func=command_planner_pack_hsip)
+
+    cmaq = planner_subparsers.add_parser(
+        "cmaq",
+        help=(
+            "Screen a run's candidate projects against FHWA CMAQ "
+            "(23 USC 149) emissions-reduction eligibility."
+        ),
+    )
+    cmaq.add_argument("--workspace", required=True, type=Path)
+    cmaq.add_argument("--run-id", dest="run_id", required=True)
+    cmaq.add_argument(
+        "--analysis-year",
+        dest="analysis_year",
+        required=True,
+        type=int,
+        help="CMAQ analysis year (e.g. 2027).",
+    )
+    cmaq.add_argument(
+        "--pollutants",
+        dest="pollutants",
+        default=None,
+        help=(
+            "Comma-separated list of pollutants to include "
+            "(default: pm2_5,pm10,nox,voc,co)."
+        ),
+    )
+    cmaq.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full CMAQ packet summary as JSON.",
+    )
+    cmaq.set_defaults(func=command_planner_pack_cmaq)
+
+    stip = planner_subparsers.add_parser(
+        "stip",
+        help=(
+            "Program a run's candidate projects into a California STIP "
+            "cycle packet (S&HC §§14525-14529.11 and §188; CTC STIP Guidelines)."
+        ),
+    )
+    stip.add_argument("--workspace", required=True, type=Path)
+    stip.add_argument("--run-id", dest="run_id", required=True)
+    stip.add_argument(
+        "--cycle",
+        dest="cycle_label",
+        default=None,
+        help="STIP cycle label (default: '2026 STIP').",
+    )
+    stip.add_argument(
+        "--region",
+        dest="region",
+        choices=("north", "south"),
+        default=None,
+        help=(
+            "Optional region filter (north / south per S&HC §188). When "
+            "omitted, all overlay rows are programmed into the packet."
+        ),
+    )
+    stip.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output the full STIP packet summary as JSON.",
+    )
+    stip.set_defaults(func=command_planner_pack_stip)
 
     diff = subparsers.add_parser(
         "diff",
@@ -1207,6 +1310,134 @@ def command_planner_pack_atp_packet(args: argparse.Namespace) -> None:
     print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
 
 
+def command_planner_pack_cmaq(args: argparse.Namespace) -> None:
+    from .planner_pack import write_cmaq
+
+    ensure_workspace(args.workspace)
+    pollutants: list[str] | None = None
+    if args.pollutants:
+        pollutants = [
+            token.strip()
+            for token in args.pollutants.split(",")
+            if token.strip()
+        ]
+    summary = write_cmaq(
+        args.workspace,
+        args.run_id,
+        analysis_year=args.analysis_year,
+        pollutants=pollutants,
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    pollutant_totals = summary["total_kg_per_day_by_pollutant"] or {}
+    totals_text = ", ".join(
+        f"{p.upper().replace('PM2_5', 'PM2.5')} {kg:.3f} kg/day"
+        for p, kg in pollutant_totals.items()
+    ) or "no pollutant totals"
+    print(
+        f"CMAQ packet — {summary['project_count']} candidate(s), "
+        f"{summary['estimate_count']} estimate(s), analysis year "
+        f"{summary['analysis_year']}."
+    )
+    print(
+        f"  Overlay staged for {summary['overlay_supplied_project_count']} "
+        f"candidate(s); totals: {totals_text}."
+    )
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
+def command_planner_pack_stip(args: argparse.Namespace) -> None:
+    from .planner_pack import DEFAULT_STIP_CYCLE_LABEL, write_stip
+
+    ensure_workspace(args.workspace)
+    summary = write_stip(
+        args.workspace,
+        args.run_id,
+        cycle_label=args.cycle_label or DEFAULT_STIP_CYCLE_LABEL,
+        region=args.region,
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    fy_totals = summary["total_cost_thousands_by_fiscal_year"] or {}
+    fy_text = ", ".join(
+        f"FY {fy} ${cost:,.0f}K" for fy, cost in fy_totals.items()
+    ) or "no fiscal-year totals"
+    split = summary["north_south_split"] or {}
+    split_text = (
+        (
+            f"north {split['north_share'] * 100:.1f}% / "
+            f"south {split['south_share'] * 100:.1f}% "
+            f"({'meets' if split.get('meets_target') else 'does not yet meet'} "
+            "40/60 target)"
+        )
+        if split
+        else "no N/S split computed"
+    )
+    print(
+        f"STIP packet — {summary['project_count']} candidate(s), "
+        f"{summary['programming_row_count']} programming row(s), cycle "
+        f"{summary['cycle_label']!r}"
+        + (
+            f" (region: {summary['region_filter']})"
+            if summary["region_filter"]
+            else ""
+        )
+        + "."
+    )
+    print(
+        f"  Overlay staged for {summary['overlay_supplied_project_count']} "
+        f"candidate(s); totals: {fy_text}."
+    )
+    print(f"  N/S split: {split_text}.")
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
+def command_planner_pack_hsip(args: argparse.Namespace) -> None:
+    from .planner_pack import (
+        DEFAULT_HSIP_CYCLE_LABEL,
+        DEFAULT_HSIP_MIN_BC_RATIO,
+        write_hsip,
+    )
+
+    ensure_workspace(args.workspace)
+    summary = write_hsip(
+        args.workspace,
+        args.run_id,
+        cycle_year=args.cycle_year,
+        cycle_label=args.cycle_label or DEFAULT_HSIP_CYCLE_LABEL,
+        min_bc_ratio=(
+            args.min_bc_ratio
+            if args.min_bc_ratio is not None
+            else DEFAULT_HSIP_MIN_BC_RATIO
+        ),
+    )
+    if args.as_json:
+        print(json.dumps(summary))
+        return
+    print(
+        f"HSIP screen — {summary['project_count']} candidate(s), "
+        f"cycle year {summary['cycle_year']}, minimum B/C "
+        f"{summary['min_bc_ratio']:.2f}."
+    )
+    print(
+        f"  Overlay staged for {summary['overlay_supplied_count']} candidate(s); "
+        f"{summary['bc_ratio_passes_count']} clear the B/C minimum; "
+        f"{summary['proven_countermeasure_count']} report a proven countermeasure."
+    )
+    print(f"Report: {summary['report_path']}")
+    print(f"CSV:    {summary['csv_path']}")
+    print(f"JSON:   {summary['json_path']}")
+    print(f"Appended {summary['fact_block_count']} fact_block(s) to fact_blocks.jsonl.")
+
+
 def command_diff(args: argparse.Namespace) -> None:
     from .diff import write_run_diff
 
@@ -1292,4 +1523,3 @@ def command_portfolio(args: argparse.Namespace) -> None:
     print(f"Report: {summary['report_path']}")
     print(f"CSV:    {summary['csv_path']}")
     print(f"JSON:   {summary['json_path']}")
-

@@ -1,12 +1,12 @@
 {
   "name": "clawmodeler",
-  "version": "0.8.1",
-  "description": "AI-orchestrated, local-first transportation scenario modeling for small and rural agencies.",
+  "version": "0.9.2",
+  "description": "Local-first transportation sketch-planning for small and rural agencies.",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
     "engine": "python3 -m clawmodeler_engine",
-    "engine:test": "python3 -m unittest discover -s tests -p 'clawmodeler_engine_test.py'",
+    "engine:test": "python3 -m unittest discover -s tests -p '*test*.py'",
     "engine:check": "bash scripts/check-packaging.sh",
     "ui:dev": "pnpm --dir desktop dev",
     "ui:build": "pnpm --dir desktop build",

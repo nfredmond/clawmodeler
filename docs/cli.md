@@ -1,74 +1,115 @@
 ---
-summary: "CLI reference for `openclaw clawmodeler` transportation modeling workflows"
+summary: "CLI reference for ClawModeler transportation sketch-planning workflows"
 read_when:
-  - You want to run ClawModeler workspace, demo, workflow, bridge, or graph commands
-  - You need the OpenClaw wrapper for the `clawmodeler-engine` Python sidecar
-title: "clawmodeler"
+  - You want to run ClawModeler workspace, demo, workflow, Planner Pack, bridge, graph, what-if, diff, portfolio, or chat commands
+  - You need the `clawmodeler-engine` Python sidecar entrypoint
+title: "clawmodeler-engine"
 ---
 
-# `openclaw clawmodeler`
+# `clawmodeler-engine`
 
-Run ClawModeler transportation sketch-planning workflows through the local Python sidecar.
+Run ClawModeler transportation sketch-planning workflows through the local Python sidecar. Outputs are screening-level unless a workspace includes calibrated model inputs, validation evidence, and method notes that support a detailed analysis tier.
 
-The command forwards arguments to `python3 -m clawmodeler_engine`. Outputs are screening-level unless a workspace includes calibrated model inputs, validation evidence, and method notes that support a detailed analysis tier.
-
-## Common commands
+## Common Commands
 
 ```bash
-openclaw clawmodeler doctor
-openclaw clawmodeler tools --json
-openclaw clawmodeler init --workspace ./demo
-openclaw clawmodeler demo --workspace ./demo
+clawmodeler-engine doctor
+clawmodeler-engine tools --json
+clawmodeler-engine init --workspace ./demo
+clawmodeler-engine demo --workspace ./demo --run-id demo
 ```
 
-## Workflow commands
+## Workflow Commands
 
 ```bash
-openclaw clawmodeler workflow full \
+clawmodeler-engine workflow full \
   --workspace ./demo \
   --inputs zones.geojson socio.csv network_edges.csv projects.csv feed.zip \
   --question question.json \
   --run-id demo \
   --scenarios baseline scenario-a
 
-openclaw clawmodeler workflow demo-full --workspace ./demo --run-id demo
-openclaw clawmodeler workflow report-only --workspace ./demo --run-id demo
-openclaw clawmodeler workflow diagnose --workspace ./demo
+clawmodeler-engine workflow demo-full --workspace ./demo --run-id demo
+clawmodeler-engine workflow report-only --workspace ./demo --run-id demo
+clawmodeler-engine workflow diagnose --workspace ./demo --run-id demo
 ```
 
-## Stage commands
+## Stage Commands
 
 ```bash
-openclaw clawmodeler intake --workspace ./demo --inputs zones.geojson socio.csv
-openclaw clawmodeler plan --workspace ./demo --question question.json
-openclaw clawmodeler run --workspace ./demo --run-id demo --scenarios baseline scenario-a
-openclaw clawmodeler export --workspace ./demo --run-id demo --format md
+clawmodeler-engine intake --workspace ./demo --inputs zones.geojson socio.csv
+clawmodeler-engine plan --workspace ./demo --question question.json
+clawmodeler-engine run --workspace ./demo --run-id demo --scenarios baseline scenario-a
+clawmodeler-engine export --workspace ./demo --run-id demo --format md
 ```
 
-## Bridge commands
+`export --format` currently supports `md` and `pdf`. PDF requires the optional `pdf` dependency set.
+
+## Planner Pack Commands
 
 ```bash
-openclaw clawmodeler bridge prepare-all --workspace ./demo --run-id demo
-openclaw clawmodeler bridge validate --workspace ./demo --run-id demo
-openclaw clawmodeler bridge sumo prepare --workspace ./demo --run-id demo
-openclaw clawmodeler bridge matsim prepare --workspace ./demo --run-id demo
-openclaw clawmodeler bridge urbansim prepare --workspace ./demo --run-id demo
+clawmodeler-engine planner-pack ceqa-vmt --workspace ./demo --run-id demo
+clawmodeler-engine planner-pack lapm-exhibit --workspace ./demo --run-id demo
+clawmodeler-engine planner-pack rtp-chapter --workspace ./demo --run-id demo
+clawmodeler-engine planner-pack equity-lens --workspace ./demo --run-id demo
+clawmodeler-engine planner-pack atp-packet --workspace ./demo --run-id demo
+clawmodeler-engine planner-pack hsip --workspace ./demo --run-id demo --cycle-year 2027
+clawmodeler-engine planner-pack cmaq --workspace ./demo --run-id demo --analysis-year 2027
+clawmodeler-engine planner-pack stip --workspace ./demo --run-id demo
 ```
 
-## Graph commands
+## Comparison Commands
 
 ```bash
-openclaw clawmodeler graph osmnx \
+clawmodeler-engine what-if \
+  --workspace ./demo \
+  --base-run-id demo \
+  --new-run-id demo-safety \
+  --weight-safety 0.4 \
+  --weight-equity 0.25 \
+  --weight-climate 0.2 \
+  --weight-feasibility 0.15
+
+clawmodeler-engine diff --workspace ./demo --run-a demo --run-b demo-safety --json
+clawmodeler-engine portfolio --workspace ./demo --json
+```
+
+## Grounded Chat
+
+```bash
+clawmodeler-engine chat \
+  --workspace ./demo \
+  --run-id demo \
+  --message "Which projects drove the VMT result?" \
+  --json
+```
+
+Chat and AI narrative calls are downstream of a finished run. Every sentence must cite a real `fact_id` or it is blocked/dropped by the deterministic grounding gate.
+
+## Bridge Commands
+
+```bash
+clawmodeler-engine bridge prepare-all --workspace ./demo --run-id demo
+clawmodeler-engine bridge validate --workspace ./demo --run-id demo
+clawmodeler-engine bridge sumo prepare --workspace ./demo --run-id demo
+clawmodeler-engine bridge matsim prepare --workspace ./demo --run-id demo
+clawmodeler-engine bridge urbansim prepare --workspace ./demo --run-id demo
+```
+
+## Graph Commands
+
+```bash
+clawmodeler-engine graph osmnx \
   --workspace ./demo \
   --place "Davis, California, USA"
 
-openclaw clawmodeler graph map-zones --workspace ./demo
+clawmodeler-engine graph map-zones --workspace ./demo
 ```
 
 ## Notes
 
 - `doctor` and `tools` inspect local Python modules, external binaries, and model bridge directories.
-- Report export is blocked when ClawQA cannot find a manifest or fact-block evidence.
-- Direct sidecar access is available with `python3 -m clawmodeler_engine --help`.
+- Report export is blocked when ClawQA cannot find a manifest or valid fact-block evidence.
+- Direct module access is available with `python3 -m clawmodeler_engine --help`.
 
-See [ClawModeler Stack](/clawmodeler-stack) for workspace contracts, analysis modules, bridge packages, and install profiles.
+See `docs/stack.md` for workspace contracts, analysis modules, bridge packages, and install profiles.

@@ -17,6 +17,68 @@ export type WorkspaceArtifacts = {
   filesTruncated: boolean;
 };
 
+export type GeneratedArtifactSummary = {
+  category: string;
+  count: number;
+};
+
+export type RunSummary = {
+  runId: string;
+  workspacePath: string;
+  manifestPath: string;
+  reportPath: string | null;
+  scenarioIds: string[];
+  qaExportReady: boolean | null;
+  bridgeExportReady: boolean | null;
+  plannerPackArtifacts: string[];
+  generatedArtifacts: GeneratedArtifactSummary[];
+  missingSidecars: string[];
+  warnings: string[];
+};
+
+type PlannerPackSpec = {
+  kind: PlannerPackKind;
+  label: string;
+  tableSuffixes: string[];
+};
+
+export type PlannerPackKind =
+  | "ceqa-vmt"
+  | "lapm-exhibit"
+  | "rtp-chapter"
+  | "equity-lens"
+  | "atp-packet"
+  | "hsip"
+  | "cmaq"
+  | "stip";
+
+export const PLANNER_PACK_SPECS: PlannerPackSpec[] = [
+  { kind: "ceqa-vmt", label: "CEQA VMT", tableSuffixes: ["outputs/tables/ceqa_vmt.csv"] },
+  { kind: "lapm-exhibit", label: "LAPM", tableSuffixes: ["outputs/tables/lapm_exhibit.csv"] },
+  {
+    kind: "rtp-chapter",
+    label: "RTP",
+    tableSuffixes: ["outputs/tables/rtp_chapter_projects.csv"],
+  },
+  { kind: "equity-lens", label: "Equity", tableSuffixes: ["outputs/tables/equity_lens.csv"] },
+  { kind: "atp-packet", label: "ATP", tableSuffixes: ["outputs/tables/atp_packet.csv"] },
+  { kind: "hsip", label: "HSIP", tableSuffixes: ["outputs/tables/hsip.csv"] },
+  { kind: "cmaq", label: "CMAQ", tableSuffixes: ["outputs/tables/cmaq.csv"] },
+  { kind: "stip", label: "STIP", tableSuffixes: ["outputs/tables/stip.csv"] },
+];
+
+export type PlannerPackSubmitPayload = {
+  workspace: string;
+  runId: string;
+  kind: PlannerPackKind;
+  cycleYear: number | null;
+  analysisYear: number | null;
+};
+
+export type PlannerPackValidation =
+  | { ok: true; payload: PlannerPackSubmitPayload }
+  | { ok: false; error: string };
+
 export function normalizePathList(input: string): string[] {
   return input
     .split(/\r?\n|,/u)
@@ -93,6 +155,210 @@ export function manifestOutputCategories(manifest: Record<string, unknown> | nul
     return [];
   }
   return Object.keys(outputs).toSorted();
+}
+
+function workspacePathJoin(workspace: string, ...segments: string[]): string {
+  const trimmed = workspace.trim().replace(/[/\\]+$/u, "");
+  const separator = trimmed.includes("\\") && !trimmed.includes("/") ? "\\" : "/";
+  return [trimmed, ...segments].filter(Boolean).join(separator);
+}
+
+function stringValues(value: unknown): string[] {
+  if (typeof value === "string" && value.trim()) {
+    return [value.trim()];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => stringValues(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap((item) => stringValues(item));
+  }
+  return [];
+}
+
+function normalizedSuffix(value: string): string {
+  return value.replace(/\\/gu, "/").replace(/^\.?\//u, "");
+}
+
+function pathHasSuffix(paths: string[], suffix: string): boolean {
+  const normalizedNeedle = normalizedSuffix(suffix);
+  return paths.some((path) => normalizedSuffix(path).endsWith(normalizedNeedle));
+}
+
+export function manifestOutputPaths(manifest: Record<string, unknown> | null): string[] {
+  return stringValues(manifest?.outputs);
+}
+
+export function detectPlannerPackArtifacts(
+  files: string[],
+  manifest: Record<string, unknown> | null,
+): string[] {
+  const paths = [...files, ...manifestOutputPaths(manifest)];
+  return PLANNER_PACK_SPECS.filter((spec) =>
+    spec.tableSuffixes.some((suffix) => pathHasSuffix(paths, suffix)),
+  ).map((spec) => spec.kind);
+}
+
+function generatedArtifactSummary(manifest: Record<string, unknown> | null): GeneratedArtifactSummary[] {
+  const outputs = manifest?.outputs;
+  if (!outputs || typeof outputs !== "object" || Array.isArray(outputs)) {
+    return [];
+  }
+  return Object.entries(outputs)
+    .map(([category, value]) => ({ category, count: stringValues(value).length }))
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => a.category.localeCompare(b.category));
+}
+
+function scenarioIds(manifest: Record<string, unknown> | null): string[] {
+  const scenarios = manifest?.scenarios;
+  if (!Array.isArray(scenarios)) {
+    return [];
+  }
+  return scenarios
+    .map((scenario) => {
+      if (typeof scenario === "string") return scenario;
+      if (scenario && typeof scenario === "object") {
+        const raw = (scenario as Record<string, unknown>).scenario_id;
+        return typeof raw === "string" ? raw : "";
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function workflowReportPath(
+  workflowReport: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const artifacts = workflowReport?.artifacts;
+  if (!artifacts || typeof artifacts !== "object" || Array.isArray(artifacts)) {
+    return null;
+  }
+  return asString((artifacts as Record<string, unknown>)[key]);
+}
+
+function bridgeExportReady(workflowReport: Record<string, unknown> | null): boolean | null {
+  const bridgeValidation = workflowReport?.bridge_validation;
+  if (!bridgeValidation || typeof bridgeValidation !== "object" || Array.isArray(bridgeValidation)) {
+    return null;
+  }
+  const value = (bridgeValidation as Record<string, unknown>).export_ready;
+  return typeof value === "boolean" ? value : null;
+}
+
+function collectWarnings(artifacts: WorkspaceArtifacts): string[] {
+  const warnings = asStringArray(artifacts.manifest?.warnings);
+  const qaBlockers = asStringArray(artifacts.qaReport?.blockers).map(
+    (blocker) => `QA blocker: ${blocker}`,
+  );
+  const bridgeValidation = artifacts.workflowReport?.bridge_validation;
+  const bridgeBlockers =
+    bridgeValidation && typeof bridgeValidation === "object" && !Array.isArray(bridgeValidation)
+      ? asStringArray((bridgeValidation as Record<string, unknown>).blockers).map(
+          (blocker) => `Bridge blocker: ${blocker}`,
+        )
+      : [];
+  if (artifacts.filesTruncated) {
+    warnings.push("File list truncated; only the first 500 artifacts are shown.");
+  }
+  return [...warnings, ...qaBlockers, ...bridgeBlockers];
+}
+
+function missingManifestSidecars(artifacts: WorkspaceArtifacts): string[] {
+  const declared = artifacts.manifest?.artifacts;
+  if (!declared || typeof declared !== "object" || Array.isArray(declared)) {
+    return [];
+  }
+  const knownPaths = [...artifacts.files, ...manifestOutputPaths(artifacts.manifest)];
+  const missing: string[] = [];
+  for (const [key, value] of Object.entries(declared)) {
+    for (const declaredPath of stringValues(value)) {
+      if (!pathHasSuffix(knownPaths, declaredPath)) {
+        missing.push(`${key}: ${declaredPath}`);
+      }
+    }
+  }
+  return missing.toSorted();
+}
+
+export function summarizeRunArtifacts(artifacts: WorkspaceArtifacts | null): RunSummary | null {
+  if (!artifacts) {
+    return null;
+  }
+  return {
+    runId: artifacts.runId,
+    workspacePath: artifacts.workspace,
+    manifestPath: workflowReportPath(artifacts.workflowReport, "manifest") ?? workspacePathJoin(
+      artifacts.workspace,
+      "runs",
+      artifacts.runId,
+      "manifest.json",
+    ),
+    reportPath: workflowReportPath(artifacts.workflowReport, "report"),
+    scenarioIds: scenarioIds(artifacts.manifest),
+    qaExportReady:
+      typeof artifacts.qaReport?.export_ready === "boolean" ? artifacts.qaReport.export_ready : null,
+    bridgeExportReady: bridgeExportReady(artifacts.workflowReport),
+    plannerPackArtifacts: detectPlannerPackArtifacts(artifacts.files, artifacts.manifest),
+    generatedArtifacts: generatedArtifactSummary(artifacts.manifest),
+    missingSidecars: missingManifestSidecars(artifacts),
+    warnings: collectWarnings(artifacts),
+  };
+}
+
+export function validatePlannerPackForm(params: {
+  workspace: string;
+  runId: string;
+  kind: string;
+  cycleYear: string;
+  analysisYear: string;
+}): PlannerPackValidation {
+  const workspace = params.workspace.trim();
+  const runId = params.runId.trim();
+  const kind = params.kind as PlannerPackKind;
+  if (!workspace) return { ok: false, error: "Workspace is required." };
+  if (!runId) return { ok: false, error: "Run ID is required." };
+  if (!PLANNER_PACK_SPECS.some((spec) => spec.kind === kind)) {
+    return { ok: false, error: "Pick a Planner Pack artifact." };
+  }
+
+  let cycleYear: number | null = null;
+  if (kind === "hsip") {
+    cycleYear = Number(params.cycleYear.trim());
+    if (!Number.isInteger(cycleYear) || cycleYear < 2000 || cycleYear > 2100) {
+      return { ok: false, error: "HSIP cycle year must be a four-digit year." };
+    }
+  }
+
+  let analysisYear: number | null = null;
+  if (kind === "cmaq") {
+    analysisYear = Number(params.analysisYear.trim());
+    if (!Number.isInteger(analysisYear) || analysisYear < 2000 || analysisYear > 2100) {
+      return { ok: false, error: "CMAQ analysis year must be a four-digit year." };
+    }
+  }
+
+  return { ok: true, payload: { workspace, runId, kind, cycleYear, analysisYear } };
+}
+
+export function buildPlannerPackArgs(payload: PlannerPackSubmitPayload): string[] {
+  const args = [
+    "planner-pack",
+    payload.kind,
+    "--workspace",
+    payload.workspace,
+    "--run-id",
+    payload.runId,
+    "--json",
+  ];
+  if (payload.kind === "hsip" && payload.cycleYear !== null) {
+    args.push("--cycle-year", String(payload.cycleYear));
+  }
+  if (payload.kind === "cmaq" && payload.analysisYear !== null) {
+    args.push("--analysis-year", String(payload.analysisYear));
+  }
+  return args;
 }
 
 const FRIENDLY_ERROR_PATTERNS: ReadonlyArray<{ pattern: RegExp; message: string }> = [
