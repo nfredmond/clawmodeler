@@ -34,20 +34,17 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 - Diff, what-if, portfolio, and grounded chat are deterministic downstream tools over finished runs.
 - The desktop app is vanilla TypeScript on Tauri v2 and invokes only the `clawmodeler-engine` sidecar or local Python fallback.
 - The desktop workbench has a top-level Workflow Guide that links workspace setup, run execution, QA/artifact review, Planner Pack generation, grounded chat, what-if, portfolio, and diff readiness.
+- The desktop workbench preserves recent workspaces, active run history, and planner-facing run labels locally so existing runs can be reopened without retyping paths.
 - The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate.
 - Release gates smoke-test the packaged sidecar, validate installer asset names, check version consistency, serialize tag publishing, and only mark the highest SemVer tag as Latest.
 
 ## Next Engineering Milestones
 
-1. **Persist desktop project state.**
-
-   Add saved recent workspaces, active run history, and explicit run labels so the desktop workbench feels like a durable local app rather than a stateless launcher over files.
-
-2. **Deepen the local data layer.**
+1. **Deepen the local data layer.**
 
    Build on the DuckDB starter sync with stable table schemas, import validation summaries, and queryable run/artifact indexes for portfolio, diff, and desktop summaries.
 
-3. **Add optional ML workflows last.**
+2. **Add optional ML workflows last.**
 
    Expose ML libraries through the toolbox only when there is a defined training target, validation set, and model-governance story.
 
@@ -73,4 +70,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when the desktop workbench preserves recent workspaces, run IDs, and planner-facing run labels across launches, and can distinguish a newly opened workspace from one with existing runs ready for QA, Planner Pack generation, bridge review, or comparison.
+The next pass is done when the local data layer has stable DuckDB-backed workspace tables for staged inputs, runs, artifacts, QA summaries, bridge readiness, and portfolio/diff indexes, with import validation summaries that the CLI and desktop can query without walking the filesystem every time.

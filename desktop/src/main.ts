@@ -12,6 +12,7 @@ import {
   DEFAULT_WHAT_IF_WEIGHTS,
   deriveWorkflowGuide,
   deriveQuestionSavePath,
+  findProjectWorkspace,
   formatDacShare,
   formatMeanScore,
   friendlyError,
@@ -20,6 +21,7 @@ import {
   normalizePathList,
   normalizeScenarios,
   parseChatTurn,
+  parseProjectState,
   parsePortfolioPayload,
   type PlannerPackKind,
   PLANNER_PACK_SPECS,
@@ -27,18 +29,24 @@ import {
   type PortfolioRun,
   type PortfolioSortDirection,
   type PortfolioSortKey,
+  type ProjectRunStateInput,
+  type ProjectWorkspaceRecord,
+  projectRunLabel,
   rebalanceWhatIfWeights,
   segmentChatText,
+  serializeProjectState,
   sortPortfolioRuns,
   summarizeRunArtifacts,
   summarizeQa,
   toggleRunSelection,
+  upsertProjectRunState,
   validateDiffSelection,
   validatePlannerPackForm,
   validateWhatIfForm,
   whatIfWeightSum,
   type WhatIfWeights,
   type WorkflowGuideStep,
+  workspaceDisplayName,
 } from "./workbench.js";
 
 type ApiResult<T = unknown> = {
@@ -169,6 +177,7 @@ type BridgeOperatorFeedback = {
 type AppState = {
   workspace: string;
   runId: string;
+  runLabel: string;
   inputPaths: string;
   questionPath: string;
   scenarios: string;
@@ -192,11 +201,23 @@ type AppState = {
   bridgeExecution: BridgeExecutionState;
   whatIf: WhatIfState;
   portfolio: PortfolioState;
+  projectState: ProjectWorkspaceRecord[];
 };
 
+const PROJECT_STATE_KEY = "clawmodeler.projectState.v1";
+const initialProjectState = parseProjectState(localStorage.getItem(PROJECT_STATE_KEY));
+const initialWorkspace =
+  localStorage.getItem("clawmodeler.workspace") || "/tmp/clawmodeler-workbench";
+const initialRunId = localStorage.getItem("clawmodeler.runId") || "demo";
+const initialRunLabel =
+  localStorage.getItem("clawmodeler.runLabel") ||
+  projectRunLabel(initialProjectState, initialWorkspace, initialRunId) ||
+  initialRunId;
+
 const state: AppState = {
-  workspace: localStorage.getItem("clawmodeler.workspace") || "/tmp/clawmodeler-workbench",
-  runId: localStorage.getItem("clawmodeler.runId") || "demo",
+  workspace: initialWorkspace,
+  runId: initialRunId,
+  runLabel: initialRunLabel,
   inputPaths: localStorage.getItem("clawmodeler.inputPaths") || "",
   questionPath: localStorage.getItem("clawmodeler.questionPath") || "",
   scenarios: localStorage.getItem("clawmodeler.scenarios") || "baseline",
@@ -262,6 +283,7 @@ const state: AppState = {
     status: "",
     lastDiffPath: null,
   },
+  projectState: initialProjectState,
 };
 
 function markOnboarded() {
@@ -390,6 +412,7 @@ function parseBridgeOperatorFeedback(
 function saveForm() {
   localStorage.setItem("clawmodeler.workspace", state.workspace);
   localStorage.setItem("clawmodeler.runId", state.runId);
+  localStorage.setItem("clawmodeler.runLabel", state.runLabel);
   localStorage.setItem("clawmodeler.inputPaths", state.inputPaths);
   localStorage.setItem("clawmodeler.questionPath", state.questionPath);
   localStorage.setItem("clawmodeler.scenarios", state.scenarios);
@@ -397,6 +420,89 @@ function saveForm() {
   localStorage.setItem("clawmodeler.routingSource", state.routingSource);
   localStorage.setItem("clawmodeler.routingGraphId", state.routingGraphId);
   localStorage.setItem("clawmodeler.routingImpedance", state.routingImpedance);
+}
+
+function saveProjectState(records = state.projectState) {
+  state.projectState = records;
+  localStorage.setItem(PROJECT_STATE_KEY, serializeProjectState(state.projectState));
+}
+
+function currentWorkspaceRecord(): ProjectWorkspaceRecord | null {
+  return findProjectWorkspace(state.projectState, state.workspace);
+}
+
+function activeRunLabel(workspace = state.workspace, runId = state.runId): string {
+  return projectRunLabel(state.projectState, workspace, runId) || runId.trim();
+}
+
+function projectStatusFromArtifacts(artifacts: WorkspaceArtifacts | null): string {
+  if (!artifacts?.manifest) {
+    return "Selected";
+  }
+  const runSummary = summarizeRunArtifacts(artifacts);
+  if (runSummary?.qaExportReady === false) {
+    return "QA blocked";
+  }
+  if ((runSummary?.bridgeExecutionReports.length ?? 0) > 0) {
+    return "Bridge review ready";
+  }
+  if ((runSummary?.plannerPackArtifacts.length ?? 0) > 0) {
+    return "Planner Pack ready";
+  }
+  if (runSummary?.qaExportReady === true) {
+    return "QA ready";
+  }
+  return "Run loaded";
+}
+
+function rememberCurrentProject(artifacts: WorkspaceArtifacts | null, status?: string) {
+  const workspace = state.workspace.trim();
+  const runId = state.runId.trim();
+  if (!workspace || !runId) {
+    return;
+  }
+  const runSummary = summarizeRunArtifacts(artifacts);
+  const label = state.runLabel.trim() || activeRunLabel(workspace, runId) || runId;
+  state.runLabel = label;
+  const update: ProjectRunStateInput = {
+    workspacePath: workspace,
+    runId,
+    label,
+    status: status ?? projectStatusFromArtifacts(artifacts),
+    updatedAt: new Date().toISOString(),
+  };
+  if (runSummary) {
+    update.manifestPath = runSummary.manifestPath;
+    update.reportPath = runSummary.reportPath;
+    update.qaExportReady = runSummary.qaExportReady;
+    update.plannerPackArtifacts = runSummary.plannerPackArtifacts;
+    update.bridgeExecutionReportCount = runSummary.bridgeExecutionReports.length;
+  }
+  saveProjectState(upsertProjectRunState(state.projectState, update));
+  saveForm();
+}
+
+function rememberCurrentSelection() {
+  const workspace = state.workspace.trim();
+  const runId = state.runId.trim();
+  if (!workspace || !runId) {
+    return;
+  }
+  saveProjectState(
+    upsertProjectRunState(state.projectState, {
+      workspacePath: workspace,
+      runId,
+      label: state.runLabel.trim() || runId,
+      updatedAt: new Date().toISOString(),
+    }),
+  );
+}
+
+function applyWorkspaceRun(workspace: string, runId: string) {
+  state.workspace = workspace;
+  state.runId = runId;
+  state.runLabel = activeRunLabel(workspace, runId) || runId;
+  saveForm();
 }
 
 function isTauriRuntime(): boolean {
@@ -573,6 +679,7 @@ async function refreshArtifacts(showBusy = true) {
   try {
     const result = await api<WorkspaceArtifacts>(path);
     state.artifacts = result.json ?? null;
+    rememberCurrentProject(state.artifacts);
     if (
       state.artifactPreview.selectedPath &&
       !state.artifacts?.files.includes(state.artifactPreview.selectedPath)
@@ -590,6 +697,7 @@ async function refreshArtifacts(showBusy = true) {
     }
     state.status = "Workspace loaded";
   } catch (error) {
+    rememberCurrentProject(null, "Not loaded");
     if (showBusy) {
       const raw = error instanceof Error ? error.message : String(error);
       state.status = friendlyError(raw);
@@ -816,6 +924,8 @@ async function submitWhatIf() {
     state.whatIf.lastResult = result.json ?? null;
     state.whatIf.status = `Created run ${payload.newRunId}.`;
     state.runId = payload.newRunId;
+    state.runLabel =
+      projectRunLabel(state.projectState, state.workspace, payload.newRunId) || payload.newRunId;
     saveForm();
     await refreshArtifacts(false);
   } catch (error) {
@@ -920,8 +1030,7 @@ function togglePortfolioSelection(runId: string) {
 }
 
 function openRunFromPortfolio(runId: string) {
-  state.runId = runId;
-  saveForm();
+  applyWorkspaceRun(state.workspace, runId);
   void refreshArtifacts();
 }
 
@@ -933,7 +1042,8 @@ async function pickWorkspaceFolder() {
       title: "Pick workspace folder",
     });
     if (typeof selected === "string" && selected) {
-      state.workspace = selected;
+      const remembered = findProjectWorkspace(state.projectState, selected);
+      applyWorkspaceRun(selected, remembered?.activeRunId || state.runId);
       saveForm();
       render();
     }
@@ -1036,8 +1146,22 @@ function bindControls() {
     saveForm();
   });
   appRoot.querySelector<HTMLInputElement>("#run-id")?.addEventListener("input", (event) => {
+    const previousRunId = state.runId;
     state.runId = (event.target as HTMLInputElement).value;
+    if (!state.runLabel.trim() || state.runLabel === previousRunId) {
+      state.runLabel = activeRunLabel(state.workspace, state.runId) || state.runId;
+    }
     saveForm();
+  });
+  appRoot.querySelector<HTMLInputElement>("#run-id")?.addEventListener("change", () => {
+    state.runLabel = activeRunLabel(state.workspace, state.runId) || state.runId;
+    saveForm();
+    render();
+  });
+  appRoot.querySelector<HTMLInputElement>("#run-label")?.addEventListener("input", (event) => {
+    state.runLabel = (event.target as HTMLInputElement).value;
+    saveForm();
+    rememberCurrentSelection();
   });
   appRoot.querySelector<HTMLTextAreaElement>("#input-paths")?.addEventListener("input", (event) => {
     state.inputPaths = (event.target as HTMLTextAreaElement).value;
@@ -1317,6 +1441,26 @@ function bindControls() {
       if (runId) openRunFromPortfolio(runId);
     });
   });
+  appRoot.querySelectorAll<HTMLButtonElement>("[data-project-open]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const index = Number(el.dataset.projectOpen);
+      const workspace = state.projectState[index];
+      if (!workspace) return;
+      applyWorkspaceRun(
+        workspace.workspacePath,
+        workspace.activeRunId || workspace.runs[0]?.runId || state.runId,
+      );
+      void refreshArtifacts();
+    });
+  });
+  appRoot.querySelectorAll<HTMLButtonElement>("[data-run-open]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const runId = el.dataset.runOpen;
+      if (!runId) return;
+      applyWorkspaceRun(state.workspace, runId);
+      void refreshArtifacts();
+    });
+  });
   appRoot.querySelectorAll<HTMLButtonElement>("[data-artifact-preview]").forEach((el) => {
     el.addEventListener("click", () => {
       const path = el.dataset.artifactPreview;
@@ -1418,6 +1562,77 @@ function renderWorkflowGuide(): string {
         ${guide.steps.map((step) => renderWorkflowGuideStep(step, guide.currentStepId)).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderProjectMemory(): string {
+  const current = currentWorkspaceRecord();
+  const activeRun = current?.runs.find((run) => run.runId === state.runId);
+  const currentStatus =
+    activeRun?.status ??
+    (state.artifacts?.manifest ? projectStatusFromArtifacts(state.artifacts) : "New setup");
+  const recentWorkspaces =
+    state.projectState.length > 0
+      ? `<ul class="project-memory-list">${state.projectState
+          .slice(0, 5)
+          .map(
+            (workspace, index) => `
+              <li>
+                <div>
+                  <strong>${escapeHtml(workspace.label)}</strong>
+                  <span>${escapeHtml(workspace.workspacePath)}</span>
+                  <small>${escapeHtml(workspace.runs.length)} run(s), active <code>${escapeHtml(
+                    workspace.activeRunId || "none",
+                  )}</code></small>
+                </div>
+                <button type="button" class="link-btn" data-project-open="${index}" ${
+                  state.busy ? "disabled" : ""
+                }>Open</button>
+              </li>
+            `,
+          )
+          .join("")}</ul>`
+      : `<p class="muted">Recent workspaces appear here after you load or run one.</p>`;
+  const runHistory =
+    current && current.runs.length > 0
+      ? `<ul class="project-memory-list">${current.runs
+          .slice(0, 6)
+          .map(
+            (run) => `
+              <li>
+                <div>
+                  <strong>${escapeHtml(run.label)}</strong>
+                  <span><code>${escapeHtml(run.runId)}</code> ${escapeHtml(run.status)}</span>
+                  <small>${escapeHtml(
+                    run.lastOpenedAt ? run.lastOpenedAt.slice(0, 19).replace("T", " ") : "Not opened",
+                  )}</small>
+                </div>
+                <button type="button" class="link-btn" data-run-open="${escapeHtml(
+                  run.runId,
+                )}" ${state.busy ? "disabled" : ""}>Open</button>
+              </li>
+            `,
+          )
+          .join("")}</ul>`
+      : `<p class="muted">No saved run history for this workspace yet.</p>`;
+  return `
+    <div class="project-memory">
+      <div class="project-memory-head">
+        <div>
+          <strong>${escapeHtml(workspaceDisplayName(state.workspace))}</strong>
+          <span>${escapeHtml(currentStatus)}</span>
+        </div>
+        <small>${current ? `${current.runs.length} remembered run(s)` : "New workspace"}</small>
+      </div>
+      <details>
+        <summary>Recent workspaces</summary>
+        ${recentWorkspaces}
+      </details>
+      <details>
+        <summary>Run history</summary>
+        ${runHistory}
+      </details>
+    </div>
   `;
 }
 
@@ -1664,6 +1879,9 @@ const PORTFOLIO_COLUMNS: PortfolioColumn[] = [
 
 function renderPortfolioRow(run: PortfolioRun): string {
   const selected = state.portfolio.selectedRunIds.includes(run.runId);
+  const label = projectRunLabel(state.projectState, state.workspace, run.runId);
+  const labelMarkup =
+    label && label !== run.runId ? `<span class="run-label">${escapeHtml(label)}</span>` : "";
   const base = run.baseRunId ? `<code>${escapeHtml(run.baseRunId)}</code>` : "—";
   const ppack = run.plannerPackArtifacts.length
     ? run.plannerPackArtifacts.map((a) => `<code>${escapeHtml(a)}</code>`).join(" ")
@@ -1677,7 +1895,7 @@ function renderPortfolioRow(run: PortfolioRun): string {
       <td class="pf-select">
         <input type="checkbox" data-portfolio-select="${escapeHtml(run.runId)}" ${selected ? "checked" : ""} />
       </td>
-      <td><code>${escapeHtml(run.runId)}</code>${run.hasWhatIfOverrides ? '<span class="pf-tag">what-if</span>' : ""}</td>
+      <td><code>${escapeHtml(run.runId)}</code>${labelMarkup}${run.hasWhatIfOverrides ? '<span class="pf-tag">what-if</span>' : ""}</td>
       <td>${escapeHtml(created)}</td>
       <td>${escapeHtml(run.engineVersion ?? "—")}</td>
       <td>${base}</td>
@@ -2246,10 +2464,16 @@ function render() {
               <input id="workspace" value="${escapeHtml(state.workspace)}" spellcheck="false" />
               <small class="help">Folder on your computer where ClawModeler stores this project's files. Pick an empty folder — it will be created if it doesn't exist.</small>
             </label>
+            ${renderProjectMemory()}
             <label>
               Run ID
               <input id="run-id" value="${escapeHtml(state.runId)}" spellcheck="false" />
               <small class="help">Short name for this analysis run (e.g., "demo", "2026-baseline"). Used to name the output folder.</small>
+            </label>
+            <label>
+              Run label
+              <input id="run-label" value="${escapeHtml(state.runLabel)}" spellcheck="true" />
+              <small class="help">Planner-facing name shown in recent runs and portfolio review. It does not rename files.</small>
             </label>
             <label>
               <span class="label-row">

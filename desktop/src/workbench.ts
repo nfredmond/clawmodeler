@@ -83,6 +83,43 @@ export type RunSummary = {
   warnings: string[];
 };
 
+export type ProjectRunRecord = {
+  runId: string;
+  label: string;
+  status: string;
+  lastOpenedAt: string;
+  manifestPath: string | null;
+  reportPath: string | null;
+  qaExportReady: boolean | null;
+  plannerPackArtifacts: string[];
+  bridgeExecutionReportCount: number;
+};
+
+export type ProjectWorkspaceRecord = {
+  workspacePath: string;
+  label: string;
+  activeRunId: string;
+  updatedAt: string;
+  runs: ProjectRunRecord[];
+};
+
+export type ProjectRunStateInput = {
+  workspacePath: string;
+  runId: string;
+  label?: string;
+  status?: string;
+  updatedAt: string;
+  manifestPath?: string | null;
+  reportPath?: string | null;
+  qaExportReady?: boolean | null;
+  plannerPackArtifacts?: string[];
+  bridgeExecutionReportCount?: number;
+};
+
+export const PROJECT_STATE_VERSION = 1;
+export const MAX_RECENT_WORKSPACES = 8;
+export const MAX_RUN_HISTORY = 12;
+
 export type WorkflowStepId =
   | "workspace"
   | "run"
@@ -166,6 +203,190 @@ const PREVIEWABLE_ARTIFACT_EXTENSIONS = new Set([
   ".yaml",
   ".yml",
 ]);
+
+export function workspaceDisplayName(path: string): string {
+  const trimmed = path.trim().replace(/[/\\]+$/u, "");
+  const parts = trimmed.split(/[/\\]/u).filter(Boolean);
+  return parts.at(-1) || trimmed || "Workspace";
+}
+
+export function parseProjectState(raw: string | null): ProjectWorkspaceRecord[] {
+  if (!raw) {
+    return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  const source =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>).workspaces
+      : parsed;
+  if (!Array.isArray(source)) {
+    return [];
+  }
+  return source
+    .map((workspace): ProjectWorkspaceRecord | null => {
+      if (!workspace || typeof workspace !== "object" || Array.isArray(workspace)) {
+        return null;
+      }
+      const row = workspace as Record<string, unknown>;
+      const workspacePath = typeof row.workspacePath === "string" ? row.workspacePath.trim() : "";
+      if (!workspacePath) {
+        return null;
+      }
+      const runs = Array.isArray(row.runs)
+        ? row.runs
+            .map((run): ProjectRunRecord | null => {
+              if (!run || typeof run !== "object" || Array.isArray(run)) {
+                return null;
+              }
+              const runRow = run as Record<string, unknown>;
+              const runId = typeof runRow.runId === "string" ? runRow.runId.trim() : "";
+              if (!runId) {
+                return null;
+              }
+              return {
+                runId,
+                label:
+                  typeof runRow.label === "string" && runRow.label.trim()
+                    ? runRow.label.trim()
+                    : runId,
+                status:
+                  typeof runRow.status === "string" && runRow.status.trim()
+                    ? runRow.status.trim()
+                    : "Selected",
+                lastOpenedAt:
+                  typeof runRow.lastOpenedAt === "string" && runRow.lastOpenedAt.trim()
+                    ? runRow.lastOpenedAt.trim()
+                    : "",
+                manifestPath:
+                  typeof runRow.manifestPath === "string" && runRow.manifestPath.trim()
+                    ? runRow.manifestPath.trim()
+                    : null,
+                reportPath:
+                  typeof runRow.reportPath === "string" && runRow.reportPath.trim()
+                    ? runRow.reportPath.trim()
+                    : null,
+                qaExportReady:
+                  typeof runRow.qaExportReady === "boolean" ? runRow.qaExportReady : null,
+                plannerPackArtifacts: asStringArray(runRow.plannerPackArtifacts),
+                bridgeExecutionReportCount:
+                  typeof runRow.bridgeExecutionReportCount === "number" &&
+                  Number.isFinite(runRow.bridgeExecutionReportCount)
+                    ? runRow.bridgeExecutionReportCount
+                    : 0,
+              };
+            })
+            .filter((run): run is ProjectRunRecord => run !== null)
+        : [];
+      const activeRunId =
+        typeof row.activeRunId === "string" && row.activeRunId.trim()
+          ? row.activeRunId.trim()
+          : runs[0]?.runId || "";
+      return {
+        workspacePath,
+        label:
+          typeof row.label === "string" && row.label.trim()
+            ? row.label.trim()
+            : workspaceDisplayName(workspacePath),
+        activeRunId,
+        updatedAt:
+          typeof row.updatedAt === "string" && row.updatedAt.trim() ? row.updatedAt.trim() : "",
+        runs: runs.slice(0, MAX_RUN_HISTORY),
+      };
+    })
+    .filter((workspace): workspace is ProjectWorkspaceRecord => workspace !== null)
+    .slice(0, MAX_RECENT_WORKSPACES);
+}
+
+export function serializeProjectState(workspaces: ProjectWorkspaceRecord[]): string {
+  return JSON.stringify({
+    version: PROJECT_STATE_VERSION,
+    workspaces: workspaces.slice(0, MAX_RECENT_WORKSPACES),
+  });
+}
+
+export function findProjectWorkspace(
+  workspaces: ReadonlyArray<ProjectWorkspaceRecord>,
+  workspacePath: string,
+): ProjectWorkspaceRecord | null {
+  const normalized = workspacePath.trim();
+  if (!normalized) {
+    return null;
+  }
+  return workspaces.find((workspace) => workspace.workspacePath === normalized) ?? null;
+}
+
+export function findProjectRun(
+  workspaces: ReadonlyArray<ProjectWorkspaceRecord>,
+  workspacePath: string,
+  runId: string,
+): ProjectRunRecord | null {
+  const workspace = findProjectWorkspace(workspaces, workspacePath);
+  if (!workspace) {
+    return null;
+  }
+  return workspace.runs.find((run) => run.runId === runId.trim()) ?? null;
+}
+
+export function projectRunLabel(
+  workspaces: ReadonlyArray<ProjectWorkspaceRecord>,
+  workspacePath: string,
+  runId: string,
+): string {
+  return findProjectRun(workspaces, workspacePath, runId)?.label ?? runId.trim();
+}
+
+export function upsertProjectRunState(
+  workspaces: ReadonlyArray<ProjectWorkspaceRecord>,
+  input: ProjectRunStateInput,
+): ProjectWorkspaceRecord[] {
+  const workspacePath = input.workspacePath.trim();
+  const runId = input.runId.trim();
+  if (!workspacePath || !runId) {
+    return [...workspaces];
+  }
+  const existingWorkspace = findProjectWorkspace(workspaces, workspacePath);
+  const existingRun = existingWorkspace?.runs.find((run) => run.runId === runId);
+  const nextRun: ProjectRunRecord = {
+    runId,
+    label: input.label?.trim() || existingRun?.label || runId,
+    status: input.status?.trim() || existingRun?.status || "Selected",
+    lastOpenedAt: input.updatedAt,
+    manifestPath:
+      input.manifestPath !== undefined ? input.manifestPath : existingRun?.manifestPath ?? null,
+    reportPath: input.reportPath !== undefined ? input.reportPath : existingRun?.reportPath ?? null,
+    qaExportReady:
+      input.qaExportReady !== undefined
+        ? input.qaExportReady
+        : existingRun?.qaExportReady ?? null,
+    plannerPackArtifacts:
+      input.plannerPackArtifacts !== undefined
+        ? [...input.plannerPackArtifacts]
+        : existingRun?.plannerPackArtifacts ?? [],
+    bridgeExecutionReportCount:
+      input.bridgeExecutionReportCount !== undefined
+        ? input.bridgeExecutionReportCount
+        : existingRun?.bridgeExecutionReportCount ?? 0,
+  };
+  const nextWorkspace: ProjectWorkspaceRecord = {
+    workspacePath,
+    label: existingWorkspace?.label || workspaceDisplayName(workspacePath),
+    activeRunId: runId,
+    updatedAt: input.updatedAt,
+    runs: [
+      nextRun,
+      ...(existingWorkspace?.runs.filter((run) => run.runId !== runId) ?? []),
+    ].slice(0, MAX_RUN_HISTORY),
+  };
+  return [
+    nextWorkspace,
+    ...workspaces.filter((workspace) => workspace.workspacePath !== workspacePath),
+  ].slice(0, MAX_RECENT_WORKSPACES);
+}
 
 export function normalizePathList(input: string): string[] {
   return input

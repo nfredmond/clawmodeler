@@ -21,18 +21,23 @@ import {
   normalizePathList,
   normalizeScenarios,
   parseChatTurn,
+  parseProjectState,
   parsePortfolioPayload,
   parseProjectIdList,
+  projectRunLabel,
   rebalanceWhatIfWeights,
   segmentChatText,
+  serializeProjectState,
   sortPortfolioRuns,
   summarizeRunArtifacts,
   summarizeQa,
   toggleRunSelection,
+  upsertProjectRunState,
   validateDiffSelection,
   validatePlannerPackForm,
   validateWhatIfForm,
   whatIfWeightSum,
+  workspaceDisplayName,
 } from "./workbench.js";
 
 describe("clawmodeler workbench helpers", () => {
@@ -493,6 +498,74 @@ describe("clawmodeler workbench helpers", () => {
       "/tmp/custom.json",
     );
     expect(deriveQuestionSavePath("", "")).toBe("question.json");
+  });
+
+  it("parses and serializes persisted project state", () => {
+    const records = parseProjectState(
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          {
+            workspacePath: "/tmp/ws",
+            label: "Demo Workspace",
+            activeRunId: "demo",
+            updatedAt: "2026-04-20T00:00:00Z",
+            runs: [
+              {
+                runId: "demo",
+                label: "Baseline Demo",
+                status: "QA ready",
+                lastOpenedAt: "2026-04-20T00:00:00Z",
+                manifestPath: "/tmp/ws/runs/demo/manifest.json",
+                reportPath: "/tmp/ws/reports/demo_report.md",
+                qaExportReady: true,
+                plannerPackArtifacts: ["ceqa-vmt"],
+                bridgeExecutionReportCount: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(records).toHaveLength(1);
+    expect(records[0]?.runs[0]?.label).toBe("Baseline Demo");
+    expect(projectRunLabel(records, "/tmp/ws", "demo")).toBe("Baseline Demo");
+    expect(JSON.parse(serializeProjectState(records)).version).toBe(1);
+    expect(parseProjectState("not json")).toEqual([]);
+  });
+
+  it("upserts project run state with recent workspace and run ordering", () => {
+    const first = upsertProjectRunState([], {
+      workspacePath: "/tmp/ws",
+      runId: "baseline",
+      label: "Existing Baseline",
+      status: "QA ready",
+      updatedAt: "2026-04-20T00:00:00Z",
+      qaExportReady: true,
+      plannerPackArtifacts: [],
+      bridgeExecutionReportCount: 0,
+    });
+    const second = upsertProjectRunState(first, {
+      workspacePath: "/tmp/ws",
+      runId: "build",
+      label: "Build Alternative",
+      status: "Planner Pack ready",
+      updatedAt: "2026-04-20T01:00:00Z",
+      qaExportReady: true,
+      plannerPackArtifacts: ["ceqa-vmt"],
+      bridgeExecutionReportCount: 0,
+    });
+    const relabeled = upsertProjectRunState(second, {
+      workspacePath: "/tmp/ws",
+      runId: "baseline",
+      label: "Baseline With Notes",
+      updatedAt: "2026-04-20T02:00:00Z",
+    });
+    expect(relabeled[0]?.activeRunId).toBe("baseline");
+    expect(relabeled[0]?.runs.map((run) => run.runId)).toEqual(["baseline", "build"]);
+    expect(relabeled[0]?.runs[0]?.label).toBe("Baseline With Notes");
+    expect(relabeled[0]?.runs[0]?.status).toBe("QA ready");
+    expect(workspaceDisplayName("/tmp/clawmodeler-workbench/")).toBe("clawmodeler-workbench");
   });
 
   it("defaults what-if weights to 0.30/0.25/0.25/0.20 summing to 1", () => {

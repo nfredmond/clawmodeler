@@ -523,6 +523,60 @@ small {
   gap: 14px;
 }
 
+.project-memory {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #dce5e0;
+  border-bottom: 1px solid #dce5e0;
+  padding: 12px 0;
+}
+
+.project-memory-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.project-memory-head div,
+.project-memory-list li div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.project-memory-head strong,
+.project-memory-list strong {
+  overflow-wrap: anywhere;
+}
+
+.project-memory-head span,
+.project-memory-list span {
+  color: #52615a;
+  overflow-wrap: anywhere;
+}
+
+.project-memory-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 8px 0 0;
+  list-style: none;
+}
+
+.project-memory-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #edf1ef;
+  padding-top: 8px;
+}
+
+.project-memory-list button {
+  min-width: 72px;
+}
+
 .section-head {
   display: flex;
   align-items: center;
@@ -1174,6 +1228,13 @@ small {
 
 th.active .pf-sort-btn {
   color: #1f6b44;
+}
+
+.run-label {
+  display: block;
+  margin-top: 4px;
+  color: #52615a;
+  overflow-wrap: anywhere;
 }
 
 .pf-tag {
