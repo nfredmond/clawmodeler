@@ -18,7 +18,7 @@ ClawModeler should let a planner install the desktop app or run `clawmodeler-eng
 
 ## Current Checkpoint
 
-The 0.9.2 checkpoint is a releasable sidecar plus a usable Tauri v2 desktop workbench:
+The 0.9.3 checkpoint is a releasable sidecar plus a usable Tauri v2 desktop workbench:
 
 - `clawmodeler-engine doctor`, `tools`, `workflow full`, `workflow demo-full`, `workflow report-only`, and `workflow diagnose` cover the core workflow.
 - Bridge packages are generated and validated for SUMO, MATSim, UrbanSim, DTALite, and TBEST where inputs support them.
@@ -26,12 +26,13 @@ The 0.9.2 checkpoint is a releasable sidecar plus a usable Tauri v2 desktop work
 - Planner Pack emitters cover CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP.
 - Diff, what-if, portfolio, and grounded chat are deterministic downstream tools over finished runs.
 - The desktop app is vanilla TypeScript on Tauri v2 and invokes only the `clawmodeler-engine` sidecar or local Python fallback.
+- The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate.
 
 ## Next Engineering Milestones
 
-1. **Release 0.9.2 cleanly.**
+1. **Release 0.9.3 cleanly.**
 
-   Keep this release to stabilization: preserve the current Planner Pack additions, package templates in the wheel, align versions, keep `pnpm engine:test` on the full Python suite, and verify engine/UI/Tauri checks before tagging.
+   Keep this release to workflow hardening: preserve 0.9.2 Planner Pack behavior, keep artifact preview read-only, keep `pnpm desktop:acceptance` green, and verify engine/UI/Tauri checks before tagging.
 
 2. **Make the planner workflow coherent in the desktop app.**
 
@@ -71,4 +72,4 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when 0.9.2 is release-ready, the desktop guided workflow can run a demo, generate Planner Pack artifacts, compare two runs, and show QA/bridge/artifact readiness, and the full engine/UI/Tauri verification suite passes.
+The next pass is done when the desktop guided workflow can run both the demo and tiny public fixture, generate Planner Pack artifacts, compare two runs, preview artifacts, and show QA/bridge/artifact readiness, and the full engine/UI/Tauri verification suite passes.

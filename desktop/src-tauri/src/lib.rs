@@ -30,9 +30,24 @@ struct WorkspaceArtifacts {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtifactPreview {
+    path: String,
+    size_bytes: u64,
+    content: String,
+    truncated: bool,
+}
+
+#[derive(Serialize)]
 struct ArtifactResult {
     ok: bool,
     json: WorkspaceArtifacts,
+}
+
+#[derive(Serialize)]
+struct ArtifactPreviewResult {
+    ok: bool,
+    json: ArtifactPreview,
 }
 
 fn repo_root() -> PathBuf {
@@ -316,6 +331,42 @@ fn clawmodeler_workspace(workspace: String, run_id: String) -> Result<ArtifactRe
     })
 }
 
+const ARTIFACT_PREVIEW_LIMIT: usize = 128 * 1024;
+
+#[tauri::command]
+fn clawmodeler_read_artifact(path: String) -> Result<ArtifactPreviewResult, String> {
+    if path.contains('\0') {
+        return Err("artifact path must not contain NUL bytes".to_string());
+    }
+    let artifact_path = PathBuf::from(path.trim());
+    if artifact_path.as_os_str().is_empty() {
+        return Err("artifact path is required".to_string());
+    }
+    if !artifact_path.is_file() {
+        return Err(format!("artifact file not found: {}", artifact_path.display()));
+    }
+    let metadata = fs::metadata(&artifact_path)
+        .map_err(|error| format!("failed to inspect artifact: {error}"))?;
+    let bytes = fs::read(&artifact_path)
+        .map_err(|error| format!("failed to read artifact: {error}"))?;
+    let truncated = bytes.len() > ARTIFACT_PREVIEW_LIMIT;
+    let content_bytes = if truncated {
+        &bytes[..ARTIFACT_PREVIEW_LIMIT]
+    } else {
+        &bytes[..]
+    };
+    let content = String::from_utf8_lossy(content_bytes).to_string();
+    Ok(ArtifactPreviewResult {
+        ok: true,
+        json: ArtifactPreview {
+            path: artifact_path.to_string_lossy().to_string(),
+            size_bytes: metadata.len(),
+            content,
+            truncated,
+        },
+    })
+}
+
 fn read_json(path: PathBuf) -> Option<Value> {
     let text = fs::read_to_string(path).ok()?;
     serde_json::from_str(&text).ok()
@@ -378,6 +429,7 @@ pub fn run() {
             clawmodeler_tools,
             clawmodeler_run,
             clawmodeler_workspace,
+            clawmodeler_read_artifact,
             clawmodeler_chat,
             clawmodeler_what_if,
             clawmodeler_portfolio

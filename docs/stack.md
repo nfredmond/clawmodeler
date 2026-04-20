@@ -105,9 +105,16 @@ The current planner-facing flow is:
 3. Review QA readiness, bridge readiness, manifest path, generated artifacts, warnings, and sidecars.
 4. Preview the report.
 5. Generate Planner Pack artifacts.
-6. Ask grounded chat questions about a finished run.
-7. Create what-if runs.
-8. Refresh the portfolio and diff two runs.
+6. Preview generated text artifacts.
+7. Ask grounded chat questions about a finished run.
+8. Create what-if runs.
+9. Refresh the portfolio and diff two runs.
+
+The fixture-backed acceptance gate for this flow is:
+
+```bash
+pnpm desktop:acceptance
+```
 
 The accessibility and VMT modules are intentionally labeled as screening-level. They are ready to be replaced or augmented with OSMnx/NetworkX, R5, MOVES, and detailed engine outputs without changing the CLI contract.
 

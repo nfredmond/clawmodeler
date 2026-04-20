@@ -539,11 +539,53 @@ small {
   gap: 6px;
   overflow: auto;
   margin: 0;
-  padding-left: 18px;
+  padding-left: 0;
+  list-style: none;
 }
 
 .artifact-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
   overflow-wrap: anywhere;
+  border-bottom: 1px solid #edf1ef;
+  padding-bottom: 6px;
+}
+
+.artifact-preview-btn {
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.artifact-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #edf1ef;
+}
+
+.artifact-preview-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.artifact-preview-meta code {
+  overflow-wrap: anywhere;
+}
+
+.artifact-preview pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  border-radius: 8px;
+  background: #17211d;
+  color: #edf6f2;
+  padding: 12px;
+  white-space: pre-wrap;
 }
 
 .report-panel {

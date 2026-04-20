@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  artifactBasename,
   buildDiffArgs,
   buildFullWorkflowArgs,
   buildPlannerPackArgs,
@@ -11,6 +12,7 @@ import {
   formatDacShare,
   formatMeanScore,
   friendlyError,
+  isPreviewableArtifact,
   isValidWhatIfWeights,
   manifestOutputCategories,
   manifestOutputPaths,
@@ -590,5 +592,15 @@ describe("clawmodeler workbench helpers", () => {
     expect(formatMeanScore(0.4567)).toBe("0.457");
     expect(formatDacShare(null)).toBe("—");
     expect(formatDacShare(0.236)).toBe("23.6%");
+  });
+
+  it("detects previewable text artifacts by extension", () => {
+    expect(artifactBasename("/tmp/ws/reports/demo_report.md")).toBe("demo_report.md");
+    expect(artifactBasename("C:\\tmp\\demo\\manifest.json")).toBe("manifest.json");
+    expect(isPreviewableArtifact("/tmp/ws/runs/demo/manifest.json")).toBe(true);
+    expect(isPreviewableArtifact("/tmp/ws/runs/demo/outputs/tables/project_scores.csv")).toBe(
+      true,
+    );
+    expect(isPreviewableArtifact("/tmp/ws/runs/demo/outputs/figures/vmt.png")).toBe(false);
   });
 });

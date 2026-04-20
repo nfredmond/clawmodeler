@@ -2,6 +2,7 @@ import "./styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  artifactBasename,
   buildDiffArgs,
   buildFullWorkflowArgs,
   buildPlannerPackArgs,
@@ -12,6 +13,7 @@ import {
   formatDacShare,
   formatMeanScore,
   friendlyError,
+  isPreviewableArtifact,
   manifestOutputCategories,
   normalizePathList,
   normalizeScenarios,
@@ -77,6 +79,20 @@ type WorkspaceArtifacts = {
   filesTruncated: boolean;
 };
 
+type ArtifactPreview = {
+  path: string;
+  sizeBytes: number;
+  content: string;
+  truncated: boolean;
+};
+
+type ArtifactPreviewState = {
+  selectedPath: string;
+  preview: ArtifactPreview | null;
+  busy: boolean;
+  status: string;
+};
+
 type PortfolioState = {
   result: PortfolioResult | null;
   selectedRunIds: string[];
@@ -122,6 +138,7 @@ type AppState = {
   status: string;
   doctor: DoctorResult | null;
   artifacts: WorkspaceArtifacts | null;
+  artifactPreview: ArtifactPreviewState;
   commandLog: string[];
   onboarded: boolean;
   chatTurns: ChatTurn[];
@@ -145,6 +162,12 @@ const state: AppState = {
   status: "Ready",
   doctor: null,
   artifacts: null,
+  artifactPreview: {
+    selectedPath: "",
+    preview: null,
+    busy: false,
+    status: "Pick an artifact to preview.",
+  },
   commandLog: [],
   onboarded: localStorage.getItem("clawmodeler.onboarded") === "true",
   chatTurns: [],
@@ -289,6 +312,11 @@ async function tauriApi<T = unknown>(path: string, body?: unknown): Promise<ApiR
   if (path === "/api/clawmodeler/run") {
     return await invoke<ApiResult<T>>("clawmodeler_run", { args: payload.args });
   }
+  if (path === "/api/clawmodeler/artifact") {
+    return await invoke<ApiResult<T>>("clawmodeler_read_artifact", {
+      path: stringField(payload, "path"),
+    });
+  }
   if (path === "/api/clawmodeler/chat") {
     return await invoke<ApiResult<T>>("clawmodeler_chat", {
       workspace: stringField(payload, "workspace"),
@@ -399,6 +427,17 @@ async function refreshArtifacts(showBusy = true) {
   try {
     const result = await api<WorkspaceArtifacts>(path);
     state.artifacts = result.json ?? null;
+    if (
+      state.artifactPreview.selectedPath &&
+      !state.artifacts?.files.includes(state.artifactPreview.selectedPath)
+    ) {
+      state.artifactPreview = {
+        selectedPath: "",
+        preview: null,
+        busy: false,
+        status: "Pick an artifact to preview.",
+      };
+    }
     state.status = "Workspace loaded";
   } catch (error) {
     if (showBusy) {
@@ -410,6 +449,31 @@ async function refreshArtifacts(showBusy = true) {
       state.busy = false;
       render();
     }
+  }
+}
+
+async function previewArtifact(path: string) {
+  if (!isPreviewableArtifact(path)) {
+    state.artifactPreview.status = "This artifact type is not previewed as text.";
+    render();
+    return;
+  }
+  state.artifactPreview.selectedPath = path;
+  state.artifactPreview.busy = true;
+  state.artifactPreview.status = `Reading ${artifactBasename(path)}…`;
+  render();
+  try {
+    const result = await api<ArtifactPreview>("/api/clawmodeler/artifact", { path });
+    state.artifactPreview.preview = result.json ?? null;
+    state.artifactPreview.status = result.json?.truncated
+      ? `Preview truncated at 128 KB from ${result.json.sizeBytes} bytes.`
+      : `Previewing ${artifactBasename(path)}.`;
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    state.artifactPreview.status = friendlyError(raw);
+  } finally {
+    state.artifactPreview.busy = false;
+    render();
   }
 }
 
@@ -1009,6 +1073,12 @@ function bindControls() {
       if (runId) openRunFromPortfolio(runId);
     });
   });
+  appRoot.querySelectorAll<HTMLButtonElement>("[data-artifact-preview]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const path = el.dataset.artifactPreview;
+      if (path) void previewArtifact(path);
+    });
+  });
 }
 
 function renderWelcome(): string {
@@ -1445,6 +1515,16 @@ function renderArtifacts() {
     runSummary && runSummary.missingSidecars.length > 0
       ? `<ul>${runSummary.missingSidecars.map((sidecar) => `<li>${escapeHtml(sidecar)}</li>`).join("")}</ul>`
       : "<p>No missing manifest sidecars recorded.</p>";
+  const artifactPreview = state.artifactPreview;
+  const artifactPreviewMarkup = artifactPreview.preview
+    ? `
+      <div class="artifact-preview-meta">
+        <strong>${escapeHtml(artifactBasename(artifactPreview.preview.path))}</strong>
+        <code>${escapeHtml(artifactPreview.preview.path)}</code>
+      </div>
+      <pre>${escapeHtml(artifactPreview.preview.content)}</pre>
+    `
+    : `<p class="muted">Select a text artifact to preview its contents.</p>`;
 
   return `
     <section class="panel run-summary-panel">
@@ -1515,10 +1595,30 @@ function renderArtifacts() {
         artifacts?.files.length
           ? `<ul class="artifact-list">${artifacts.files
               .slice(0, 80)
-              .map((file) => `<li>${escapeHtml(file)}</li>`)
+              .map((file) => {
+                const previewable = isPreviewableArtifact(file);
+                return `
+                  <li>
+                    <span title="${escapeHtml(file)}">${escapeHtml(artifactBasename(file))}</span>
+                    <button
+                      type="button"
+                      class="artifact-preview-btn"
+                      data-artifact-preview="${escapeHtml(file)}"
+                      ${!previewable || artifactPreview.busy ? "disabled" : ""}
+                    >Preview</button>
+                  </li>
+                `;
+              })
               .join("")}</ul>`
           : `<p class="muted">Run a workflow to create manifests, tables, bridge packages, and reports.</p>`
       }
+      <div class="artifact-preview">
+        <div class="section-head">
+          <strong>Artifact Preview</strong>
+          <span>${escapeHtml(artifactPreview.status)}</span>
+        </div>
+        ${artifactPreviewMarkup}
+      </div>
     </section>
 
     <section class="panel report-panel">

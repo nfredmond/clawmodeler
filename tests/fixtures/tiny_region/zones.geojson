@@ -1,0 +1,29 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "zone_id": "civic", "name": "Civic Center" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-121.010, 38.000], [-121.000, 38.000], [-121.000, 38.010], [-121.010, 38.010], [-121.010, 38.000]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_id": "school", "name": "School District" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-121.025, 38.012], [-121.015, 38.012], [-121.015, 38.022], [-121.025, 38.022], [-121.025, 38.012]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_id": "station", "name": "Station Area" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-120.995, 37.985], [-120.985, 37.985], [-120.985, 37.995], [-120.995, 37.995], [-120.995, 37.985]]]
+      }
+    }
+  ]
+}

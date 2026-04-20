@@ -344,6 +344,7 @@ Implemented now:
 - Planner Pack artifacts for CEQA VMT, LAPM, RTP, equity, ATP, HSIP, CMAQ, and STIP,
 - run-to-run diff, what-if runs, grounded chat, and portfolio summaries,
 - Tauri v2 desktop workbench with a vanilla TypeScript front end,
+- read-only desktop artifact previews and a fixture-backed desktop workflow acceptance script,
 - toolbox inventory and install profiles.
 
 Still to build:
@@ -366,6 +367,7 @@ Useful checks:
 ```bash
 pnpm engine:test
 bash scripts/check-packaging.sh
+pnpm desktop:acceptance
 clawmodeler-engine doctor --json
 clawmodeler-engine tools
 ```

@@ -1,0 +1,4 @@
+from_zone_id,to_zone_id,minutes
+civic,school,9
+civic,station,16
+school,station,24

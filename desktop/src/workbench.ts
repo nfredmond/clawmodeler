@@ -79,6 +79,19 @@ export type PlannerPackValidation =
   | { ok: true; payload: PlannerPackSubmitPayload }
   | { ok: false; error: string };
 
+const PREVIEWABLE_ARTIFACT_EXTENSIONS = new Set([
+  ".csv",
+  ".json",
+  ".jsonl",
+  ".md",
+  ".txt",
+  ".xml",
+  ".sh",
+  ".toml",
+  ".yaml",
+  ".yml",
+]);
+
 export function normalizePathList(input: string): string[] {
   return input
     .split(/\r?\n|,/u)
@@ -359,6 +372,20 @@ export function buildPlannerPackArgs(payload: PlannerPackSubmitPayload): string[
     args.push("--analysis-year", String(payload.analysisYear));
   }
   return args;
+}
+
+export function artifactBasename(path: string): string {
+  const parts = path.split(/[/\\]/u).filter(Boolean);
+  return parts.at(-1) ?? path;
+}
+
+export function isPreviewableArtifact(path: string): boolean {
+  const lower = artifactBasename(path).toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  if (dot < 0) {
+    return false;
+  }
+  return PREVIEWABLE_ARTIFACT_EXTENSIONS.has(lower.slice(dot));
 }
 
 const FRIENDLY_ERROR_PATTERNS: ReadonlyArray<{ pattern: RegExp; message: string }> = [

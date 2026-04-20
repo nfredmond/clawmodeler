@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
+from .bridge_prepare import manifest_file_links
 from .contracts import stamp_contract, validate_artifact_file, validate_contract
 from .sumo_bridge import validate_sumo_bridge
 from .workspace import InsufficientDataError, read_json, utc_now, write_json
@@ -25,8 +26,13 @@ def validate_all_bridges(
             {
                 "bridge": "sumo",
                 "ready": qa["export_ready"],
+                "manifest": str(bridges_dir / "sumo" / "sumo_run_manifest.json"),
                 "qa_report": str(qa_path),
                 "blockers": qa["blockers"],
+                "generated_files": manifest_file_links(
+                    bridges_dir / "sumo" / "sumo_run_manifest.json"
+                )
+                + [str(qa_path)],
             }
         )
     if (bridges_dir / "matsim" / "matsim_bridge_manifest.json").exists():
@@ -79,6 +85,7 @@ def validate_matsim_bridge(bridge_dir: Path) -> dict[str, Any]:
         "ready": not blockers,
         "manifest": str(manifest_path),
         "blockers": blockers,
+        "generated_files": manifest_file_links(manifest_path),
     }
 
 
@@ -102,6 +109,7 @@ def validate_urbansim_bridge(bridge_dir: Path) -> dict[str, Any]:
         "ready": not blockers,
         "manifest": str(manifest_path),
         "blockers": blockers,
+        "generated_files": manifest_file_links(manifest_path),
     }
 
 
@@ -121,6 +129,7 @@ def validate_csv_manifest_bridge(bridge_dir: Path, bridge_id: str) -> dict[str, 
         "ready": not blockers,
         "manifest": str(manifest_path),
         "blockers": blockers,
+        "generated_files": manifest_file_links(manifest_path),
     }
 
 

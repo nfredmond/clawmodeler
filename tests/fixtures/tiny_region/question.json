@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "artifact_type": "question",
+  "question_type": "accessibility",
+  "proxy_speed_kph": 40,
+  "daily_vmt_per_capita": 18.5,
+  "kg_co2e_per_vmt": 0.404,
+  "scenarios": [
+    {
+      "scenario_id": "baseline",
+      "name": "Existing Conditions"
+    },
+    {
+      "scenario_id": "station-growth",
+      "name": "Station Growth",
+      "population_multiplier": 1.04,
+      "jobs_multiplier": 1.12,
+      "zone_adjustments": {
+        "station": {
+          "population_delta": 120,
+          "jobs_delta": 180
+        }
+      }
+    }
+  ]
+}

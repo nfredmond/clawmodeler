@@ -100,6 +100,7 @@ async function readTextIfExists(filePath: string): Promise<string | null> {
 }
 
 const FILE_LIST_LIMIT = 500;
+const ARTIFACT_PREVIEW_LIMIT = 128 * 1024;
 
 async function listFiles(root: string): Promise<{ files: string[]; truncated: boolean }> {
   const files: string[] = [];
@@ -161,6 +162,25 @@ function optionalNumber(body: Record<string, unknown>, key: string): number | nu
 function optionalStringArray(body: Record<string, unknown>, key: string): string[] {
   const value = body[key];
   return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+}
+
+async function readArtifactPreview(filePath: string) {
+  if (filePath.includes("\0")) {
+    throw new Error("artifact path must not contain NUL bytes");
+  }
+  const stat = await fs.stat(filePath);
+  if (!stat.isFile()) {
+    throw new Error(`artifact file not found: ${filePath}`);
+  }
+  const bytes = await fs.readFile(filePath);
+  const truncated = bytes.length > ARTIFACT_PREVIEW_LIMIT;
+  const content = bytes.subarray(0, ARTIFACT_PREVIEW_LIMIT).toString("utf8");
+  return {
+    path: filePath,
+    sizeBytes: stat.size,
+    content,
+    truncated,
+  };
 }
 
 function clawModelerApiPlugin(): Plugin {
@@ -269,6 +289,12 @@ function clawModelerApiPlugin(): Plugin {
             }
             const result = await runEngine(args as string[]);
             sendJson(response, result.ok ? 200 : 500, result);
+            return;
+          }
+
+          if (route === "/artifact") {
+            const json = await readArtifactPreview(requiredString(body, "path"));
+            sendJson(response, 200, { ok: true, json });
             return;
           }
 

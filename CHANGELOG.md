@@ -4,6 +4,19 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] — 2026-04-20
+
+### Added
+
+- **Desktop artifact preview.** The Tauri/Vite workbench can now preview text artifacts (`.md`, `.csv`, `.json`, `.jsonl`, `.xml`, `.sh`, and similar) directly from the artifact list. Reads are local, read-only, and truncated at 128 KB for large files.
+- **Desktop workflow acceptance gate.** New `pnpm desktop:acceptance` script runs a full fixture-backed workflow: intake, scenario run, bridge preparation/validation, report export, Planner Pack CEQA VMT generation, what-if, diff, and portfolio.
+- **Tiny public integration fixture.** New `tests/fixtures/tiny_region/` fixture gives CI a small non-demo path for workflow, bridge, Planner Pack, what-if, diff, and portfolio coverage.
+
+### Changed
+
+- **Bridge reports are easier to inspect.** Bridge preparation and validation results now include generated-file links for prepared bridges, plus structured `required_inputs` / `missing_inputs` fields for skipped bridge packages.
+- **Version advanced to 0.9.3** across the Python engine, root package metadata, and Tauri desktop metadata.
+
 ## [0.9.2] — 2026-04-19
 
 ### Added

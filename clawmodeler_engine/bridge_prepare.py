@@ -10,7 +10,7 @@ from .model import artifact_paths
 from .sumo_bridge import prepare_sumo_bridge
 from .tbest_bridge import prepare_tbest_bridge
 from .urbansim_bridge import prepare_urbansim_bridge
-from .workspace import ClawModelerError, load_receipt, utc_now, write_json
+from .workspace import ClawModelerError, load_receipt, read_json, utc_now, write_json
 
 BridgePrepare = Callable[[Path, str, str], Path]
 
@@ -55,6 +55,8 @@ def prepare_all_bridges(
                 {
                     "bridge": bridge["id"],
                     "status": "skipped",
+                    "required_inputs": list(bridge["requires"]),
+                    "missing_inputs": missing,
                     "reason": f"Missing required inputs: {', '.join(missing)}",
                 }
             )
@@ -68,7 +70,12 @@ def prepare_all_bridges(
             )
         else:
             results.append(
-                {"bridge": bridge["id"], "status": "prepared", "manifest": str(path)}
+                {
+                    "bridge": bridge["id"],
+                    "status": "prepared",
+                    "manifest": str(path),
+                    "generated_files": manifest_file_links(path),
+                }
             )
 
     output_path = workspace / "runs" / run_id / "outputs" / "bridges" / "bridge_prepare_report.json"
@@ -93,3 +100,34 @@ def missing_required_inputs(
     workspace: Path, receipt: dict[str, Any], kinds: tuple[str, ...]
 ) -> list[str]:
     return [kind for kind in kinds if not artifact_paths(workspace, receipt, kind)]
+
+
+def manifest_file_links(manifest_path: Path) -> list[str]:
+    """Return inspectable files recorded by a bridge manifest."""
+
+    paths = {str(manifest_path)}
+    try:
+        manifest = read_json(manifest_path)
+    except ClawModelerError:
+        return sorted(paths)
+    for key in ("inputs", "outputs"):
+        paths.update(_file_path_values(manifest.get(key)))
+    if manifest.get("bridge_qa_report"):
+        paths.add(str(manifest["bridge_qa_report"]))
+    return sorted(paths)
+
+
+def _file_path_values(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, list):
+        out: set[str] = set()
+        for item in value:
+            out.update(_file_path_values(item))
+        return out
+    if isinstance(value, dict):
+        out: set[str] = set()
+        for item in value.values():
+            out.update(_file_path_values(item))
+        return out
+    return set()
