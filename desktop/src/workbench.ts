@@ -18,6 +18,7 @@ export type WorkspaceArtifacts = {
   workspaceIndex?: Record<string, unknown> | null;
   indexStatus?: string | null;
   indexUpdatedAt?: string | null;
+  latestArtifactModifiedMs?: number | null;
 };
 
 export type GeneratedArtifactSummary = {
@@ -773,6 +774,31 @@ function indexedBridgeGeneratedFileCount(artifacts: WorkspaceArtifacts): number 
   return count > 0 ? count : null;
 }
 
+function parsedIndexUpdatedMs(artifacts: WorkspaceArtifacts): number | null {
+  const raw = artifacts.indexUpdatedAt;
+  if (!raw) {
+    return null;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function workspaceIndexStale(artifacts: WorkspaceArtifacts | null): boolean {
+  if (!artifacts?.workspaceIndex) {
+    return false;
+  }
+  const latestArtifactModifiedMs =
+    typeof artifacts.latestArtifactModifiedMs === "number" &&
+    Number.isFinite(artifacts.latestArtifactModifiedMs)
+      ? artifacts.latestArtifactModifiedMs
+      : null;
+  const indexUpdatedMs = parsedIndexUpdatedMs(artifacts);
+  if (latestArtifactModifiedMs === null || indexUpdatedMs === null) {
+    return false;
+  }
+  return latestArtifactModifiedMs > indexUpdatedMs + 1000;
+}
+
 function routingSummary(workflowReport: Record<string, unknown> | null): RoutingSummary | null {
   const routing = workflowReport?.routing;
   if (!routing || typeof routing !== "object" || Array.isArray(routing)) {
@@ -854,6 +880,9 @@ function collectWarnings(artifacts: WorkspaceArtifacts): string[] {
   );
   if (artifacts.filesTruncated) {
     warnings.push("File list truncated; only the first 500 artifacts are shown.");
+  }
+  if (workspaceIndexStale(artifacts)) {
+    warnings.push("Workspace index may be stale; refresh the workspace to resync artifacts.");
   }
   if (!artifacts.workspaceIndex) {
     warnings.push("Workspace index unavailable; summary used direct artifact fallback.");

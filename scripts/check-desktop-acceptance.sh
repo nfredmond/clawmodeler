@@ -53,6 +53,11 @@ echo "Running desktop workflow acceptance against tiny_region fixture"
   --workspace "$workspace" \
   --json >/dev/null
 
+"$python_bin" -m clawmodeler_engine data index \
+  --workspace "$workspace" \
+  --run-id baseline \
+  --json >/dev/null
+
 "$python_bin" -m clawmodeler_engine workflow full \
   --workspace "$empty_scenarios_workspace" \
   --inputs \
@@ -75,6 +80,7 @@ empty_workspace = Path(sys.argv[2])
 workflow = json.loads((workspace / "runs" / "baseline" / "workflow_report.json").read_text())
 bridge_validation = workflow["bridge_validation"]
 portfolio = json.loads((workspace / "portfolio" / "summary.json").read_text())
+workspace_index = json.loads((workspace / "logs" / "workspace_index.json").read_text())
 empty_manifest = json.loads(
     (empty_workspace / "runs" / "default-scenario" / "manifest.json").read_text()
 )
@@ -87,6 +93,7 @@ required_files = [
     workspace / "runs" / "baseline" / "manifest.json",
     workspace / "runs" / "baseline" / "qa_report.json",
     workspace / "runs" / "safety-heavy" / "manifest.json",
+    workspace / "logs" / "workspace_index.json",
 ]
 missing = [str(path) for path in required_files if not path.exists()]
 if missing:
@@ -102,6 +109,16 @@ if not bridge_validation["detailed_forecast_blockers"]:
     raise SystemExit("expected detailed forecast blockers for fixture bridge packages")
 if portfolio["run_count"] != 2:
     raise SystemExit(f"expected 2 portfolio runs, got {portfolio['run_count']}")
+if workspace_index["run_count"] != 1 or workspace_index["runs"][0]["run_id"] != "baseline":
+    raise SystemExit(f"workspace index did not focus baseline run: {workspace_index['runs']}")
+if workspace_index["artifact_count"] <= 0:
+    raise SystemExit("workspace index did not record run artifacts")
+if workspace_index["bridge_readiness_count"] < 4:
+    raise SystemExit(f"workspace index missed bridge readiness: {workspace_index}")
+if workspace_index["portfolio_run_count"] != 1:
+    raise SystemExit(f"workspace index missed portfolio row: {workspace_index}")
+if workspace_index["diff_count"] != 1:
+    raise SystemExit(f"workspace index missed baseline diff row: {workspace_index}")
 if workflow["routing"]["selected_source"] != "network_edges_csv":
     raise SystemExit(f"expected network_edges_csv routing, got {workflow['routing']}")
 routing_comparison = workflow["routing"].get("proxy_comparison")

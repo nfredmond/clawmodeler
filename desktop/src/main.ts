@@ -43,6 +43,7 @@ import {
   validateDiffSelection,
   validatePlannerPackForm,
   validateWhatIfForm,
+  workspaceIndexStale,
   whatIfWeightSum,
   type WhatIfWeights,
   type WorkflowGuideStep,
@@ -91,6 +92,7 @@ type WorkspaceArtifacts = {
   workspaceIndex?: Record<string, unknown> | null;
   indexStatus?: string | null;
   indexUpdatedAt?: string | null;
+  latestArtifactModifiedMs?: number | null;
 };
 
 type ArtifactPreview = {
@@ -968,6 +970,7 @@ async function loadPortfolio() {
         runIds.has(id),
       );
     }
+    await refreshArtifacts(false);
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);
     state.portfolio.status = friendlyError(raw);
@@ -1008,6 +1011,7 @@ async function diffSelectedRuns() {
     state.portfolio.status = state.portfolio.lastDiffPath
       ? `Diff report written to ${state.portfolio.lastDiffPath}.`
       : `Diff completed for ${validation.runA} → ${validation.runB}.`;
+    await refreshArtifacts(false);
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);
     state.portfolio.status = friendlyError(raw);
@@ -2037,6 +2041,8 @@ function renderArtifacts() {
   const indexStatus = artifacts?.indexStatus ?? "not indexed";
   const indexUpdatedAt = artifacts?.indexUpdatedAt ?? "not recorded";
   const indexArtifactCount = artifacts?.files.length ?? 0;
+  const indexIsStale = workspaceIndexStale(artifacts ?? null);
+  const indexLabel = `${indexStatus}${indexIsStale ? " (stale)" : ""}; ${indexArtifactCount} artifact(s)`;
   const routing = runSummary?.routing;
   const routingText = routing
     ? `${routing.selectedSource} (${routing.impedance})`
@@ -2157,9 +2163,14 @@ function renderArtifacts() {
         </div>
         <div>
           <strong>Workspace index</strong>
-          <span>${escapeHtml(`${indexStatus}; ${indexArtifactCount} artifact(s)`)}</span>
+          <span>${escapeHtml(indexLabel)}</span>
         </div>
       </div>
+      ${
+        indexIsStale
+          ? `<p class="muted">Index may be stale. Use Refresh to resync workspace artifacts.</p>`
+          : ""
+      }
       <p class="muted">Index refreshed: ${escapeHtml(indexUpdatedAt)}</p>
       <details>
         <summary>Warnings</summary>

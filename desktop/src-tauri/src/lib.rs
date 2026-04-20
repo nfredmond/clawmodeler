@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::UNIX_EPOCH;
 use tauri::Manager;
 
 #[derive(Serialize)]
@@ -30,6 +31,7 @@ struct WorkspaceArtifacts {
     workspace_index: Option<Value>,
     index_status: Option<String>,
     index_updated_at: Option<String>,
+    latest_artifact_modified_ms: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -338,6 +340,7 @@ fn clawmodeler_workspace(
         .and_then(|index| index_run_string(index, &run_id, "report_path"))
         .map(PathBuf::from)
         .unwrap_or_else(|| reports_dir.join(format!("{run_id}_report.md")));
+    let latest_modified_ms = latest_artifact_modified_ms(&files);
     let artifacts = WorkspaceArtifacts {
         workspace: workspace_string,
         run_id: run_id.clone(),
@@ -347,6 +350,7 @@ fn clawmodeler_workspace(
         report_markdown: fs::read_to_string(report_path).ok(),
         files,
         files_truncated,
+        latest_artifact_modified_ms: latest_modified_ms,
         index_status: workspace_index
             .as_ref()
             .and_then(|index| index.get("database_status"))
@@ -452,6 +456,16 @@ fn index_run_string(index: &Value, run_id: &str, key: &str) -> Option<String> {
         .get(key)
         .and_then(Value::as_str)
         .map(str::to_string)
+}
+
+fn latest_artifact_modified_ms(files: &[String]) -> Option<u64> {
+    files
+        .iter()
+        .filter_map(|path| fs::metadata(path).ok())
+        .filter_map(|metadata| metadata.modified().ok())
+        .filter_map(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .max()
 }
 
 const FILE_LIST_LIMIT: usize = 500;

@@ -99,6 +99,21 @@ async function readTextIfExists(filePath: string): Promise<string | null> {
   }
 }
 
+async function latestArtifactModifiedMs(files: string[]): Promise<number | null> {
+  let latest: number | null = null;
+  for (const filePath of files) {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        latest = latest === null ? stat.mtimeMs : Math.max(latest, stat.mtimeMs);
+      }
+    } catch {
+      // Ignore files that disappeared between index refresh and UI load.
+    }
+  }
+  return latest;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -297,6 +312,7 @@ function clawModelerApiPlugin(): Plugin {
                 typeof workspaceIndex?.created_at === "string"
                   ? workspaceIndex.created_at
                   : null,
+              latestArtifactModifiedMs: await latestArtifactModifiedMs(files),
             };
             sendJson(response, 200, { ok: true, json: payload });
             return;

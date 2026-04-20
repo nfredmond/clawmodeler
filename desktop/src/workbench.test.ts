@@ -37,6 +37,7 @@ import {
   validatePlannerPackForm,
   validateWhatIfForm,
   whatIfWeightSum,
+  workspaceIndexStale,
   workspaceDisplayName,
 } from "./workbench.js";
 
@@ -361,6 +362,39 @@ describe("clawmodeler workbench helpers", () => {
     expect(summary?.warnings).toContain(
       "DuckDB database unavailable; summary used the JSON workspace index.",
     );
+  });
+
+  it("detects stale workspace index timestamps", () => {
+    expect(
+      workspaceIndexStale({
+        workspace: "/tmp/ws",
+        runId: "demo",
+        manifest: null,
+        qaReport: null,
+        workflowReport: null,
+        reportMarkdown: null,
+        files: [],
+        filesTruncated: false,
+        workspaceIndex: { runs: [] },
+        indexUpdatedAt: "2026-04-20T00:00:00Z",
+        latestArtifactModifiedMs: Date.parse("2026-04-20T00:00:05Z"),
+      }),
+    ).toBe(true);
+    expect(
+      workspaceIndexStale({
+        workspace: "/tmp/ws",
+        runId: "demo",
+        manifest: null,
+        qaReport: null,
+        workflowReport: null,
+        reportMarkdown: null,
+        files: [],
+        filesTruncated: false,
+        workspaceIndex: { runs: [] },
+        indexUpdatedAt: "2026-04-20T00:00:05Z",
+        latestArtifactModifiedMs: Date.parse("2026-04-20T00:00:00Z"),
+      }),
+    ).toBe(false);
   });
 
   it("flattens manifest outputs and detects planner-pack tables", () => {

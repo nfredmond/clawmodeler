@@ -37,18 +37,20 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
   run diffs, and writes `logs/workspace_index.json` even when DuckDB is not installed.
 - The desktop app is vanilla TypeScript on Tauri v2 and invokes only the `clawmodeler-engine` sidecar or local Python fallback.
 - The desktop workbench has a top-level Workflow Guide that links workspace setup, run execution, QA/artifact review, Planner Pack generation, grounded chat, what-if, portfolio, and diff readiness.
-- The desktop workbench refreshes and reads the workspace index for run artifact lists, report paths, QA status, bridge readiness, Planner Pack coverage, and index freshness, with direct artifact fallback for older workspaces.
+- The desktop workbench refreshes and reads the workspace index for run artifact lists, report paths, QA status, bridge readiness, Planner Pack coverage, and index freshness, flags stale index state when artifacts are newer than the index, and keeps direct artifact fallback for older workspaces.
 - The desktop workbench preserves recent workspaces, active run history, and planner-facing run labels locally so existing runs can be reopened without retyping paths.
-- The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate.
+- The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate that verifies workspace-index JSON coverage for run artifacts, bridge readiness, portfolio rows, and run diffs.
 - Release gates smoke-test the packaged sidecar, validate installer asset names, check version consistency, serialize tag publishing, and only mark the highest SemVer tag as Latest.
 
 ## Next Engineering Milestones
 
-1. **Harden indexed desktop workflows.**
+1. **Prepare a first-user release candidate.**
 
-   Add fixture-backed desktop checks that exercise the Tauri/Vite workspace-index load path,
-   then tune refresh timing so portfolio, diff, Planner Pack, bridge, and what-if actions
-   update the visible index state without redundant scans.
+   Turn the now-indexed workflow into a first-run path that a planner can trust without
+   reading the internals first: package-facing docs, release checklist coverage, and a
+   desktop smoke path that proves workspace creation, baseline execution, index refresh,
+   QA review, Planner Pack generation, portfolio refresh, and diff review from a clean
+   workspace.
 
 2. **Add optional ML workflows last.**
 
@@ -76,6 +78,7 @@ Proceed to production packaging only when the wheel stays lean, includes require
 
 ## Definition Of Done For The Next Pass
 
-The next pass is done when desktop acceptance explicitly proves the indexed workspace load path
-and the UI refreshes index state after every action that writes run, Planner Pack, bridge,
-portfolio, or diff artifacts.
+The next pass is done when the first-user release candidate flow can be checked from a clean
+workspace with one command, the release checklist names every supported installer and unsigned
+first-run caveat, and the desktop smoke path proves the generated index-backed summaries a
+planner sees after baseline, Planner Pack, portfolio, and diff actions.
