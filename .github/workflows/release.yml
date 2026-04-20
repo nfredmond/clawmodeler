@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-latest'
@@ -41,7 +41,7 @@ jobs:
             libsoup-3.0-dev
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -50,16 +50,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: pnpm
-          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10 --activate
+
+      - name: Release workflow audit
+        run: pnpm release:workflow:test
 
       - name: Install desktop dependencies
         run: pnpm install --frozen-lockfile
@@ -78,7 +80,7 @@ jobs:
           "desktop/src-tauri/binaries/clawmodeler-engine${{ matrix.os == 'windows-latest' && '.exe' || '' }}"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: clawmodeler-${{ matrix.target }}
           if-no-files-found: error
@@ -98,21 +100,25 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10 --activate
+
+      - name: Release workflow audit
+        run: pnpm release:workflow:test
+
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
           merge-multiple: true
@@ -125,7 +131,7 @@ jobs:
         run: pnpm release:assets -- --tag "$GITHUB_REF_NAME" --dir artifacts
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2.6.2
+        uses: softprops/action-gh-release@v3
         with:
           files: artifacts/**/*
           draft: false
