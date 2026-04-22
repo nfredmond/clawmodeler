@@ -23,9 +23,9 @@ function parseArgs(argv) {
 }
 
 export function expectedReleaseAssets(tag) {
-  const match = /^v(\d+\.\d+\.\d+)$/.exec(tag);
+  const match = /^v(\d+\.\d+\.\d+)(?:-rc\.\d+)?$/.exec(tag);
   if (!match) {
-    throw new Error(`release tag must look like vX.Y.Z, got ${tag}`);
+    throw new Error(`release tag must look like vX.Y.Z or vX.Y.Z-rc.N, got ${tag}`);
   }
   const version = match[1];
   return [
@@ -36,6 +36,10 @@ export function expectedReleaseAssets(tag) {
     `ClawModeler_${version}_x64-setup.exe`,
     `ClawModeler_${version}_x64_en-US.msi`,
   ];
+}
+
+export function isPrereleaseTag(tag) {
+  return /^v\d+\.\d+\.\d+-rc\.\d+$/.test(tag);
 }
 
 function listFiles(root) {
@@ -99,6 +103,22 @@ function selfTest() {
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+
+  // Pre-release tags share asset names with their base version.
+  const rcExpected = expectedReleaseAssets("v1.2.3-rc.1");
+  const finalExpected = expectedReleaseAssets("v1.2.3");
+  if (JSON.stringify(rcExpected) !== JSON.stringify(finalExpected)) {
+    throw new Error(
+      `rc tag should produce same asset names as final; rc=${JSON.stringify(rcExpected)} final=${JSON.stringify(finalExpected)}`,
+    );
+  }
+  if (!isPrereleaseTag("v1.2.3-rc.1")) {
+    throw new Error("isPrereleaseTag should return true for v1.2.3-rc.1");
+  }
+  if (isPrereleaseTag("v1.2.3")) {
+    throw new Error("isPrereleaseTag should return false for v1.2.3");
+  }
+
   console.log("release asset self-test passed");
 }
 
