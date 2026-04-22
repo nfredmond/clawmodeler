@@ -48,7 +48,11 @@ if [ ! -x "$venv_python" ] && [ ! -f "$venv_python" ]; then
 fi
 
 "$venv_python" -m pip install --upgrade pip setuptools wheel pyinstaller
-"$venv_python" -m pip install -e "$repo_root"
+# Install with [pdf,docx] extras so PyInstaller bundles weasyprint,
+# markdown-it-py, and python-docx into the sidecar binary. Without these,
+# `clawmodeler-engine export --format pdf|docx` crashes at runtime even
+# though the desktop UI offers those formats.
+"$venv_python" -m pip install -e "$repo_root[pdf,docx]"
 
 rm -f "$dist_dir/clawmodeler-engine$exe_suffix"
 

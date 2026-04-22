@@ -140,6 +140,41 @@ function runSmoke({ binary, version, keepWorkspace }) {
     }
     assertExists(path.join(fixtureWorkspace, "reports", "baseline_report.md"));
     assertExists(path.join(fixtureWorkspace, "reports", "baseline_ceqa_vmt.md"));
+
+    // PDF + DOCX export must work in the bundled binary, not just locally.
+    // Without this gate, optional-deps that aren't installed in the
+    // PyInstaller venv pass local tests but crash for installed users.
+    runEngine(binary, [
+      "export",
+      "--workspace",
+      fixtureWorkspace,
+      "--run-id",
+      "baseline",
+      "--format",
+      "pdf",
+    ]);
+    const pdfPath = path.join(fixtureWorkspace, "reports", "baseline_report.pdf");
+    assertExists(pdfPath);
+    const pdfHead = fs.readFileSync(pdfPath).subarray(0, 5).toString("latin1");
+    if (!pdfHead.startsWith("%PDF-")) {
+      throw new Error(`PDF export did not produce a valid PDF magic header (got ${JSON.stringify(pdfHead)})`);
+    }
+
+    runEngine(binary, [
+      "export",
+      "--workspace",
+      fixtureWorkspace,
+      "--run-id",
+      "baseline",
+      "--format",
+      "docx",
+    ]);
+    const docxPath = path.join(fixtureWorkspace, "reports", "baseline_report.docx");
+    assertExists(docxPath);
+    const docxHead = fs.readFileSync(docxPath).subarray(0, 2).toString("latin1");
+    if (docxHead !== "PK") {
+      throw new Error(`DOCX export did not produce a valid ZIP container (got ${JSON.stringify(docxHead)})`);
+    }
   } finally {
     if (keepWorkspace) {
       console.log(`Kept smoke workspace: ${tmp}`);
