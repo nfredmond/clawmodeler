@@ -4,6 +4,26 @@ All notable changes to ClawModeler will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] — 2026-04-22
+
+The first stable release. ClawModeler is now positioned as a free, installable, adoption-ready local-first transportation sketch-planning workbench for small and rural agencies.
+
+### Added
+
+- **DOCX report rendering.** `clawmodeler-engine export --format docx` and `workflow full/report-only --format docx` now produce Word-compatible `.docx` Planner Pack reports for planners who live in Word. Headings, paragraphs, bold/italic/code emphasis, bullet and numbered lists, tables, and blockquotes are preserved; relative figure paths embed as images when the files exist. Install the new optional-deps group: `pip install clawmodeler-engine[docx]`.
+- **DOCX parity across the workflow CLI.** `workflow full --format` and `workflow report-only --format` now accept `md`, `pdf`, and `docx`, matching the `export --format` surface.
+- **Desktop report-format selector.** The Tauri workbench Regenerate Report control now has an MD/PDF/DOCX dropdown; the selection persists in local storage and threads through to the sidecar via `workflow report-only --format`.
+- **Rural-demo sample Planner Pack.** `docs/samples/rural-demo/` now contains a full, real output set (technical report in MD/PDF/DOCX, CEQA VMT memo, QA report, fact-blocks, key figures) so prospective users can review what ClawModeler produces before installing. Reproducible from the `workflow demo-full` + `planner-pack ceqa-vmt` commands documented in the sample README.
+- **20-minute adoption tutorial.** New `docs/tutorial.md` walks a first-time planner from installer download through running the demo, inspecting QA-gated outputs, exporting to Word, and generating a CEQA VMT Planner Pack — no CLI required. Includes a "Bring your own data" section and a prominent "What ClawModeler is not" scope statement.
+- **Starter data template.** `docs/samples/starter-template/` ships a ready-to-edit minimum-viable input set (`zones.geojson`, `socio.csv`, `projects.csv`) with real-world data-source pointers for zone layers, ACS/LODES socio data, and project lists.
+- **Adoption-focused README entry points.** README now surfaces the tutorial, sample Planner Pack, and starter template in a "New to ClawModeler? Start here" section between Download and the developer-oriented Quick Start, and notes Linux AppImage first-run permission alongside the existing macOS/Windows unsigned-build steps.
+
+### Changed
+
+- **Version advanced to 1.0.0** across the Python engine (`pyproject.toml`, `clawmodeler_engine/workspace.py:ENGINE_VERSION`), root `package.json`, Tauri `Cargo.toml`, `Cargo.lock`, and `tauri.conf.json`.
+- **Full engine test suite grew to 308 tests** (was 302) with the new DOCX coverage. Desktop Vitest grew to 44 tests (was 41).
+- **README Quick Start is now clearly labeled for developers.** Non-developer users are pointed at the release installers + tutorial first.
+
 ## [0.9.6] — 2026-04-20
 
 ### Added

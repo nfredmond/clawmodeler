@@ -1782,6 +1782,33 @@ export function buildDiffArgs(params: {
   ];
 }
 
+export type ReportFormat = "md" | "pdf" | "docx";
+
+export const REPORT_FORMATS: readonly ReportFormat[] = ["md", "pdf", "docx"] as const;
+
+export function isReportFormat(value: unknown): value is ReportFormat {
+  return typeof value === "string" && (REPORT_FORMATS as readonly string[]).includes(value);
+}
+
+export function buildReportOnlyArgs(params: {
+  workspace: string;
+  runId: string;
+  format?: ReportFormat;
+}): string[] {
+  const args = [
+    "workflow",
+    "report-only",
+    "--workspace",
+    params.workspace,
+    "--run-id",
+    params.runId,
+  ];
+  if (params.format && params.format !== "md") {
+    args.push("--format", params.format);
+  }
+  return args;
+}
+
 export function formatDacShare(share: number | null): string {
   if (share === null) return "—";
   return `${(share * 100).toFixed(1)}%`;

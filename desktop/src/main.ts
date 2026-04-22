@@ -7,6 +7,7 @@ import {
   buildDiffArgs,
   buildFullWorkflowArgs,
   buildPlannerPackArgs,
+  buildReportOnlyArgs,
   type ChatTurn,
   chatTurnBadge,
   DEFAULT_WHAT_IF_WEIGHTS,
@@ -17,6 +18,7 @@ import {
   formatMeanScore,
   friendlyError,
   isPreviewableArtifact,
+  isReportFormat,
   manifestOutputCategories,
   normalizePathList,
   normalizeScenarios,
@@ -33,6 +35,8 @@ import {
   type ProjectWorkspaceRecord,
   projectRunLabel,
   rebalanceWhatIfWeights,
+  REPORT_FORMATS,
+  type ReportFormat,
   segmentChatText,
   serializeProjectState,
   sortPortfolioRuns,
@@ -190,6 +194,7 @@ type AppState = {
   routingSource: string;
   routingGraphId: string;
   routingImpedance: string;
+  reportFormat: ReportFormat;
   busy: boolean;
   status: string;
   doctor: DoctorResult | null;
@@ -230,6 +235,10 @@ const state: AppState = {
   routingSource: localStorage.getItem("clawmodeler.routingSource") || "question",
   routingGraphId: localStorage.getItem("clawmodeler.routingGraphId") || "",
   routingImpedance: localStorage.getItem("clawmodeler.routingImpedance") || "minutes",
+  reportFormat: (() => {
+    const stored = localStorage.getItem("clawmodeler.reportFormat");
+    return isReportFormat(stored) ? stored : "md";
+  })(),
   busy: false,
   status: "Ready",
   doctor: null,
@@ -555,15 +564,14 @@ async function tauriApi<T = unknown>(path: string, body?: unknown): Promise<ApiR
     return await invoke<ApiResult<T>>("clawmodeler_run", { args });
   }
   if (path === "/api/clawmodeler/report-only") {
+    const rawFormat = payload.format;
+    const format: ReportFormat = isReportFormat(rawFormat) ? rawFormat : "md";
     return await invoke<ApiResult<T>>("clawmodeler_run", {
-      args: [
-        "workflow",
-        "report-only",
-        "--workspace",
-        stringField(payload, "workspace"),
-        "--run-id",
-        stringField(payload, "runId", "demo"),
-      ],
+      args: buildReportOnlyArgs({
+        workspace: stringField(payload, "workspace"),
+        runId: stringField(payload, "runId", "demo"),
+        format,
+      }),
     });
   }
   if (path === "/api/clawmodeler/run") {
@@ -1286,9 +1294,22 @@ function bindControls() {
   appRoot
     .querySelector<HTMLButtonElement>("[data-action='report']")
     ?.addEventListener("click", () => {
-      void runAction("Regenerating report", () =>
-        api("/api/clawmodeler/report-only", { workspace: state.workspace, runId: state.runId }),
+      void runAction(`Regenerating report (${state.reportFormat.toUpperCase()})`, () =>
+        api("/api/clawmodeler/report-only", {
+          workspace: state.workspace,
+          runId: state.runId,
+          format: state.reportFormat,
+        }),
       );
+    });
+  appRoot
+    .querySelector<HTMLSelectElement>("[data-field='reportFormat']")
+    ?.addEventListener("change", (event) => {
+      const value = (event.target as HTMLSelectElement).value;
+      if (isReportFormat(value)) {
+        state.reportFormat = value;
+        localStorage.setItem("clawmodeler.reportFormat", value);
+      }
     });
 
   appRoot
@@ -2578,6 +2599,15 @@ function render() {
               <button data-action="full" ${state.busy ? "disabled" : ""}>Run Full Workflow</button>
               <button data-action="diagnose" ${state.busy ? "disabled" : ""}>Diagnose</button>
               <button data-action="report" ${state.busy ? "disabled" : ""}>Regenerate Report</button>
+              <label class="report-format-select">
+                Format:
+                <select data-field="reportFormat" ${state.busy ? "disabled" : ""}>
+                  ${REPORT_FORMATS.map(
+                    (fmt) =>
+                      `<option value="${fmt}" ${state.reportFormat === fmt ? "selected" : ""}>${fmt.toUpperCase()}</option>`,
+                  ).join("")}
+                </select>
+              </label>
             </div>
 
             <div class="doctor">

@@ -1,0 +1,29 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "zone_id": "zone-1", "name": "Example Zone One" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-121.01, 37.99], [-120.99, 37.99], [-120.99, 38.01], [-121.01, 38.01], [-121.01, 37.99]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_id": "zone-2", "name": "Example Zone Two" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-121.03, 37.99], [-121.01, 37.99], [-121.01, 38.01], [-121.03, 38.01], [-121.03, 37.99]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_id": "zone-3", "name": "Example Zone Three" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-120.99, 37.97], [-120.97, 37.97], [-120.97, 37.99], [-120.99, 37.99], [-120.99, 37.97]]]
+      }
+    }
+  ]
+}

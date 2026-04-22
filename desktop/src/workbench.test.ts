@@ -5,6 +5,7 @@ import {
   buildDiffArgs,
   buildFullWorkflowArgs,
   buildPlannerPackArgs,
+  buildReportOnlyArgs,
   chatTurnBadge,
   countJsonLines,
   DEFAULT_WHAT_IF_WEIGHTS,
@@ -15,6 +16,7 @@ import {
   formatMeanScore,
   friendlyError,
   isPreviewableArtifact,
+  isReportFormat,
   isValidWhatIfWeights,
   manifestOutputCategories,
   manifestOutputPaths,
@@ -957,6 +959,54 @@ describe("clawmodeler workbench helpers", () => {
       "bravo",
       "--json",
     ]);
+  });
+
+  it("buildReportOnlyArgs defaults to Markdown and omits --format", () => {
+    expect(buildReportOnlyArgs({ workspace: "/tmp/ws", runId: "demo" })).toEqual([
+      "workflow",
+      "report-only",
+      "--workspace",
+      "/tmp/ws",
+      "--run-id",
+      "demo",
+    ]);
+  });
+
+  it("buildReportOnlyArgs threads DOCX and PDF through --format", () => {
+    expect(
+      buildReportOnlyArgs({ workspace: "/tmp/ws", runId: "demo", format: "docx" }),
+    ).toEqual([
+      "workflow",
+      "report-only",
+      "--workspace",
+      "/tmp/ws",
+      "--run-id",
+      "demo",
+      "--format",
+      "docx",
+    ]);
+    expect(
+      buildReportOnlyArgs({ workspace: "/tmp/ws", runId: "demo", format: "pdf" }),
+    ).toEqual([
+      "workflow",
+      "report-only",
+      "--workspace",
+      "/tmp/ws",
+      "--run-id",
+      "demo",
+      "--format",
+      "pdf",
+    ]);
+  });
+
+  it("isReportFormat accepts md/pdf/docx and rejects everything else", () => {
+    expect(isReportFormat("md")).toBe(true);
+    expect(isReportFormat("pdf")).toBe(true);
+    expect(isReportFormat("docx")).toBe(true);
+    expect(isReportFormat("txt")).toBe(false);
+    expect(isReportFormat(null)).toBe(false);
+    expect(isReportFormat(undefined)).toBe(false);
+    expect(isReportFormat(42)).toBe(false);
   });
 
   it("validates and builds Planner Pack args", () => {

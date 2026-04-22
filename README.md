@@ -21,16 +21,23 @@ Pre-built desktop installers are attached to every [GitHub release](https://gith
 | macOS Apple Silicon (M1/M2/M3/M4) | `ClawModeler_<version>_aarch64.dmg` |
 | Windows 10 / 11 | `ClawModeler_<version>_x64_en-US.msi` or `ClawModeler_<version>_x64-setup.exe` |
 
-**Intel Mac (x86_64):** no pre-built installer at this time. GitHub's `macos-13` hosted-runner pool is being deprecated and is unreliable for release builds. Intel Mac users can build from source (see Quick Start), or wait for a self-hosted Intel runner in a future release.
+**Intel Mac (x86_64):** no pre-built installer at this time. GitHub's `macos-13` hosted-runner pool is being deprecated and is unreliable for release builds. Intel Mac users can build from source (see [Developer Quick Start](#developer-quick-start-from-source)), or wait for a self-hosted Intel runner in a future release.
 
-### First-run on macOS or Windows (unsigned builds)
+### First-run on Linux, macOS, or Windows (unsigned builds)
 
 ClawModeler currently ships without Apple or Microsoft code-signing certificates to keep every platform free. The first launch needs a one-time bypass:
 
-- **macOS:** Right-click `ClawModeler.app` → **Open** → **Open** (Gatekeeper remembers it afterwards).
+- **Linux AppImage:** make the file executable first (right-click → Properties → Permissions → Allow executing as program, or `chmod +x ClawModeler*.AppImage`), then double-click.
+- **macOS:** right-click `ClawModeler.app` → **Open** → **Open** (Gatekeeper remembers it afterwards).
 - **Windows:** SmartScreen dialog → **More info** → **Run anyway**.
 
 Code signing is planned for a future release.
+
+## New to ClawModeler? Start here
+
+- **[20-minute tutorial](docs/tutorial.md)** — install, open, run the demo, inspect QA-gated outputs, export a Word document, and generate a CEQA VMT Planner Pack memo. Zero prior data or setup needed.
+- **[Sample Planner Pack](docs/samples/rural-demo/)** — a full, real output set (technical report in MD/PDF/DOCX, CEQA VMT memo, QA report, fact-blocks, figures) committed to the repo. Review before you install.
+- **[Starter data template](docs/samples/starter-template/)** — ready-to-edit `zones.geojson`, `socio.csv`, and `projects.csv` for your own project, with real-world data-source pointers.
 
 ## What It Does
 
@@ -51,9 +58,9 @@ ClawModeler coordinates:
 
 Current analysis outputs are intentionally labeled as screening-level when proxy methods are used. The stack is built so detailed engines can replace or augment those proxy methods without changing the user-facing workflow. Bridge packages can be structurally ready for handoff before they are forecast-ready. ClawModeler now records detailed-engine readiness explicitly so uncalibrated handoff artifacts are not presented as authoritative forecasts.
 
-## Quick Start
+## Developer Quick Start (from source)
 
-Most users should grab a [release installer](#download) instead. These steps are for developers who want to run from source.
+> **Not a developer?** Grab a [release installer](#download) and follow the [20-minute tutorial](docs/tutorial.md) instead. The section below is for contributors who want to run ClawModeler directly from a source checkout.
 
 Clone and install the Python engine:
 

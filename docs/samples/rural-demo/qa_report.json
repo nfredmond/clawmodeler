@@ -1,0 +1,17 @@
+{
+  "artifact_type": "qa_report",
+  "blockers": [],
+  "checks": {
+    "ai_narrative_grounded": true,
+    "fact_block_count": 17,
+    "fact_blocks_present": true,
+    "fact_blocks_valid": true,
+    "invalid_fact_block_count": 0,
+    "manifest_present": true,
+    "manifest_valid": true,
+    "narrative_claims_without_factblocks": 0
+  },
+  "export_ready": true,
+  "run_id": "rural-demo",
+  "schema_version": "1.0.0"
+}

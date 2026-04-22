@@ -100,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     export = subparsers.add_parser("export", help="Export report artifacts when QA allows it.")
     export.add_argument("--workspace", required=True, type=Path)
     export.add_argument("--run-id", required=True)
-    export.add_argument("--format", choices=["md", "pdf"], default="md")
+    export.add_argument("--format", choices=["md", "pdf", "docx"], default="md")
     export.add_argument(
         "--report-type",
         choices=["technical", "layperson", "brief", "all"],
@@ -176,7 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_full.add_argument("--question", required=True, type=Path)
     workflow_full.add_argument("--run-id", required=True)
     workflow_full.add_argument("--scenarios", nargs="*", default=["baseline"])
-    workflow_full.add_argument("--format", choices=["md"], default="md")
+    workflow_full.add_argument("--format", choices=["md", "pdf", "docx"], default="md")
     add_routing_override_arguments(workflow_full)
     workflow_full.add_argument(
         "--skip-bridges",
@@ -197,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     workflow_report_only.add_argument("--workspace", required=True, type=Path)
     workflow_report_only.add_argument("--run-id", required=True)
-    workflow_report_only.add_argument("--format", choices=["md"], default="md")
+    workflow_report_only.add_argument("--format", choices=["md", "pdf", "docx"], default="md")
     workflow_report_only.add_argument("--scenario-id", default="baseline")
     workflow_report_only.add_argument(
         "--skip-bridge-validation",

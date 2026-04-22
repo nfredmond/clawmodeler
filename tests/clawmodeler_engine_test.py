@@ -406,12 +406,20 @@ class ClawModelerEngineTest(unittest.TestCase):
                 ).exists()
             )
 
-    def test_export_parser_rejects_docx_until_writer_exists(self) -> None:
+    def test_export_parser_accepts_docx_format(self) -> None:
+        try:
+            import docx  # noqa: F401
+            import markdown_it  # noqa: F401
+        except ModuleNotFoundError:
+            self.skipTest("python-docx and markdown-it-py required for DOCX export")
+
+        import zipfile
+
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir) / "demo"
             self.run_engine("demo", "--workspace", str(workspace), "--run-id", "sample")
 
-            result = self.run_engine(
+            self.run_engine(
                 "export",
                 "--workspace",
                 str(workspace),
@@ -419,10 +427,14 @@ class ClawModelerEngineTest(unittest.TestCase):
                 "sample",
                 "--format",
                 "docx",
-                expected_code=2,
             )
 
-            self.assertIn("invalid choice", result.stderr)
+            report_path = workspace / "reports" / "sample_report.docx"
+            self.assertTrue(report_path.exists(), f"{report_path} was not written")
+            self.assertTrue(
+                zipfile.is_zipfile(report_path),
+                "docx export did not produce a valid ZIP container",
+            )
 
     def test_run_resolves_relative_receipt_paths_from_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
