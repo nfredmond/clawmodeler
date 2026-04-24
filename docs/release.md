@@ -19,6 +19,13 @@ Release workflow gates:
 - The release job validates asset names with `pnpm release:assets -- --tag "$GITHUB_REF_NAME" --dir artifacts`.
 - The release job marks the GitHub release as Latest only when the tag is the highest SemVer `vX.Y.Z` tag.
 
+WeasyPrint native runtime:
+
+- Linux installs the native Pango/PangoFT2 packages in the release runner and relies on the platform package dependencies at install time.
+- macOS installs the Homebrew Pango/fontconfig/HarfBuzz/GLib stack, copies the dylib dependency closure into `desktop/src-tauri/binaries/weasyprint-runtime/`, rewrites Homebrew install names to local `@loader_path` references, and ad-hoc signs the copied dylibs.
+- Windows uses `msys2/setup-msys2@v2` with `mingw-w64-x86_64-pango`, copies the required DLL closure into `desktop/src-tauri/binaries/weasyprint-runtime/`, and the frozen sidecar launcher points WeasyPrint at that directory before import.
+- `pnpm release:sidecar-smoke` must produce valid MD, PDF, and DOCX reports from the built sidecar before release artifacts are uploaded.
+
 Release dry run:
 
 - Trigger `Release` with `workflow_dispatch` on `main` before publishing a tag. The build matrix runs and uploads installer artifacts, while the publish job is skipped because the ref is not a `vX.Y.Z` tag.

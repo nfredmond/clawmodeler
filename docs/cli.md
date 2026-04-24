@@ -46,7 +46,9 @@ clawmodeler-engine run --workspace ./demo --run-id demo --scenarios baseline sce
 clawmodeler-engine export --workspace ./demo --run-id demo --format md
 ```
 
-`export --format` currently supports `md` and `pdf`. PDF requires the optional `pdf` dependency set.
+`export --format` currently supports `md`, `pdf`, and `docx`. The desktop sidecar bundles
+the PDF and DOCX runtimes; source installs need the optional dependency sets, for example
+`python3 -m pip install -e ".[pdf,docx]"`.
 
 ## Workspace Data Index
 

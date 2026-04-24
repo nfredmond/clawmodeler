@@ -142,8 +142,9 @@ function runSmoke({ binary, version, keepWorkspace }) {
     assertExists(path.join(fixtureWorkspace, "reports", "baseline_ceqa_vmt.md"));
 
     // PDF + DOCX export must work in the bundled binary, not just locally.
-    // Without this gate, optional-deps that aren't installed in the
-    // PyInstaller venv pass local tests but crash for installed users.
+    // Without this gate, optional-deps or native runtime files that are
+    // missing from the PyInstaller/Tauri bundle pass local tests but crash
+    // for installed users.
     runEngine(binary, [
       "export",
       "--workspace",

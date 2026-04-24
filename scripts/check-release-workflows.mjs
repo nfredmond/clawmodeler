@@ -22,6 +22,10 @@ const workflowChecks = [
       "actions/checkout@v6",
       "actions/setup-python@v6",
       "actions/setup-node@v6",
+      "libpangoft2-1.0-0",
+      "brew install pango fontconfig harfbuzz glib",
+      "msys2/setup-msys2@v2",
+      "mingw-w64-x86_64-pango",
       "corepack prepare pnpm@10 --activate",
       "pnpm release:sidecar-smoke",
       "pnpm release:first-user-smoke -- --binary",
@@ -56,6 +60,7 @@ const docChecks = [
       "Unsigned first-run caveats:",
       "Intel Mac x86_64: no pre-built installer",
       "Linux AppImage users may need to mark the file executable",
+      "WeasyPrint native runtime:",
     ],
   },
   {
@@ -63,6 +68,7 @@ const docChecks = [
     required: [
       "pnpm release:first-user-smoke",
       "pnpm release:first-user-smoke -- --binary",
+      "PDF and DOCX",
     ],
   },
 ];

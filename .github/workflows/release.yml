@@ -37,8 +37,25 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
+            libpango-1.0-0 \
+            libpangoft2-1.0-0 \
             patchelf \
             libsoup-3.0-dev
+
+      - name: Install macOS WeasyPrint runtime dependencies
+        if: matrix.os == 'macos-14'
+        run: |
+          brew update
+          brew install pango fontconfig harfbuzz glib
+
+      - name: Set up Windows WeasyPrint runtime dependencies
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: mingw-w64-x86_64-pango
 
       - name: Set up Python
         uses: actions/setup-python@v6

@@ -15,6 +15,99 @@ mkdir -p "$dist_dir" "$work_dir" "$repo_root/.tmp"
 launcher="$work_dir/clawmodeler-engine-launcher.py"
 
 cat >"$launcher" <<'PY'
+from __future__ import annotations
+
+import ctypes
+import os
+from pathlib import Path
+import sys
+
+
+_DLL_DIRECTORY_HANDLES = []
+
+
+def _prepend_env_path(name: str, value: Path) -> None:
+    text = str(value)
+    existing = os.environ.get(name, "")
+    parts = [part for part in existing.split(os.pathsep) if part]
+    if text not in parts:
+        os.environ[name] = os.pathsep.join([text, *parts])
+
+
+def _candidate_runtime_dirs() -> list[Path]:
+    candidates: list[Path] = []
+    override = os.environ.get("CLAWMODELER_WEASYPRINT_RUNTIME")
+    if override:
+        candidates.append(Path(override))
+
+    executable_dir = Path(sys.executable).resolve().parent
+    candidates.extend(
+        [
+            executable_dir / "weasyprint-runtime",
+            executable_dir / "binaries" / "weasyprint-runtime",
+        ]
+    )
+    return candidates
+
+
+def _configure_fontconfig(runtime_dir: Path) -> None:
+    fonts_dir = runtime_dir / "etc" / "fonts"
+    fonts_conf = fonts_dir / "fonts.conf"
+    if fonts_conf.is_file():
+        os.environ.setdefault("FONTCONFIG_FILE", str(fonts_conf))
+        os.environ.setdefault("FONTCONFIG_PATH", str(fonts_dir))
+
+
+def _configure_windows_runtime(runtime_dir: Path) -> None:
+    _prepend_env_path("PATH", runtime_dir)
+    existing = os.environ.get("WEASYPRINT_DLL_DIRECTORIES", "")
+    parts = [part for part in existing.split(";") if part]
+    runtime_text = str(runtime_dir)
+    if runtime_text not in parts:
+        os.environ["WEASYPRINT_DLL_DIRECTORIES"] = ";".join([runtime_text, *parts])
+
+    if hasattr(os, "add_dll_directory"):
+        try:
+            _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(runtime_text))
+        except OSError:
+            pass
+
+
+def _configure_macos_runtime(runtime_dir: Path) -> None:
+    _prepend_env_path("DYLD_LIBRARY_PATH", runtime_dir)
+    _prepend_env_path("DYLD_FALLBACK_LIBRARY_PATH", runtime_dir)
+    mode = getattr(ctypes, "RTLD_GLOBAL", 0)
+    for name in (
+        "libgobject-2.0.0.dylib",
+        "libpango-1.0.dylib",
+        "libharfbuzz.0.dylib",
+        "libharfbuzz-subset.0.dylib",
+        "libfontconfig.1.dylib",
+        "libpangoft2-1.0.dylib",
+    ):
+        path = runtime_dir / name
+        if path.is_file():
+            try:
+                ctypes.CDLL(str(path), mode=mode)
+            except OSError:
+                pass
+
+
+def _configure_weasyprint_runtime() -> None:
+    runtime_dir = next((path for path in _candidate_runtime_dirs() if path.is_dir()), None)
+    if runtime_dir is None:
+        return
+
+    os.environ.setdefault("CLAWMODELER_WEASYPRINT_RUNTIME", str(runtime_dir))
+    _configure_fontconfig(runtime_dir)
+    if sys.platform == "win32":
+        _configure_windows_runtime(runtime_dir)
+    elif sys.platform == "darwin":
+        _configure_macos_runtime(runtime_dir)
+
+
+_configure_weasyprint_runtime()
+
 from clawmodeler_engine.cli import main
 
 raise SystemExit(main())
@@ -48,11 +141,14 @@ if [ ! -x "$venv_python" ] && [ ! -f "$venv_python" ]; then
 fi
 
 "$venv_python" -m pip install --upgrade pip setuptools wheel pyinstaller
-# Install with [pdf,docx] extras so PyInstaller bundles weasyprint,
-# markdown-it-py, and python-docx into the sidecar binary. Without these,
-# `clawmodeler-engine export --format pdf|docx` crashes at runtime even
-# though the desktop UI offers those formats.
-"$venv_python" -m pip install -e "$repo_root[pdf,docx]"
+# Run from the repo root so Windows Git Bash does not rewrite an absolute
+# editable-extra path such as C:\...\clawmodeler[pdf,docx].
+(
+  cd "$repo_root"
+  "$venv_python" -m pip install -e ".[pdf,docx]"
+)
+"$venv_python" "$repo_root/scripts/collect-weasyprint-runtime.py" \
+  --output "$dist_dir/weasyprint-runtime"
 
 rm -f "$dist_dir/clawmodeler-engine$exe_suffix"
 
