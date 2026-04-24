@@ -161,58 +161,112 @@ function detachDmg(mountPoint) {
   }
 }
 
+function clearQuarantine(targetPath) {
+  const result = spawnSync("xattr", ["-dr", "com.apple.quarantine", targetPath], {
+    encoding: "utf8",
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
+    if (!output.includes("No such xattr")) {
+      throw new Error(
+        [
+          `xattr -dr com.apple.quarantine ${targetPath} failed with exit ${result.status}`,
+          output.trim() ? output.trim() : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+  }
+}
+
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function findLaunchedAppProcess(appPath, executableName) {
-  const result = spawnSync("ps", ["-axo", "pid=,comm=,command="], { encoding: "utf8" });
-  if (result.status !== 0) {
-    return "";
+function appExecutablePaths(appPath, executableName) {
+  const paths = new Set([path.join(appPath, "Contents", "MacOS", executableName)]);
+  try {
+    paths.add(path.join(fs.realpathSync(appPath), "Contents", "MacOS", executableName));
+  } catch {
+    // The original path is still good enough for self-tests and local failures.
   }
-  const executablePathPrefix = path.join(appPath, "Contents", "MacOS");
-  return result.stdout
-    .split(/\r?\n/)
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        return false;
-      }
-      const parts = trimmed.split(/\s+/);
-      const comm = parts[1] || "";
-      const command = parts.slice(2).join(" ");
-      return (
-        path.basename(comm) === executableName ||
-        path.basename(comm) === "ClawModeler" ||
-        command.includes(executablePathPrefix)
-      );
-    })
-    .join("\n");
+  return paths;
 }
 
-function launchApp(appPath, bundleIdentifier, executableName) {
-  spawnSync("xattr", ["-dr", "com.apple.quarantine", appPath], { encoding: "utf8" });
+function commandExecutablePath(command) {
+  return command.trim().split(/\s+/u, 1)[0] || "";
+}
+
+function appProcessRowsFromPs(psOutput, appPath, executableName) {
+  const executablePaths = appExecutablePaths(appPath, executableName);
+  return psOutput
+    .split(/\r?\n/u)
+    .map((line) => {
+      const trimmed = line.trim();
+      const match = /^(\d+)\s+(\S+)\s*(.*)$/u.exec(trimmed);
+      if (!match) {
+        return null;
+      }
+      return {
+        pid: match[1],
+        comm: match[2],
+        command: match[3] || "",
+        line: trimmed,
+      };
+    })
+    .filter((row) => {
+      if (!row) {
+        return false;
+      }
+      return executablePaths.has(row.comm) || executablePaths.has(commandExecutablePath(row.command));
+    });
+}
+
+function findLaunchedAppProcesses(appPath, executableName) {
+  const result = spawnSync("ps", ["-axo", "pid=,comm=,command="], { encoding: "utf8" });
+  if (result.status !== 0) {
+    return [];
+  }
+  return appProcessRowsFromPs(result.stdout, appPath, executableName);
+}
+
+function terminateAppProcesses(appPath, executableName) {
+  for (const processRow of findLaunchedAppProcesses(appPath, executableName)) {
+    spawnSync("kill", [processRow.pid], { encoding: "utf8" });
+  }
+  sleep(1000);
+  for (const processRow of findLaunchedAppProcesses(appPath, executableName)) {
+    spawnSync("kill", ["-KILL", processRow.pid], { encoding: "utf8" });
+  }
+}
+
+function launchApp(appPath, executableName) {
+  clearQuarantine(appPath);
   run("open", ["-n", appPath]);
 
   const deadline = Date.now() + 30_000;
-  let processList = "";
+  let processes = [];
   while (Date.now() < deadline) {
-    processList = findLaunchedAppProcess(appPath, executableName);
-    if (processList.trim()) {
-      console.log(`[macos-dmg-smoke] app process detected:\n${processList.trim()}`);
+    processes = findLaunchedAppProcesses(appPath, executableName);
+    if (processes.length > 0) {
+      console.log(
+        `[macos-dmg-smoke] app process detected:\n${processes
+          .map((processRow) => processRow.line)
+          .join("\n")}`,
+      );
       break;
     }
     sleep(1000);
   }
-  if (!processList.trim()) {
+  if (processes.length === 0) {
     throw new Error("ClawModeler.app did not appear in the process list after launch");
   }
 
-  spawnSync("osascript", ["-e", `tell application id "${bundleIdentifier}" to quit`], {
-    encoding: "utf8",
-  });
-  spawnSync("pkill", ["-x", executableName], { encoding: "utf8" });
-  spawnSync("pkill", ["-x", "ClawModeler"], { encoding: "utf8" });
+  terminateAppProcesses(appPath, executableName);
 }
 
 function runSmoke({ dmg, version, skipLaunch }) {
@@ -238,6 +292,7 @@ function runSmoke({ dmg, version, skipLaunch }) {
     fs.mkdirSync(installRoot);
     const installedApp = path.join(installRoot, "ClawModeler.app");
     run("ditto", [mountedApp, installedApp]);
+    clearQuarantine(installedApp);
 
     const bundleVersion = plistValue(installedApp, "CFBundleShortVersionString");
     if (bundleVersion !== version) {
@@ -256,7 +311,7 @@ function runSmoke({ dmg, version, skipLaunch }) {
     run("node", [sidecarSmokeScript, "--binary", engine, "--version", version]);
 
     if (!skipLaunch) {
-      launchApp(installedApp, bundleIdentifier, executableName);
+      launchApp(installedApp, executableName);
     }
     console.log(`macOS DMG smoke passed for ${path.basename(dmgPath)}.`);
   } finally {
@@ -292,6 +347,21 @@ function selfTest() {
     }
     if (findWeasyPrintRuntime(appPath) !== runtimePath) {
       throw new Error("findWeasyPrintRuntime failed");
+    }
+    const appExecutablePath = path.join(appPath, "Contents", "MacOS", "ClawModeler");
+    const unrelatedExecutablePath = "/Applications/ClawModeler.app/Contents/MacOS/ClawModeler";
+    const processRows = appProcessRowsFromPs(
+      [
+        `100 ${unrelatedExecutablePath} ${unrelatedExecutablePath}`,
+        `101 ClawModeler ${unrelatedExecutablePath}`,
+        `102 ${appExecutablePath} ${appExecutablePath}`,
+        `103 helper /usr/bin/helper --inspecting ${appExecutablePath}`,
+      ].join("\n"),
+      appPath,
+      "ClawModeler",
+    );
+    if (processRows.length !== 1 || processRows[0].pid !== "102") {
+      throw new Error(`app process detection matched unrelated processes: ${JSON.stringify(processRows)}`);
     }
     console.log("macOS DMG smoke self-test passed");
   } finally {
