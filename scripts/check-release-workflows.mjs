@@ -36,6 +36,18 @@ const workflowChecks = [
       "release-${{ github.repository }}",
     ],
   },
+  {
+    path: ".github/workflows/macos-arm-dmg-smoke.yml",
+    required: [
+      "runs-on: macos-14",
+      "actions/checkout@v6",
+      "actions/setup-node@v6",
+      "corepack prepare pnpm@10 --activate",
+      "gh release download",
+      "ClawModeler_*_aarch64.dmg",
+      "pnpm release:macos-dmg-smoke",
+    ],
+  },
 ];
 
 const forbidden = [
@@ -56,7 +68,9 @@ const docChecks = [
     path: "docs/release.md",
     required: [
       "pnpm release:first-user-smoke",
+      "pnpm release:macos-dmg-smoke",
       "Expected installer assets:",
+      "Hosted macOS ARM DMG smoke:",
       "Unsigned first-run caveats:",
       "Intel Mac x86_64: no pre-built installer",
       "Linux AppImage users may need to mark the file executable",
@@ -68,6 +82,7 @@ const docChecks = [
     required: [
       "pnpm release:first-user-smoke",
       "pnpm release:first-user-smoke -- --binary",
+      "pnpm release:macos-dmg-smoke",
       "PDF and DOCX",
     ],
   },

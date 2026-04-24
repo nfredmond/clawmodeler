@@ -19,6 +19,13 @@ Release workflow gates:
 - The release job validates asset names with `pnpm release:assets -- --tag "$GITHUB_REF_NAME" --dir artifacts`.
 - The release job marks the GitHub release as Latest only when the tag is the highest SemVer `vX.Y.Z` tag.
 
+Hosted macOS ARM DMG smoke:
+
+- Trigger `macOS ARM DMG Smoke` with `workflow_dispatch` and the release candidate tag, for example `v1.0.0-rc.3`.
+- The job uses GitHub's hosted `macos-14` Apple Silicon runner, downloads `ClawModeler_<version>_aarch64.dmg` from the GitHub release, mounts it, copies `ClawModeler.app`, verifies `Info.plist`, runs `pnpm release:sidecar-smoke` against the sidecar inside the app bundle, confirms the bundled WeasyPrint runtime is present, and launches the app once with Gatekeeper quarantine cleared.
+- Run the same check manually on an Apple Silicon Mac with `pnpm release:macos-dmg-smoke -- --tag vX.Y.Z-rc.N --dmg path/to/ClawModeler_<version>_aarch64.dmg`.
+- This hosted check strengthens the installer gate, but it does not replace the final manual GUI gate: install the DMG, use the unsigned first-run bypass, Run Demo, regenerate DOCX and PDF, and open both outputs.
+
 WeasyPrint native runtime:
 
 - Linux installs the native Pango/PangoFT2 packages in the release runner and relies on the platform package dependencies at install time.
@@ -52,3 +59,4 @@ After publication:
 - Verify the release page has the expected six assets: AppImage, deb, rpm, macOS ARM64 dmg, Windows MSI, and Windows setup exe.
 - Verify `gh release list --limit 5` marks the newest SemVer release as Latest.
 - Verify `https://github.com/nfredmond/clawmodeler/releases/latest` resolves to the newest SemVer tag.
+- For free hosted Apple Silicon beyond CI, apply for MacStadium Open Source Program access and use it for the final manual macOS ARM GUI gate when approved.

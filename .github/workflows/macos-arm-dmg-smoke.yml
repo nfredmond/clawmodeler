@@ -1,0 +1,54 @@
+name: macOS ARM DMG Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: GitHub release tag to test
+        required: true
+        default: v1.0.0-rc.3
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  smoke:
+    runs-on: macos-14
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10 --activate
+
+      - name: Release workflow audit
+        run: pnpm release:workflow:test
+
+      - name: Download macOS ARM DMG release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          mkdir -p artifacts
+          gh release download "$RELEASE_TAG" \
+            --pattern 'ClawModeler_*_aarch64.dmg' \
+            --dir artifacts \
+            --clobber
+          find artifacts -maxdepth 1 -type f -name 'ClawModeler_*_aarch64.dmg' -print
+
+      - name: Smoke test installed app and bundled sidecar from DMG
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          dmg="$(find artifacts -maxdepth 1 -type f -name 'ClawModeler_*_aarch64.dmg' -print -quit)"
+          test -n "$dmg"
+          pnpm release:macos-dmg-smoke -- --tag "$RELEASE_TAG" --dmg "$dmg"

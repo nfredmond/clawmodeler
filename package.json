@@ -14,6 +14,8 @@
     "release:latest-policy:test": "node scripts/release-latest-policy.mjs --self-test",
     "release:version-check": "node scripts/check-version-consistency.mjs",
     "release:sidecar-smoke": "node scripts/check-release-sidecar.mjs",
+    "release:macos-dmg-smoke": "node scripts/check-macos-dmg-smoke.mjs",
+    "release:macos-dmg-smoke:test": "node scripts/check-macos-dmg-smoke.mjs --self-test",
     "release:first-user-smoke": "node scripts/check-first-user-smoke.mjs",
     "release:workflow:test": "node scripts/check-release-workflows.mjs",
     "ui:dev": "pnpm --dir desktop dev",
