@@ -162,24 +162,40 @@ function detachDmg(mountPoint) {
 }
 
 function clearQuarantine(targetPath) {
-  const result = spawnSync("xattr", ["-dr", "com.apple.quarantine", targetPath], {
-    encoding: "utf8",
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
-    if (!output.includes("No such xattr")) {
-      throw new Error(
-        [
-          `xattr -dr com.apple.quarantine ${targetPath} failed with exit ${result.status}`,
-          output.trim() ? output.trim() : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
+  const candidates = [targetPath, ...walkEntries(targetPath)];
+  const failures = [];
+  for (const candidate of candidates) {
+    const readResult = spawnSync("xattr", ["-p", "com.apple.quarantine", candidate], {
+      encoding: "utf8",
+    });
+    if (readResult.error) {
+      throw readResult.error;
     }
+    if (readResult.status !== 0) {
+      continue;
+    }
+    try {
+      const stat = fs.statSync(candidate);
+      if ((stat.mode & 0o200) === 0) {
+        fs.chmodSync(candidate, stat.mode | 0o200);
+      }
+    } catch (error) {
+      failures.push(`${candidate}: ${error.message}`);
+      continue;
+    }
+    const deleteResult = spawnSync("xattr", ["-d", "com.apple.quarantine", candidate], {
+      encoding: "utf8",
+    });
+    if (deleteResult.error) {
+      throw deleteResult.error;
+    }
+    if (deleteResult.status !== 0) {
+      const output = [deleteResult.stdout, deleteResult.stderr].filter(Boolean).join("\n").trim();
+      failures.push(`${candidate}: ${output || `exit ${deleteResult.status}`}`);
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`failed to clear quarantine:\n${failures.join("\n")}`);
   }
 }
 
