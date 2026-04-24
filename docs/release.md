@@ -38,6 +38,15 @@ Release dry run:
 - Trigger `Release` with `workflow_dispatch` on `main` before publishing a tag. The build matrix runs and uploads installer artifacts, while the publish job is skipped because the ref is not a `vX.Y.Z` tag.
 - Download the dry-run artifacts and run `pnpm release:assets -- --tag vX.Y.Z --dir <downloaded-artifacts-dir>` before pushing the real tag.
 
+Remaining release-validation blockers:
+
+| Area | Remaining blocker | Proof needed to clear |
+|---|---|---|
+| Linux packaging | Manual first launch has not been recorded for the AppImage execute-bit path or native `.deb` / `.rpm` installs. | Install or launch each Linux artifact from a release build, run the built-in demo, regenerate PDF and DOCX, and open both outputs. |
+| macOS packaging | Hosted DMG smoke does not replace the final Apple Silicon GUI pass for the unsigned app. | Install the DMG on real Apple Silicon, use the Gatekeeper bypass, Run Demo, regenerate PDF and DOCX, and open both outputs. |
+| Windows packaging | Automated sidecar smoke does not prove the unsigned SmartScreen path or GUI installer flow. | Install the setup exe or MSI on Windows 10/11, use **More info** then **Run anyway**, Run Demo, regenerate PDF and DOCX, and open both outputs. |
+| Docs | Tutorial screenshot placeholders remain until final installer verification. | Capture the release page, first-run bypass dialogs, Run Demo, Results, DOCX export, and Planner Pack screens during the manual validation pass. |
+
 Expected installer assets:
 
 - Linux AppImage: `ClawModeler_<version>_amd64.AppImage`
