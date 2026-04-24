@@ -82,62 +82,97 @@ def _install_macos_cffi_runtime_patch(runtime_dir: Path) -> None:
     if getattr(original_dlopen, "_clawmodeler_weasyprint_runtime", False):
         return
 
-    library_names = {
-        "libgobject-2.0.0.dylib": (
-            "libgobject-2.0-0",
-            "gobject-2.0-0",
-            "gobject-2.0",
-            "libgobject-2.0.so.0",
-            "libgobject-2.0.0.dylib",
-            "libgobject-2.0-0.dll",
+    def first_existing(names: tuple[str, ...], pattern: str) -> str | None:
+        for name in names:
+            path = runtime_dir / name
+            if path.is_file():
+                return str(path)
+        return next((str(path) for path in sorted(runtime_dir.glob(pattern))), None)
+
+    library_groups = (
+        (
+            first_existing(("libgobject-2.0.0.dylib",), "libgobject-2.0*.dylib"),
+            (
+                "libgobject-2.0-0",
+                "gobject-2.0-0",
+                "gobject-2.0",
+                "libgobject-2.0.so.0",
+                "libgobject-2.0.0.dylib",
+                "libgobject-2.0-0.dll",
+            ),
         ),
-        "libpango-1.0.dylib": (
-            "libpango-1.0-0",
-            "pango-1.0-0",
-            "pango-1.0",
-            "libpango-1.0.so.0",
-            "libpango-1.0.dylib",
-            "libpango-1.0-0.dll",
+        (
+            first_existing(
+                ("libpango-1.0.0.dylib", "libpango-1.0.dylib"),
+                "libpango-1.0*.dylib",
+            ),
+            (
+                "libpango-1.0-0",
+                "pango-1.0-0",
+                "pango-1.0",
+                "libpango-1.0.so.0",
+                "libpango-1.0.dylib",
+                "libpango-1.0.0.dylib",
+                "libpango-1.0-0.dll",
+            ),
         ),
-        "libharfbuzz.0.dylib": (
-            "libharfbuzz-0",
-            "harfbuzz",
-            "harfbuzz-0.0",
-            "libharfbuzz.so.0",
-            "libharfbuzz.0.dylib",
-            "libharfbuzz-0.dll",
+        (
+            first_existing(("libharfbuzz.0.dylib",), "libharfbuzz.*.dylib"),
+            (
+                "libharfbuzz-0",
+                "harfbuzz",
+                "harfbuzz-0.0",
+                "libharfbuzz.so.0",
+                "libharfbuzz.0.dylib",
+                "libharfbuzz-0.dll",
+            ),
         ),
-        "libharfbuzz-subset.0.dylib": (
-            "libharfbuzz-subset-0",
-            "harfbuzz-subset",
-            "harfbuzz-subset-0.0",
-            "libharfbuzz-subset.so.0",
-            "libharfbuzz-subset.0.dylib",
-            "libharfbuzz-subset-0.dll",
+        (
+            first_existing(
+                ("libharfbuzz-subset.0.dylib",),
+                "libharfbuzz-subset*.dylib",
+            ),
+            (
+                "libharfbuzz-subset-0",
+                "harfbuzz-subset",
+                "harfbuzz-subset-0.0",
+                "libharfbuzz-subset.so.0",
+                "libharfbuzz-subset.0.dylib",
+                "libharfbuzz-subset-0.dll",
+            ),
         ),
-        "libfontconfig.1.dylib": (
-            "libfontconfig-1",
-            "fontconfig-1",
-            "fontconfig",
-            "libfontconfig.so.1",
-            "libfontconfig.1.dylib",
-            "libfontconfig-1.dll",
+        (
+            first_existing(("libfontconfig.1.dylib",), "libfontconfig*.dylib"),
+            (
+                "libfontconfig-1",
+                "fontconfig-1",
+                "fontconfig",
+                "libfontconfig.so.1",
+                "libfontconfig.1.dylib",
+                "libfontconfig-1.dll",
+            ),
         ),
-        "libpangoft2-1.0.dylib": (
-            "libpangoft2-1.0-0",
-            "pangoft2-1.0-0",
-            "pangoft2-1.0",
-            "libpangoft2-1.0.so.0",
-            "libpangoft2-1.0.dylib",
-            "libpangoft2-1.0-0.dll",
+        (
+            first_existing(
+                ("libpangoft2-1.0.0.dylib", "libpangoft2-1.0.dylib"),
+                "libpangoft2-1.0*.dylib",
+            ),
+            (
+                "libpangoft2-1.0-0",
+                "pangoft2-1.0-0",
+                "pangoft2-1.0",
+                "libpangoft2-1.0.so.0",
+                "libpangoft2-1.0.dylib",
+                "libpangoft2-1.0.0.dylib",
+                "libpangoft2-1.0-0.dll",
+            ),
         ),
-    }
+    )
     runtime_libraries: dict[str, str] = {}
-    for runtime_name, aliases in library_names.items():
-        path = runtime_dir / runtime_name
-        if path.is_file():
+    for runtime_path, aliases in library_groups:
+        if runtime_path:
             for alias in aliases:
-                runtime_libraries[alias] = str(path)
+                runtime_libraries[alias] = runtime_path
 
     def patched_dlopen(self, name, flags=0):
         if isinstance(name, str):

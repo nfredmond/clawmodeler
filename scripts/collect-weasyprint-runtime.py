@@ -226,14 +226,14 @@ def copy_fontconfig_data(output: Path, prefixes: list[Path]) -> list[Path]:
 
 def collect_macos(output: Path) -> list[Path]:
     prefixes = mac_prefixes()
-    roots: list[tuple[Path, str]] = []
+    roots: list[Path] = []
     missing: list[str] = []
     for library_name in MAC_ROOT_DYLIBS:
         path = find_macos_library(library_name, prefixes)
         if path is None:
             missing.append(library_name)
         else:
-            roots.append((path, library_name))
+            roots.append(path)
     if missing:
         raise RuntimeError(
             "Missing Homebrew WeasyPrint libraries: "
@@ -245,18 +245,20 @@ def collect_macos(output: Path) -> list[Path]:
     dependency_map: dict[Path, list[str]] = {}
     queue = roots[:]
     while queue:
-        source, destination_name = queue.pop(0)
+        source = queue.pop(0)
+        resolved_source = source.resolve()
+        destination_name = resolved_source.name
         destination = output / destination_name
         if destination_name in copied:
             continue
-        shutil.copy2(source.resolve(), destination)
+        shutil.copy2(resolved_source, destination)
         copied[destination_name] = destination
-        dependencies = parse_otool_dependencies(source.resolve())
+        dependencies = parse_otool_dependencies(resolved_source)
         dependency_map[destination] = dependencies
         for dep in dependencies:
-            dep_source = resolve_macos_dependency(dep, source.resolve(), prefixes)
-            if dep_source is not None and dep_source.name not in copied:
-                queue.append((dep_source, dep_source.name))
+            dep_source = resolve_macos_dependency(dep, resolved_source, prefixes)
+            if dep_source is not None and dep_source.resolve().name not in copied:
+                queue.append(dep_source)
 
     rewrite_macos_install_names(dependency_map)
     copied_files = list(dependency_map) + copy_fontconfig_data(output, prefixes)
