@@ -191,19 +191,25 @@ def resolve_macos_dependency(dep: str, source: Path, prefixes: list[Path]) -> Pa
     return None
 
 
-def rewrite_macos_install_names(dependency_map: dict[Path, list[str]]) -> None:
+def rewrite_macos_install_names(
+    dependency_map: dict[Path, list[str]],
+    copied_name_by_source_name: dict[str, str],
+) -> None:
     copied_names = {path.name for path in dependency_map}
     for copied_path, dependencies in dependency_map.items():
         run(["install_name_tool", "-id", f"@rpath/{copied_path.name}", copied_path])
         for dep in dependencies:
             dep_name = Path(dep.replace("@loader_path/", "").replace("@rpath/", "")).name
-            if dep_name in copied_names:
+            target_name = copied_name_by_source_name.get(dep_name)
+            if target_name is None and dep_name in copied_names:
+                target_name = dep_name
+            if target_name is not None:
                 run(
                     [
                         "install_name_tool",
                         "-change",
                         dep,
-                        f"@loader_path/{dep_name}",
+                        f"@loader_path/{target_name}",
                         copied_path,
                     ]
                 )
@@ -226,14 +232,14 @@ def copy_fontconfig_data(output: Path, prefixes: list[Path]) -> list[Path]:
 
 def collect_macos(output: Path) -> list[Path]:
     prefixes = mac_prefixes()
-    roots: list[Path] = []
+    roots: list[tuple[Path, str]] = []
     missing: list[str] = []
     for library_name in MAC_ROOT_DYLIBS:
         path = find_macos_library(library_name, prefixes)
         if path is None:
             missing.append(library_name)
         else:
-            roots.append(path)
+            roots.append((path, library_name))
     if missing:
         raise RuntimeError(
             "Missing Homebrew WeasyPrint libraries: "
@@ -242,25 +248,29 @@ def collect_macos(output: Path) -> list[Path]:
         )
 
     copied: dict[str, Path] = {}
+    copied_sources: dict[Path, Path] = {}
+    copied_name_by_source_name: dict[str, str] = {}
     dependency_map: dict[Path, list[str]] = {}
     queue = roots[:]
     while queue:
-        source = queue.pop(0)
+        source, destination_name = queue.pop(0)
         resolved_source = source.resolve()
-        destination_name = resolved_source.name
         destination = output / destination_name
-        if destination_name in copied:
+        if resolved_source in copied_sources or destination_name in copied:
             continue
         shutil.copy2(resolved_source, destination)
         copied[destination_name] = destination
+        copied_sources[resolved_source] = destination
+        copied_name_by_source_name[source.name] = destination_name
+        copied_name_by_source_name[resolved_source.name] = destination_name
         dependencies = parse_otool_dependencies(resolved_source)
         dependency_map[destination] = dependencies
         for dep in dependencies:
             dep_source = resolve_macos_dependency(dep, resolved_source, prefixes)
-            if dep_source is not None and dep_source.resolve().name not in copied:
-                queue.append(dep_source)
+            if dep_source is not None and dep_source.resolve() not in copied_sources:
+                queue.append((dep_source, dep_source.resolve().name))
 
-    rewrite_macos_install_names(dependency_map)
+    rewrite_macos_install_names(dependency_map, copied_name_by_source_name)
     copied_files = list(dependency_map) + copy_fontconfig_data(output, prefixes)
     return [path for path in copied_files if path.exists()]
 
