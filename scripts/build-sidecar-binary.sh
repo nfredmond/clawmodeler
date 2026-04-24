@@ -17,7 +17,6 @@ launcher="$work_dir/clawmodeler-engine-launcher.py"
 cat >"$launcher" <<'PY'
 from __future__ import annotations
 
-import ctypes
 import os
 from pathlib import Path
 import sys
@@ -73,24 +72,88 @@ def _configure_windows_runtime(runtime_dir: Path) -> None:
             pass
 
 
+def _install_macos_cffi_runtime_patch(runtime_dir: Path) -> None:
+    try:
+        import cffi
+    except ImportError:
+        return
+
+    original_dlopen = cffi.FFI.dlopen
+    if getattr(original_dlopen, "_clawmodeler_weasyprint_runtime", False):
+        return
+
+    library_names = {
+        "libgobject-2.0.0.dylib": (
+            "libgobject-2.0-0",
+            "gobject-2.0-0",
+            "gobject-2.0",
+            "libgobject-2.0.so.0",
+            "libgobject-2.0.0.dylib",
+            "libgobject-2.0-0.dll",
+        ),
+        "libpango-1.0.dylib": (
+            "libpango-1.0-0",
+            "pango-1.0-0",
+            "pango-1.0",
+            "libpango-1.0.so.0",
+            "libpango-1.0.dylib",
+            "libpango-1.0-0.dll",
+        ),
+        "libharfbuzz.0.dylib": (
+            "libharfbuzz-0",
+            "harfbuzz",
+            "harfbuzz-0.0",
+            "libharfbuzz.so.0",
+            "libharfbuzz.0.dylib",
+            "libharfbuzz-0.dll",
+        ),
+        "libharfbuzz-subset.0.dylib": (
+            "libharfbuzz-subset-0",
+            "harfbuzz-subset",
+            "harfbuzz-subset-0.0",
+            "libharfbuzz-subset.so.0",
+            "libharfbuzz-subset.0.dylib",
+            "libharfbuzz-subset-0.dll",
+        ),
+        "libfontconfig.1.dylib": (
+            "libfontconfig-1",
+            "fontconfig-1",
+            "fontconfig",
+            "libfontconfig.so.1",
+            "libfontconfig.1.dylib",
+            "libfontconfig-1.dll",
+        ),
+        "libpangoft2-1.0.dylib": (
+            "libpangoft2-1.0-0",
+            "pangoft2-1.0-0",
+            "pangoft2-1.0",
+            "libpangoft2-1.0.so.0",
+            "libpangoft2-1.0.dylib",
+            "libpangoft2-1.0-0.dll",
+        ),
+    }
+    runtime_libraries: dict[str, str] = {}
+    for runtime_name, aliases in library_names.items():
+        path = runtime_dir / runtime_name
+        if path.is_file():
+            for alias in aliases:
+                runtime_libraries[alias] = str(path)
+
+    def patched_dlopen(self, name, flags=0):
+        if isinstance(name, str):
+            local_path = runtime_libraries.get(name) or runtime_libraries.get(Path(name).name)
+            if local_path:
+                return original_dlopen(self, local_path, flags)
+        return original_dlopen(self, name, flags)
+
+    patched_dlopen._clawmodeler_weasyprint_runtime = True
+    cffi.FFI.dlopen = patched_dlopen
+
+
 def _configure_macos_runtime(runtime_dir: Path) -> None:
     _prepend_env_path("DYLD_LIBRARY_PATH", runtime_dir)
     _prepend_env_path("DYLD_FALLBACK_LIBRARY_PATH", runtime_dir)
-    mode = getattr(ctypes, "RTLD_GLOBAL", 0)
-    for name in (
-        "libgobject-2.0.0.dylib",
-        "libpango-1.0.dylib",
-        "libharfbuzz.0.dylib",
-        "libharfbuzz-subset.0.dylib",
-        "libfontconfig.1.dylib",
-        "libpangoft2-1.0.dylib",
-    ):
-        path = runtime_dir / name
-        if path.is_file():
-            try:
-                ctypes.CDLL(str(path), mode=mode)
-            except OSError:
-                pass
+    _install_macos_cffi_runtime_patch(runtime_dir)
 
 
 def _configure_weasyprint_runtime() -> None:
