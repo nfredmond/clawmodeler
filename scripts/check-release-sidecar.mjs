@@ -6,6 +6,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_ENGINE_TIMEOUT_MS =
+  Number.parseInt(process.env.CLAWMODELER_RELEASE_SIDECAR_TIMEOUT_MS || "", 10) ||
+  10 * 60 * 1000;
 
 function parseArgs(argv) {
   const args = {};
@@ -37,19 +40,26 @@ function defaultBinaryPath() {
 }
 
 function runEngine(binary, args, options = {}) {
+  const {
+    env: optionEnv = {},
+    timeout = DEFAULT_ENGINE_TIMEOUT_MS,
+    ...spawnOptions
+  } = options;
+  const commandLabel = `clawmodeler-engine ${args.join(" ")}`;
+  const startedAt = Date.now();
+  console.log(`[release:sidecar-smoke] start ${commandLabel}`);
   const result = spawnSync(binary, args, {
     cwd: repoRoot,
     encoding: "utf8",
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
-    ...options,
+    ...spawnOptions,
+    timeout,
+    env: { ...process.env, PYTHONUNBUFFERED: "1", ...optionEnv },
   });
+  const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
   if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
     throw new Error(
       [
-        `clawmodeler-engine ${args.join(" ")} failed with exit ${result.status}`,
+        `${commandLabel} failed after ${elapsedSeconds}s: ${result.error.message}`,
         result.stdout ? `stdout:\n${result.stdout}` : "",
         result.stderr ? `stderr:\n${result.stderr}` : "",
       ]
@@ -57,6 +67,18 @@ function runEngine(binary, args, options = {}) {
         .join("\n"),
     );
   }
+  if (result.status !== 0) {
+    throw new Error(
+      [
+        `${commandLabel} failed with exit ${result.status} after ${elapsedSeconds}s`,
+        result.stdout ? `stdout:\n${result.stdout}` : "",
+        result.stderr ? `stderr:\n${result.stderr}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+  console.log(`[release:sidecar-smoke] ok ${commandLabel} (${elapsedSeconds}s)`);
   return result.stdout;
 }
 
@@ -158,7 +180,9 @@ function runSmoke({ binary, version, keepWorkspace }) {
     assertExists(pdfPath);
     const pdfHead = fs.readFileSync(pdfPath).subarray(0, 5).toString("latin1");
     if (!pdfHead.startsWith("%PDF-")) {
-      throw new Error(`PDF export did not produce a valid PDF magic header (got ${JSON.stringify(pdfHead)})`);
+      throw new Error(
+        `PDF export did not produce a valid PDF magic header (got ${JSON.stringify(pdfHead)})`,
+      );
     }
 
     runEngine(binary, [

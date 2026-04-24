@@ -49,6 +49,7 @@ jobs:
           brew install pango fontconfig harfbuzz glib
 
       - name: Set up Windows WeasyPrint runtime dependencies
+        id: msys2
         if: matrix.os == 'windows-latest'
         uses: msys2/setup-msys2@v2
         with:
@@ -87,6 +88,9 @@ jobs:
       - name: Build Tauri bundles
         run: pnpm tauri:build
         working-directory: desktop
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
 
       - name: Smoke test packaged sidecar
         run: pnpm release:sidecar-smoke

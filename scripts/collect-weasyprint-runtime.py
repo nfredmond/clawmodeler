@@ -57,6 +57,8 @@ WINDOWS_SYSTEM_DLL_NAMES = {
     "ws2_32.dll",
 }
 
+WINDOWS_MSYS_PREFIXES = ("mingw64", "ucrt64", "clang64", "clangarm64")
+
 
 def run(command: list[str | Path], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
@@ -261,16 +263,50 @@ def collect_macos(output: Path) -> list[Path]:
     return [path for path in copied_files if path.exists()]
 
 
+def candidate_msys_roots() -> list[Path]:
+    roots: list[Path] = []
+    for env_name in ("MSYS2_LOCATION", "MSYS2_ROOT", "MSYS2_PATH"):
+        if os.environ.get(env_name):
+            roots.append(Path(os.environ[env_name]))
+
+    for env_name in ("RUNNER_TEMP", "TEMP", "TMP"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            root = Path(env_value)
+            roots.extend([root / "msys64", root / "setup-msys2" / "msys64"])
+
+    roots.append(Path("C:/msys64"))
+
+    for part in os.environ.get("PATH", "").split(os.pathsep):
+        if not part:
+            continue
+        path = Path(part)
+        if path.name.lower() == "bin" and path.parent.name.lower() in (
+            *WINDOWS_MSYS_PREFIXES,
+            "usr",
+        ):
+            roots.append(path.parent.parent)
+        for index, segment in enumerate(path.parts):
+            if segment.lower() == "msys64":
+                roots.append(Path(*path.parts[: index + 1]))
+                break
+
+    return unique_existing(roots)
+
+
 def windows_search_dirs() -> list[Path]:
     candidates = [Path(part) for part in os.environ.get("PATH", "").split(os.pathsep) if part]
-    msys_root = Path(os.environ.get("MSYS2_ROOT", "C:/msys64"))
+    msys_roots = candidate_msys_roots()
+    msys_root = msys_roots[0] if msys_roots else Path("C:/msys64")
     mingw_prefix = os.environ.get("MINGW_PREFIX", "")
     if mingw_prefix:
         if Path(mingw_prefix).is_absolute() and not mingw_prefix.startswith("/"):
             candidates.append(Path(mingw_prefix) / "bin")
         elif mingw_prefix.startswith("/"):
             candidates.append(msys_root / mingw_prefix.lstrip("/") / "bin")
-    candidates.extend([msys_root / "mingw64" / "bin", msys_root / "ucrt64" / "bin"])
+    for root in msys_roots or [msys_root]:
+        candidates.extend(root / prefix / "bin" for prefix in WINDOWS_MSYS_PREFIXES)
+        candidates.append(root / "usr" / "bin")
     return unique_existing(candidates)
 
 
@@ -311,10 +347,12 @@ def collect_windows(output: Path) -> list[Path]:
         else:
             roots.append(path)
     if missing:
+        searched = "\n".join(f"  - {path}" for path in search_dirs) or "  <none>"
         raise RuntimeError(
             "Missing MSYS2 WeasyPrint DLLs: "
             f"{', '.join(missing)}. Install mingw-w64-x86_64-pango with "
-            "msys2/setup-msys2 before building the sidecar."
+            "msys2/setup-msys2 before building the sidecar.\n"
+            f"Searched DLL directories:\n{searched}"
         )
 
     objdump = shutil.which("objdump")
