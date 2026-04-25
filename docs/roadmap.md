@@ -40,7 +40,7 @@ The current post-0.9.6 checkpoint is a releasable sidecar plus a guided Tauri v2
 - The desktop workbench refreshes and reads the workspace index for run artifact lists, report paths, QA status, bridge readiness, Planner Pack coverage, and index freshness, flags stale index state when artifacts are newer than the index, and keeps direct artifact fallback for older workspaces.
 - The desktop workbench preserves recent workspaces, active run history, and planner-facing run labels locally so existing runs can be reopened without retyping paths.
 - The desktop workbench can preview text artifacts locally and the repo has a fixture-backed desktop workflow acceptance gate that verifies workspace-index JSON coverage for run artifacts, bridge readiness, portfolio rows, and run diffs.
-- Release gates smoke-test the packaged sidecar, prove the first-user clean-workspace path against index-backed summaries, validate installer asset names, check version consistency, audit the release workflow for Node 24-backed actions and required smoke gates, serialize tag publishing, and only mark the highest SemVer tag as Latest.
+- Release gates smoke-test the packaged sidecar, prove the first-user clean-workspace path against index-backed summaries, validate installer asset names, check version consistency, generate headless RC/final dry-run proof, audit the release workflow for Node 24-backed actions and required smoke gates, serialize tag publishing, and only mark the highest SemVer tag as Latest.
 
 ## Next Engineering Milestones
 
@@ -77,5 +77,5 @@ Proceed to production packaging only when the wheel stays lean, includes require
 ## Definition Of Done For The Next Pass
 
 The next pass is done when a dry-run release build has produced the expected Linux,
-macOS ARM64, and Windows artifacts, those artifacts pass the asset-name validator, and
-the next public tag can be pushed with the release checklist already satisfied.
+macOS ARM64, and Windows artifacts, those artifacts pass the RC/final dry-run proof,
+and the next public tag can be pushed with the release checklist already satisfied.

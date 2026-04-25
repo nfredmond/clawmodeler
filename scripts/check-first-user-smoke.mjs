@@ -30,7 +30,7 @@ function pythonCommand(preferred) {
   const candidates = preferred ? [preferred] : ["python3", "python"];
   for (const candidate of candidates) {
     const result = spawnSync(candidate, ["--version"], { encoding: "utf8" });
-    if (!result.error && result.status === 0) {
+    if (result.status === 0) {
       return candidate;
     }
   }
@@ -64,7 +64,7 @@ function run(command, args, options = {}) {
     },
     ...options,
   });
-  if (result.error) {
+  if (result.error && result.status !== 0) {
     throw result.error;
   }
   if (result.status !== 0) {

@@ -10,6 +10,7 @@ bash scripts/install-profile.sh full
 bash scripts/install-profile.sh gpu
 bash scripts/check-packaging.sh
 pnpm release:assets:test
+pnpm release:dry-run:test
 pnpm release:latest-policy:test
 pnpm release:first-user-smoke
 pnpm release:workflow:test
@@ -49,9 +50,10 @@ Release checks:
 pnpm sidecar:build
 pnpm release:sidecar-smoke
 pnpm release:first-user-smoke -- --binary desktop/src-tauri/binaries/clawmodeler-engine
+pnpm release:dry-run -- --tag vX.Y.Z-rc.N --dir artifacts --out release-dry-run-proof.md --json-out release-dry-run-proof.json
 pnpm release:macos-dmg-smoke -- --tag vX.Y.Z-rc.N --dmg path/to/ClawModeler_X.Y.Z_aarch64.dmg
 pnpm release:workflow:test
 pnpm release:assets -- --tag vX.Y.Z --dir artifacts
 ```
 
-The release sidecar smoke check runs the built desktop sidecar through version, doctor, demo workflow, tiny-fixture workflow, CEQA Planner Pack generation, and PDF and DOCX report export. `scripts/collect-weasyprint-runtime.py` prepares the ignored `desktop/src-tauri/binaries/weasyprint-runtime/` folder for macOS and Windows release builds so WeasyPrint native libraries sit beside the packaged sidecar. The first-user smoke check starts from a clean workspace and verifies the planner-facing baseline, workspace index, QA, CEQA Planner Pack, portfolio, and diff path. The macOS DMG smoke mounts an Apple Silicon release DMG, verifies the app bundle, runs the packaged sidecar inside `ClawModeler.app`, confirms PDF and DOCX export, and launches the app once on a hosted macOS ARM runner. The release workflow self-test blocks Node 20-backed workflow actions and missing smoke gates. The asset check verifies release bundle names before GitHub release publication.
+The release sidecar smoke check runs the built desktop sidecar through version, doctor, demo workflow, tiny-fixture workflow, CEQA Planner Pack generation, and PDF and DOCX report export. `scripts/collect-weasyprint-runtime.py` prepares the ignored `desktop/src-tauri/binaries/weasyprint-runtime/` folder for macOS and Windows release builds so WeasyPrint native libraries sit beside the packaged sidecar. The first-user smoke check starts from a clean workspace and verifies the planner-facing baseline, workspace index, QA, CEQA Planner Pack, portfolio, and diff path. The dry-run proof validates merged workflow artifacts against an RC or final candidate tag, records prerelease and Latest-release policy, and writes Markdown/JSON checklist evidence without creating a tag or publishing a release. The macOS DMG smoke mounts an Apple Silicon release DMG, verifies the app bundle, runs the packaged sidecar inside `ClawModeler.app`, confirms PDF and DOCX export, and launches the app once on a hosted macOS ARM runner. The release workflow self-test blocks Node 20-backed workflow actions and missing smoke gates. The asset check verifies release bundle names before GitHub release publication.

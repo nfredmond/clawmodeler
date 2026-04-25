@@ -11,6 +11,8 @@
     "desktop:acceptance": "bash scripts/check-desktop-acceptance.sh",
     "release:assets": "node scripts/check-release-assets.mjs",
     "release:assets:test": "node scripts/check-release-assets.mjs --self-test",
+    "release:dry-run": "node scripts/check-release-dry-run.mjs",
+    "release:dry-run:test": "node scripts/check-release-dry-run.mjs --self-test",
     "release:latest-policy:test": "node scripts/release-latest-policy.mjs --self-test",
     "release:version-check": "node scripts/check-version-consistency.mjs",
     "release:sidecar-smoke": "node scripts/check-release-sidecar.mjs",

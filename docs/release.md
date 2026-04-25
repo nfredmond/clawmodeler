@@ -7,6 +7,7 @@ Before tagging:
 - Confirm all version fields match the intended tag with `pnpm release:version-check`: root `package.json`, Python package metadata, `ENGINE_VERSION`, Tauri `Cargo.toml`, `Cargo.lock`, and `tauri.conf.json`.
 - Run the core checks: `python3 -m ruff check .`, `pnpm engine:test`, `pnpm engine:check`, `pnpm ui:typecheck`, `pnpm ui:test`, `pnpm ui:build`, `pnpm desktop:acceptance`, `pnpm release:first-user-smoke`, `pnpm release:workflow:test`, and `cargo test` in `desktop/src-tauri`.
 - Build the sidecar with `pnpm sidecar:build`, then run `pnpm release:sidecar-smoke`.
+- Run a headless dry run from `main` with the intended RC or final candidate tag in the `candidate_tag` workflow input, then keep the uploaded `release-dry-run-proof` artifact with the release notes.
 - Commit the version and changelog changes, push `main`, then push the matching `vX.Y.Z` tag.
 
 Release workflow gates:
@@ -18,6 +19,7 @@ Release workflow gates:
 - Each matrix build runs `pnpm release:first-user-smoke` against the packaged sidecar, proving clean workspace creation, baseline execution, workspace-index refresh, QA review, CEQA Planner Pack output, portfolio refresh, and baseline-vs-alternative diff review.
 - The release job validates asset names with `pnpm release:assets -- --tag "$GITHUB_REF_NAME" --dir artifacts`.
 - The release job marks the GitHub release as Latest only when the tag is the highest SemVer `vX.Y.Z` tag.
+- The workflow-dispatch dry-run job validates merged artifacts with `pnpm release:dry-run`, records RC/final prerelease and Latest policy, and uploads Markdown/JSON proof without creating a tag or release.
 
 Hosted macOS ARM DMG smoke:
 
@@ -35,8 +37,18 @@ WeasyPrint native runtime:
 
 Release dry run:
 
-- Trigger `Release` with `workflow_dispatch` on `main` before publishing a tag. The build matrix runs and uploads installer artifacts, while the publish job is skipped because the ref is not a `vX.Y.Z` tag.
-- Download the dry-run artifacts and run `pnpm release:assets -- --tag vX.Y.Z --dir <downloaded-artifacts-dir>` before pushing the real tag.
+- Trigger `Release` with `workflow_dispatch` on `main` before publishing a tag. Enter the intended RC tag, such as `vX.Y.Z-rc.N`, or final tag, such as `vX.Y.Z`, in the required `candidate_tag` input.
+- The build matrix runs and uploads installer artifacts. The publish job is skipped because the ref is not a pushed `v*` tag.
+- The `dry-run-readiness` job downloads the merged artifacts and runs `pnpm release:dry-run -- --tag "$candidate_tag" --dir artifacts --out release-dry-run-proof.md --json-out release-dry-run-proof.json`.
+- Download the `release-dry-run-proof` artifact and attach it to the release checklist before pushing the public tag.
+
+Headless dry-run proof:
+
+- Version fields match the candidate tag's base version.
+- Installer asset names match the RC/final candidate tag's base version.
+- RC candidates resolve to `prerelease=true` and `make_latest=false`.
+- Final candidates resolve the same Latest-release policy that the tag-driven publish job will use.
+- The proof confirms no Git tag is created and no GitHub release is published by the dry-run readiness job.
 
 Remaining release-validation blockers:
 
