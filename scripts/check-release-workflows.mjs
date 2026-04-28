@@ -87,6 +87,21 @@ const docChecks = [
       "Intel Mac x86_64: no pre-built installer",
       "Linux AppImage users may need to mark the file executable",
       "WeasyPrint native runtime:",
+      "docs/macos-arm-gui-gate.md",
+    ],
+  },
+  {
+    path: "docs/macos-arm-gui-gate.md",
+    required: [
+      "Manual Evidence Record",
+      "Manual Apple Silicon GUI gate:",
+      "DMG SHA256:",
+      "Hardware model and chip:",
+      "Unsigned first-launch bypass result:",
+      "PDF regenerate result:",
+      "DOCX regenerate result:",
+      "Screenshots captured:",
+      "Do not tag or publish a final release solely from hosted CI evidence.",
     ],
   },
   {

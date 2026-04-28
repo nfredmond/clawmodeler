@@ -27,6 +27,7 @@ Hosted macOS ARM DMG smoke:
 - The job uses GitHub's hosted `macos-14` Apple Silicon runner, downloads `ClawModeler_<version>_aarch64.dmg` from the GitHub release, mounts it, copies `ClawModeler.app`, verifies `Info.plist`, runs `pnpm release:sidecar-smoke` against the sidecar inside the app bundle, confirms the bundled WeasyPrint runtime is present, and launches the app once with Gatekeeper quarantine cleared.
 - Run the same check manually on an Apple Silicon Mac with `pnpm release:macos-dmg-smoke -- --tag vX.Y.Z-rc.N --dmg path/to/ClawModeler_<version>_aarch64.dmg`.
 - This hosted check strengthens the installer gate, but it does not replace the final manual GUI gate: install the DMG, use the unsigned first-run bypass, Run Demo, regenerate DOCX and PDF, and open both outputs.
+- Record the human Apple Silicon GUI result with the evidence template in [`docs/macos-arm-gui-gate.md`](macos-arm-gui-gate.md) before promoting an RC to final.
 
 WeasyPrint native runtime:
 

@@ -23,6 +23,34 @@ The final release still needs a manual Apple Silicon desktop pass:
 - Regenerate DOCX.
 - Open both outputs.
 
+## Manual Evidence Record
+
+Copy this record into the release notes or release checklist before promoting an RC to final.
+Leave the gate blocked until every line is filled from a real Apple Silicon desktop session.
+
+```text
+Manual Apple Silicon GUI gate:
+- Candidate tag:
+- DMG asset name:
+- DMG SHA256:
+- Tester:
+- Hardware model and chip:
+- macOS version:
+- Test date:
+- Install result:
+- Unsigned first-launch bypass result:
+- Run Demo result:
+- PDF regenerate result:
+- DOCX regenerate result:
+- Opened PDF result:
+- Opened DOCX result:
+- Screenshots captured:
+- Notes/blockers:
+```
+
+Do not tag or publish a final release solely from hosted CI evidence. This record must come
+from a human GUI pass on real Apple Silicon hardware.
+
 ## Free Hosted Apple Silicon Options
 
 Use GitHub Actions immediately for the CI smoke. It is free for public repositories and runs on hosted Apple Silicon through `macos-14`.
